@@ -2,6 +2,354 @@
 
 Oct 14, 2026 · follows [`SPIKE_REPORT.md`](../../SPIKE_REPORT.md) (recommendation: go)
 
+## Execution baseline
+
+The first milestone prioritizes trustworthy native Rego and a small Checkov pilot.
+The baseline, initial native-versus-Checkov comparison harness, uncertainty
+contract experiment, and all five native Rego seed rules are implemented.
+Next is stabilizing and documenting the native input/result contract before
+external policy loading; the general input schema is not yet frozen.
+
+`crates/tf_cli/tests/native_baseline.rs` checks native output against
+[`fixtures/baseline/native.json`](../../fixtures/baseline/native.json):
+
+- 34 existing source cases and 34 existing plan cases, with explicit source mapping for plans.
+- Four source regressions for S3 sibling instances, computed IDs, transformed names, and local aliases.
+- Two synthetic plan regressions for sibling instances and transformed names. These test the plan adapter; they are not Terraform-generated plans.
+- 57 findings: 53 Definite and four Conditional, with no diagnostics in this baseline.
+
+The snapshot includes rule ID, full resource-instance address, root, module, impact level,
+certainty, message, primary location, ordered provenance, diagnostics, and deterministic
+scan counts. Passing cases retain empty finding lists. Finding and diagnostic order is
+normalized without deduplication; provenance order is retained. Only elapsed time and
+absolute checkout-directory prefixes are removed. The artifact is a native regression
+baseline, not a claim of correctness or foreign-engine parity.
+
+Verify without changing the snapshot:
+
+```sh
+cargo test -p tf_cli --test native_baseline
+```
+
+After reviewing an intentional semantic or fixture change, regenerate and inspect the diff:
+
+```sh
+OXTF_UPDATE_BASELINE=1 cargo test -p tf_cli --test native_baseline
+git diff -- fixtures/baseline/native.json
+```
+
+Normal test runs never update the snapshot. Inventory assertions require deliberate
+review when fixtures are added or removed. The S3 regression cases also assert their
+expected resource addresses independently of the snapshot, including during regeneration.
+The existing rule-selection tests continue to check unknown-ID errors and intentional
+empty selections; those are execution contracts rather than security findings.
+
+## Initial comparison harness
+
+The standard-library Python runner `bench/parity/compare.py` compares
+`aws-rds-unencrypted` with `CKV_AWS_16`. Its manifest,
+[`bench/parity/rds.json`](../../bench/parity/rds.json), pins Checkov **3.2.328**,
+the installed version used for this pilot. This differs from the earlier 3.3.29
+research inventory; the pilot makes no claim about the newer version's behavior
+or catalog size. Checkov is installed through pipx on the development machine;
+the harness does not install or upgrade dependencies.
+
+```sh
+cargo build -p tf_cli
+python3 -m unittest discover -s bench/parity -p 'test_*.py'
+python3 bench/parity/compare.py --output bench/results/out/parity-rds-new-run
+```
+
+The output directory must be new. Override `--native`, `--checkov`, or `--manifest`
+to select explicit executables or another pilot manifest. Each subprocess has a
+60-second default timeout, configurable with `--timeout`. The harness exits 2 for
+execution/normalization failures and 0 for a completed comparison, including
+semantic disagreements, skips, and unsupported rows. It is an investigation tool,
+not a CI parity threshold.
+
+Each manifest root has an explicit inventory of resource-instance addresses.
+Rows are keyed by root, mapped check ID, and the full instance address. Module
+prefixes and instance keys are retained; duplicate or out-of-inventory records
+are flagged rather than silently merged. This first pilot scans source roots;
+plan parity and general corpus inventory discovery remain future work.
+
+The report distinguishes `both_reported`, `native_only`, `checkov_only`, and
+`neither_reported`. Native certainty remains `definite` or `conditional`;
+`no_finding` does not imply that native evaluation proved a pass. Checkov
+suppression is `skipped`; unknown or missing check records are `unsupported`.
+Errors, parsing diagnostics, malformed reports, version mismatches, and timeouts
+cannot become clean results. Reports retain native location/provenance and
+Checkov result evidence for manual comparison.
+
+Checkov runs without `--quiet`, because quiet JSON omits passed/skipped records.
+The pinned version's summary-only zero-result output is recognized as missing
+coverage. Rule-pack downloading and external-module downloads are disabled.
+Raw stdout, stderr, commands, return codes, and elapsed time are saved per scan
+under the gitignored output directory; `report.json` contains normalized rows,
+summary counts, input hashes, and the native executable hash. The harness measures
+finding agreement, not precision or recall against a correctness oracle.
+
+### RDS pilot result
+
+The [recorded pilot](../../bench/results/rule-parity-rds.json) covers seven roots
+and eight resource/check rows using Checkov 3.2.328:
+
+| Case | Native | Checkov | Comparison |
+| --- | --- | --- | --- |
+| Explicit false | Definite | Failed | Both reported |
+| Absent encryption field | Definite | Failed | Both reported |
+| Variable default false | Definite | Failed | Both reported |
+| Explicit encryption true | No finding | Passed | Neither reported |
+| tfvars overrides false default | No finding | Passed | Neither reported |
+| Unconstrained variable | Conditional | No check record | Unsupported for comparison |
+| Read replica | No finding | Failed | Checkov only |
+| Suppressed Checkov check | Definite | Skipped | Skipped |
+
+There were no execution errors. Six rows have comparable two-valued Checkov
+outcomes: three shared findings, two shared non-findings, and one Checkov-only
+finding. The missing-record and suppressed rows are excluded from agreement counts.
+
+The read-replica disagreement is explained by the implementations: the native
+rule skips a resource with a non-null `replicate_source_db`; the installed Checkov
+`RDSEncryption` value check inspects `storage_encrypted` without that exception.
+This is a rule-scope difference, not evidence that either tool is universally
+correct. The unconstrained-variable case demonstrates why missing foreign results
+must not be treated as passes and is an input to the next uncertainty experiment.
+The suppressed case demonstrates a deliberate compatibility gap: native rules do
+not currently implement Checkov suppression comments.
+
+## Uncertainty experiment and contract direction
+
+An isolated Rust executable at `bench/uncertainty` runs actual Rego on regorus
+**0.12.0**, with default features disabled and only `std` and `arc` enabled.
+Its own Cargo workspace and lockfile keep the dependency out of the production
+scanner. The downloaded release changelog dates 0.12.0 to 2026-09-01, satisfying
+the original dependency-age rule on 2026-10-14. No production evaluator, finding
+format, or backend interface was changed for this experiment.
+
+Reproduce:
+
+```sh
+cargo test --locked --manifest-path bench/uncertainty/Cargo.toml
+cargo run --locked --quiet --manifest-path bench/uncertainty/Cargo.toml > bench/results/uncertainty-contract.json
+```
+
+The [machine-readable results](../../bench/results/uncertainty-contract.json)
+compare three policies on 17 deliberately adversarial cases. Native
+`tf_eval::truth` operations are the compatibility reference. Production
+`RuleContext::report` applies resource-existence gating for every strategy.
+
+| Strategy | Truth matches | Finding-certainty matches |
+| --- | --- | --- |
+| Null projection, then taint at the display location | 9 / 17 | 9 / 17 |
+| Null projection, then conservative taint/Unknown checks over declared evidence | 12 / 17 | 12 / 17 |
+| Tagged values and native four-valued composition in Rego | 17 / 17 | 17 / 17 |
+
+These are test-case counts, not estimated accuracy rates. The matrix covers
+known booleans/null, Unknown, Tainted, finite flattened Known alternatives,
+AND/OR, taint unrelated to the display location, and False/Unknown/Tainted
+resource existence. It does not cover arbitrary Rego, nested abstract containers,
+string coercions, all Terraform functions, or correlation between alternatives.
+The evidence downgrade is one explicit conservative heuristic, not an exhaustive
+search over possible postprocessors.
+
+Concrete failures:
+
+- Unknown projected as null becomes an apparently definite failure under
+  `value != true`; native semantics suppress that finding.
+- Taint outside the displayed location is missed; unrelated display taint can
+  incorrectly downgrade a definite finding.
+- For `value == true`, projecting Tainted to null produces no result. A
+  postprocessor cannot downgrade or recover a result that does not exist.
+- Downgrading based on every referenced value loses expression structure:
+  a definite true branch of OR stays definite despite another tainted branch,
+  and Tainted OR Unknown differs from Tainted AND Unknown.
+
+A separate two-input fixture uses `storage_encrypted = var.a == var.b` with two
+unconstrained booleans. Real Rego produces no violation for the two uniform
+substitutions `(false, false)` and `(true, true)`, but does for the two mixed
+assignments. Native evaluation reports Conditional. This rejects two uniform
+passes as a general repair; it does not reject exhaustive enumeration for bounded
+finite domains or establish that any proposed universal insecure witness exists.
+
+Four real-source evidence probes also pass through production finding construction:
+
+- An S3 bucket is the finding target while the deciding tainted protection flag
+  belongs to its public-access-block resource. The shared resource-reference
+  matcher establishes the relation. Certainty remains Conditional, the primary
+  location remains the bucket header, and flag provenance survives.
+- An extracted SSH CIDR retains the complete tfvars → variable → local →
+  attribute chain. This is a scalar provenance probe, not a Rego port of the SSH rule.
+- An absent RDS encryption field and an explicitly null field retain distinct
+  configured states while both resolve to the current false defaults overlay,
+  including the Default provenance step.
+
+For each probe, the Rego-returned opaque evidence handle resolves to the original
+owned Value; complete rendered finding JSON matches a native predicate over that
+Value. A fabricated handle is rejected. A valid handle proves a location can be
+resolved, not that a policy's verdict is correct or its evidence is complete.
+
+### Constraints for the first native Rego rule
+
+1. Keep configured presence, configured value, and effective/defaulted value
+   distinct. Preserve Known null, Unknown, Tainted, and OneOf explicitly; a bare
+   null is not an uncertainty representation.
+2. Preserve four-valued predicate results during evaluation, including False
+   and Unknown outcomes. They are distinct even when neither emits a finding.
+   Do not infer certainty from the final display path.
+3. Separate the finding target and optional display path from deciding evidence.
+   Resolve scoped evidence handles against the original analysis to recover
+   provenance. Handles identify a value read, including its full resource instance,
+   typed path segments, and configured/effective read mode. Their wire format
+   remains a design task; the experiment's numeric truth ranks are not a public format.
+4. Compose predicates through reviewed uncertainty-aware helpers and retain a
+   deciding witness. A flat list of dependencies is insufficient to reconstruct
+   AND/OR, negation, quantifiers, or missing-result behavior.
+5. Keep resource-existence gating and final finding construction shared with
+   native rules. Use semantic reference matching for joins; a dependency or
+   provenance path is not proof of identity. Negative joins additionally need
+   explicit knowledge that the candidate set is complete.
+6. Treat invalid results, missing/invalid handles, unsupported expressions, and
+   execution errors as explicit outcomes. Do not turn these into passes or
+   silently label them Definite. Policy absence alone cannot establish that a
+   resource/check pair was evaluated.
+
+The evidence supports a restricted native-Rego contract with reviewed helpers.
+It does **not** support automatically assigning native-equivalent certainty to
+arbitrary unchanged KICS, Checkov, or user policies. Foreign compatibility results
+must remain distinguishable until their uncertainty behavior is validated.
+The experiment inherits the native lattice's approximations; it is a compatibility
+check, not a proof of logical soundness for all unconstrained values.
+
+### First native Rego slice (implemented)
+
+`oxtf scan PATH --rego-rds` (also supported with `--plan`) replaces only
+`aws-rds-unencrypted` with the bundled policy in `crates/tf_rego/src/rds.rego`.
+Rule selection, rule ID, impact, message construction, existence gating, source
+mapping, and provenance remain shared with the native implementation. Native
+rules remain the default. This flag does not load arbitrary external policies.
+
+`tf_rego` pins regorus 0.12.0 with only `std` and `arc`; the policy is prepared before
+scanning, then the engine is cloned for each resource evaluation. Parallel-root
+parity is tested. Full-pack performance and release binary-size cost remain open.
+The callback-based scan adapter checks accumulated errors before returning the
+result; CLI failures exit 2 without printing a partial successful scan.
+
+The private RDS contract deliberately contains only what this rule needs:
+
+- `target`: full resource-instance address and resource type, separate from evidence.
+- `replica.kind`: missing, null, or set, preserving the native replica exception.
+- `configured` and `effective`: separate tagged views of `storage_encrypted`;
+  effective values use the existing provider-default overlay and its provenance.
+- Each value is missing, known, unknown, tainted, or a finite one_of. Known values
+  retain their type (including null) and Terraform boolean view (`true`, `false`,
+  or null for non-booleans); this is not a general JSON value projection.
+- one_of carries its tainted flag and ordered alternatives. Each alternative's
+  handle resolves to its original value with parent provenance joined.
+- Result: rank 0/1/2/3 for False/Unknown/Tainted/True plus a nullable evidence
+  handle. These numeric ranks remain private. Invalid ranks, malformed/undefined
+  results, missing required evidence, invalid handles, and evaluator errors fail
+  the scan. Handles are scoped to one resource evaluation.
+
+Rego implements the predicate and finite-choice truth/witness selection. Rust
+resolves the evidence and calls the shared RDS reporting helper. Coverage includes
+full source/plan output parity across the fixture suite, concurrent roots, a
+172-case scalar/finite-choice matrix, error propagation and scan isolation, and a
+module/local/tfvars chain with unknown, absent, and tainted resource existence.
+The 74-scan native golden baseline remains unchanged.
+
+### Second native Rego slice: GCP uniform access (implemented)
+
+`oxtf scan PATH --rego-native` (also supported with `--plan`) runs both
+`aws-rds-unencrypted` and `gcp-storage-uniform-access` through bundled Rego.
+The other three seed rules remain native. `--rego-rds` retains its RDS-only
+behavior; combining both flags selects the two-rule set without duplicating rules.
+`--rule` continues to select by existing rule IDs.
+
+The two policies import the same `boolean.rego` predicate, including finite-choice
+truth and deciding-witness selection. The GCP policy uses the same tagged boolean
+contract for configured/effective `uniform_bucket_level_access`, without a replica
+exception. Its metadata and reporting remain shared with the native GCP rule.
+The adapter now selects the attribute, policy entry point, and reporter for each
+supported boolean rule; it does not introduce a universal backend abstraction.
+Each engine is prepared once before scanning and cloned for resource evaluation.
+
+Validation: complete output parity on the source/plan fixture suite, concurrent
+roots, both CLI flags and rule selection, the 172-case lattice matrix for each
+policy, and GCP-specific null/default, string-boolean, computed/tainted/OneOf,
+resource-existence, and module/local/tfvars provenance cases. The 74-scan native
+baseline still passes unchanged. Entry-point and runtime errors still invalidate
+the scan before output is published.
+
+### Third native Rego slice: SSH ingress (implemented)
+
+`--rego-native` now also replaces `aws-sg-open-ssh` for all three native resource
+shapes: inline `aws_security_group` ingress, `aws_security_group_rule` ingress,
+and `aws_vpc_security_group_ingress_rule`. RDS-only mode is unchanged.
+
+The private SSH projection adds ordered list elements and selected object fields.
+Rust extracts values with the same parent-provenance joins as native traversal,
+registers scoped evidence handles, and supplies Terraform string/numeric views.
+Rego evaluates CIDR membership, protocol and port predicates, legacy ingress type,
+AND/OR, list existence, and finite choices. It preserves the native witness rules:
+AND/OR keep the left witness on ties, list existence keeps the first strongest
+match (or FALSE without evidence), and mixed finite choices keep the last
+strongest alternative. Unknown and Tainted remain distinct at every level.
+
+Projection shapes follow the finite SSH structure: ingress collection, inline rule,
+CIDR collection, and scalar. This avoids recursive Rego functions without placing
+predicate evaluation in Rust. Comprehensions are bound in rule bodies rather than
+nested inside head calls, avoiding a scheduling error in pinned regorus 0.12.0.
+
+Validation includes source/plan parity across the existing fixture suite, all three
+resource forms, dynamic ingress through module/local/tfvars bindings, conditional
+ports, nested finite choices, and approximately 4,000 direct truth/witness cases
+against `tf_eval` composition. Those cases include empty and null containers,
+non-object rules, computed/tainted children, numeric strings (including infinities),
+and witness ties. The existing native golden baseline remains unchanged.
+
+### Fourth and fifth slices: IAM and S3 (implemented)
+
+`--rego-native` now runs all five seed rules through bundled Rego. Existing IDs,
+impact levels, messages, source/plan mapping, and provenance are preserved.
+`--rego-rds` still selects only the original RDS replacement.
+
+IAM supports all four native IAM resource types. Rust unwraps structured
+`jsonencode` values or parses raw JSON, retaining original provenance; Rego walks
+Statement collections, tests Allow/Action/Resource, and combines uncertainty and
+witnesses. Scalar/list fields, finite alternatives, and unknown/tainted documents
+retain native behavior. Invalid JSON remains a native-compatible non-finding;
+it is distinct from a Rego evaluation/contract error, which fails the scan.
+
+S3 is evaluated per bucket within its module instance. The semantic identity
+matcher projects Yes/Maybe/No edges for candidate PABs, using concrete names or
+computed references and instance keys; dependency provenance is not identity.
+Rego selects definite matches, suppresses an unprotected finding when only a
+possible match exists, evaluates all four defaulted flags, accounts for tainted
+PAB existence, and chooses the least permissive definitely matching PAB. Order
+and witness ties match native behavior. Native handling of Unknown existence is
+preserved rather than reinterpreted during this port.
+
+S3 adds two narrowly validated structural evidence reasons: `missing_protection`
+(TRUE with no value witness) and `pab_existence` (Tainted with no value witness).
+Only the S3 entry point accepts them, with the corresponding rank and no handle.
+Other positive/unknown decisions still require a valid scoped value handle.
+Reporting uses the original bucket as target and the PAB flag as deciding evidence.
+
+SSH, IAM, and S3 share four-valued composition in `lattice.rego`. Validation covers
+all existing source/plan fixtures, the unchanged 74-scan native baseline, IAM
+raw/structured documents and nested uncertainty, S3 candidate ordering and witness
+selection, structural-reason rejection, sibling/computed/transformed references,
+module isolation, multiple matching PABs, conditional PAB existence, and IAM
+module/local/tfvars provenance. All five rule IDs also pass explicit selection and
+parallel-root parity checks.
+
+The five-rule parity milestone is complete. Remaining R1 work: stabilize and
+publish the input/result JSON Schema, external policy loading and Python policy
+integration, and release-size/performance measurements. A universal backend
+interface remains deferred until justified by another real backend. Checkov/KICS
+compatibility remains separate from this native-policy milestone.
+
 ## Summary
 
 The spike's biggest open risk is rule coverage: oxtf has 5 rules, Checkov ships 1,144 Terraform checks, and KICS 763 Terraform queries. This plan closes that gap by running other projects' rules on oxtf's engine instead of rewriting them by hand, while keeping what makes oxtf different: evaluated values, provenance chains, and Definite vs Conditional severity.
@@ -71,8 +419,8 @@ Evidence for every line is in the [appendix](#appendix-evidence-gathered-for-thi
 Key design points, each to be confirmed by measurement in its workstream:
 
 1. **Projections are generated, not hand-written.** Each is one function from `Analysis` to `serde_json::Value`, keyed by schema (block vs attribute, nesting mode) so block-syntax attributes and nested attributes render the way the foreign rules expect (KICS: a single block is an object, repeated blocks a list; Checkov: every value wrapped in a list).
-2. **Results map back through paths.** KICS results carry `searchLine` paths like `["resource", "aws_security_group", "web", "ingress"]`; Checkov reports the resource and `evaluated_keys`. The resolver walks that path in the model to find the value, which yields span, provenance and taint.
-3. **Four-valued semantics over a two-valued engine.** Rego and Checkov are true/false. The projection renders Unknown values the way each tool does for unresolved expressions (KICS: the raw `${...}` string), so foreign rules behave as they do natively on unknowns. A finding whose resolved path depends on a Tainted value becomes Conditional. Whether that's sound enough, or whether a second "pessimistic" evaluation is needed, is open question 3.
+2. **Results map back through paths.** KICS results carry `searchLine` paths like `["resource", "aws_security_group", "web", "ingress"]`; Checkov reports the resource and `evaluated_keys`. The resolver walks that path in the model for display location; native policies also return deciding evidence separately, since a display path alone cannot establish certainty or complete provenance.
+3. **Four-valued semantics over a two-valued engine.** The uncertainty experiment above rejects display-path taint and two uniform evaluations as general repairs. Native policies need tagged values and uncertainty-aware predicate composition, with separate deciding evidence. Foreign-shaped projections may reproduce a tool's unresolved-expression conventions, but that does not establish native-equivalent certainty. Compatibility outcomes must remain explicit until validated.
 4. **One compile, many evaluations.** Policies are parsed and compiled once per scan; each root module is an independent regorus evaluation, run in parallel with rayon, which needs per-thread `Engine` clones (open question 4).
 
 ## Workstreams
@@ -81,12 +429,12 @@ R1 and R3 can run in parallel first; R2 needs R1; R4 needs R1 and R3; R6 needs R
 
 ### R1. Backend abstraction and native Rego
 
-- [ ] Pin regorus. The smoke test used 0.13.0, released the day this plan was written; pin the newest release that is at least two weeks old when work starts (0.12.0 if started before 2026-10-28) and re-run the smoke test on it. Record features enabled (`full-opa` vs a minimal set) and the binary-size cost.
+- [x] Pin regorus 0.12.0 with `std` and `arc`, satisfying the two-week release-age requirement; smoke and parity tests pass. Release binary-size measurement remains pending.
 - [ ] `RuleBackend` trait in `tf_linter` (or a new `tf_rules` crate): `prepare(&Rules) -> Compiled`, `run(&Compiled, &Analysis) -> Vec<RawResult>`, `resolve(RawResult) -> Finding`. Port the native and rule-IR rules onto it without changing their findings (the 34 fixtures must stay green).
-- [ ] **oxtf native input schema** for Rego (`input.resources[]` with `address`, `type`, `name`, `module`, `values`, `known`, `tainted_paths`, plus `input.variables`, `input.outputs`), documented as JSON Schema and generated `.pyi`/docs. Values are the evaluated values; unknowns are `null` with an entry in `unknown_paths`.
-- [ ] Result contract: a policy's `deny` / `warn` rules return `{address, path, msg}`; the resolver maps `path` to span and provenance.
+- [ ] **oxtf native input schema** for Rego: resource-instance identity, configured presence, effective/defaulted values, explicit Known/Unknown/Tainted/OneOf states, and scoped evidence handles. Apply the uncertainty-experiment constraints above; freeze the first version only after the RDS vertical slice passes. Document it as JSON Schema before extending generated `.pyi`/docs.
+- [ ] Result contract: preserve four-valued evaluation outcomes, distinguish target/display location from deciding evidence, and resolve evidence into the original model. Keep impact level separate from certainty. Define explicit unsupported/error outcomes; `{address, path, msg}` alone is insufficient.
 - [ ] `oxtf scan --policy DIR` and `tfscan.scan(..., policies=[...])`.
-- [ ] Port seed rules 1–5 to Rego, including rule 2 (cross-resource join), which rule IR v1 couldn't express; they must produce identical findings to the native rules on all fixtures.
+- [x] Port seed rules 1–5 to Rego, including the S3 cross-resource rule. All five match native findings on the source/plan fixture suite, including severity and provenance.
 
 **Exit:** five Rego policies match the native rules on all 34 fixtures, including severity and provenance; a Rego finding prints the full `.tfvars` chain.
 
