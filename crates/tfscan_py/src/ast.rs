@@ -50,13 +50,16 @@ self_cell!(
 /// `OwnedParse` made shareable across threads.
 pub struct SharedParse(OwnedParse);
 
-// SAFETY: the only `!Send`/`!Sync` parts are the `&bumpalo::Bump` pointers
-// inside arena `Vec`s, which bumpalo uses only to grow or free a vector.
-// After construction nothing can grow a vector: the tree is reachable only
-// through shared references handed out by `with_dependent`, and arena nodes
-// never run destructors (the dependent's own fields are std `Vec`s of
-// references). The `Bump` itself is `Send` and is only touched again when the
-// whole cell is dropped, by the thread that drops the last `Arc`.
+// SAFETY: the `!Send`/`!Sync` parts are bumpalo's interior mutability: the
+// `Bump` (chunk list in `Cell`s) and the `&Bump` + raw pointers inside arena
+// `Vec`s, which bumpalo uses only to allocate, grow or free. After
+// construction nothing allocates: the tree is reachable only through shared
+// references handed out by `with_dependent`, no `&mut` to an arena `Vec` can
+// be obtained, and arena nodes never run destructors (the dependent's own
+// fields are std `Vec`s of references). The only `Bump` method called after
+// construction is `allocated_bytes()`, which reads the chunk list. The cell is
+// dropped once, by whichever thread drops the last `Arc`, with exclusive
+// access.
 unsafe impl Send for SharedParse {}
 // SAFETY: see above; all access after construction is read-only.
 unsafe impl Sync for SharedParse {}
