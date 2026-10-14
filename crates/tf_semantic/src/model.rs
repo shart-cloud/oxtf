@@ -100,7 +100,10 @@ impl Resource {
     /// pointing at the resource header that says so.
     pub fn value_or_default(&self, name: &str) -> Option<Value> {
         if let Some(v) = self.value(name) {
-            return Some(v);
+            // `attr = null` means "unset" in Terraform.
+            if !v.is_null() {
+                return Some(v);
+            }
         }
         let d = tf_schema::default_for(&self.ty, name)?;
         let note = tf_schema::defaults_for(&self.ty)

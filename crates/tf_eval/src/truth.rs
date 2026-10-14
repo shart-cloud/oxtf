@@ -107,6 +107,21 @@ pub fn test_with(v: &Value, pred: &dyn Fn(&Value) -> Truth) -> Verdict {
     }
 }
 
+/// Apply a Verdict-valued function to a value, lifting over `OneOf`
+/// (alternatives combined as in [`test`]) and mapping Tainted / Unknown to
+/// themselves. `f` sees Known values (including null).
+pub fn map(v: &Value, f: &dyn Fn(&Value) -> Verdict) -> Verdict {
+    match &v.kind {
+        Kind::Known(_) => f(v),
+        Kind::Tainted(_) => Verdict::new(Truth::Tainted, Some(v.clone())),
+        Kind::Unknown(_) => Verdict::new(Truth::Unknown, Some(v.clone())),
+        Kind::OneOf(o) => {
+            let vs: Vec<Verdict> = o.alternatives.iter().map(|a| map(&a.child_of(v), f)).collect();
+            combine_one_of(vs, o.tainted)
+        }
+    }
+}
+
 /// "Some element of the list `v` satisfies `pred`" (`pred` sees each element,
 /// which may itself be abstract; use [`test`] inside it for scalars).
 pub fn exists(v: &Value, pred: &dyn Fn(&Value) -> Verdict) -> Verdict {
