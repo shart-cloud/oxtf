@@ -8,7 +8,7 @@ use hcl_edit::structure::{BlockLabel, Body, Structure};
 use hcl_edit::template::{Directive, Element, Template};
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
-use tf_parser::dump::{fmt_num, normalize_template, render_items, NItem};
+use tf_parser::dump::{NItem, fmt_num, normalize_template, render_items};
 
 pub fn corpus_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/repos")
@@ -19,7 +19,9 @@ pub fn corpus_dir() -> PathBuf {
 pub fn corpus_files() -> Vec<PathBuf> {
     let mut out = Vec::new();
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
-        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return;
+        };
         for e in rd.flatten() {
             let p = e.path();
             let ft = e.file_type().unwrap();
@@ -160,10 +162,11 @@ pub fn expr_into(s: &mut String, e: &E, indent: usize) {
         E::UnaryOp(u) => {
             let op = u.operator.value().as_str();
             if op == "-"
-                && let E::Number(n) = &u.expr {
-                    s.push_str(&fmt_num(-n.value().as_f64().unwrap()));
-                    return;
-                }
+                && let E::Number(n) = &u.expr
+            {
+                s.push_str(&fmt_num(-n.value().as_f64().unwrap()));
+                return;
+            }
             write!(s, "({} ", if op == "!" { "!" } else { "neg" }).unwrap();
             expr_into(s, &u.expr, indent);
             s.push(')');
@@ -243,11 +246,15 @@ fn template(t: &Template, lead: bool, trail: bool, indent: usize) -> String {
                     let ifs = i.if_expr.strip;
                     let ends = i.endif_expr.strip;
                     let mut s = format!("%{{if {}", sub(&i.if_expr.cond_expr, indent));
-                    let then_trail = i.else_expr.as_ref().map_or(ends.strip_start(), |e| e.strip.strip_start());
+                    let then_trail = i
+                        .else_expr
+                        .as_ref()
+                        .map_or(ends.strip_start(), |e| e.strip.strip_start());
                     let then = template(&i.if_expr.template, ifs.strip_end(), then_trail, indent);
                     write!(s, " then[{then}]").unwrap();
                     if let Some(e) = &i.else_expr {
-                        let els = template(&e.template, e.strip.strip_end(), ends.strip_start(), indent);
+                        let els =
+                            template(&e.template, e.strip.strip_end(), ends.strip_start(), indent);
                         write!(s, " else[{els}]").unwrap();
                     }
                     s.push('}');
@@ -259,10 +266,25 @@ fn template(t: &Template, lead: bool, trail: bool, indent: usize) -> String {
                     if let Some(k) = &fe.key_var {
                         write!(s, "{}, ", k.as_str()).unwrap();
                     }
-                    write!(s, "{} in {}", fe.value_var.as_str(), sub(&fe.collection_expr, indent)).unwrap();
-                    let body = template(&fe.template, fe.strip.strip_end(), f.endfor_expr.strip.strip_start(), indent);
+                    write!(
+                        s,
+                        "{} in {}",
+                        fe.value_var.as_str(),
+                        sub(&fe.collection_expr, indent)
+                    )
+                    .unwrap();
+                    let body = template(
+                        &fe.template,
+                        fe.strip.strip_end(),
+                        f.endfor_expr.strip.strip_start(),
+                        indent,
+                    );
                     write!(s, " do[{body}]}}").unwrap();
-                    items.push((NItem::Other(s), fe.strip.strip_start(), f.endfor_expr.strip.strip_end()));
+                    items.push((
+                        NItem::Other(s),
+                        fe.strip.strip_start(),
+                        f.endfor_expr.strip.strip_end(),
+                    ));
                 }
             },
         }

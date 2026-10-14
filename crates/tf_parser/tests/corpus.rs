@@ -5,13 +5,16 @@
 
 mod common;
 
-use tf_parser::dump::{dump_file, Options};
+use tf_parser::dump::{Options, dump_file};
 
 #[test]
 fn corpus_parses_cleanly() {
     let files = common::corpus_files();
     if files.is_empty() {
-        eprintln!("corpus not found at {}; skipping", common::corpus_dir().display());
+        eprintln!(
+            "corpus not found at {}; skipping",
+            common::corpus_dir().display()
+        );
         return;
     }
     let mut failed = Vec::new();
@@ -25,11 +28,20 @@ fn corpus_parses_cleanly() {
             failed.push((path.clone(), ret.errors.clone()));
         }
     }
-    println!("corpus: {} files, {} bytes, {} with errors", files.len(), bytes, failed.len());
+    println!(
+        "corpus: {} files, {} bytes, {} with errors",
+        files.len(),
+        bytes,
+        failed.len()
+    );
     for (p, errs) in failed.iter().take(20) {
         println!("  {}: {}", p.display(), errs[0]);
     }
-    assert!(failed.is_empty(), "{} corpus files had parse errors", failed.len());
+    assert!(
+        failed.is_empty(),
+        "{} corpus files had parse errors",
+        failed.len()
+    );
 }
 
 #[test]
@@ -39,7 +51,11 @@ fn corpus_differential_vs_hcl_edit() {
         eprintln!("corpus not found; skipping");
         return;
     }
-    let opts = Options { spans: false, normalize: true, dedupe_object_keys: true };
+    let opts = Options {
+        spans: false,
+        normalize: true,
+        dedupe_object_keys: true,
+    };
     let mut hcl_failed = Vec::new();
     let mut diverged = Vec::new();
     let mut same = 0usize;
@@ -71,14 +87,30 @@ fn corpus_differential_vs_hcl_edit() {
         hcl_failed.len()
     );
     println!("differential: {compared_bytes} bytes of normalised S-expressions compared");
-    assert!(compared_bytes > 1_000_000, "normaliser output suspiciously small");
+    assert!(
+        compared_bytes > 1_000_000,
+        "normaliser output suspiciously small"
+    );
     for (p, a, b) in diverged.iter().take(30) {
-        println!("  DIVERGED {}\n    tf_parser: {}\n    hcl-edit:  {}", p.display(), a, b);
+        println!(
+            "  DIVERGED {}\n    tf_parser: {}\n    hcl-edit:  {}",
+            p.display(),
+            a,
+            b
+        );
     }
     for (p, e) in hcl_failed.iter().take(10) {
-        println!("  HCL-EDIT ERROR {}: {}", p.display(), e.lines().next().unwrap_or(""));
+        println!(
+            "  HCL-EDIT ERROR {}: {}",
+            p.display(),
+            e.lines().next().unwrap_or("")
+        );
     }
-    assert!(diverged.is_empty(), "{} files diverged from hcl-edit", diverged.len());
+    assert!(
+        diverged.is_empty(),
+        "{} files diverged from hcl-edit",
+        diverged.len()
+    );
 }
 
 /// First differing line of two dumps.
@@ -88,5 +120,8 @@ fn first_diff(a: &str, b: &str) -> (String, String) {
             return (x.trim().to_string(), y.trim().to_string());
         }
     }
-    (format!("<{} lines>", a.lines().count()), format!("<{} lines>", b.lines().count()))
+    (
+        format!("<{} lines>", a.lines().count()),
+        format!("<{} lines>", b.lines().count()),
+    )
 }

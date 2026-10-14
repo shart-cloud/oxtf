@@ -43,12 +43,18 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     pub fn new(alloc: &'a Allocator, src: &'a str) -> Self {
-        assert!(src.len() < u32::MAX as usize, "source files must be < 4 GiB");
+        assert!(
+            src.len() < u32::MAX as usize,
+            "source files must be < 4 GiB"
+        );
         let mut p = Parser {
             alloc,
             src,
             lexer: Lexer::new(src),
-            tok: Token { kind: Kind::Eof, span: Span::EMPTY },
+            tok: Token {
+                kind: Kind::Eof,
+                span: Span::EMPTY,
+            },
             prev_end: 0,
             modes: vec![false],
             comments: std::vec::Vec::new(),
@@ -60,8 +66,15 @@ impl<'a> Parser<'a> {
 
     pub fn parse_file(mut self) -> ParseResult<'a> {
         let body = self.parse_body(true, 0);
-        let file = File { span: Span::new(0, self.src.len() as u32), body };
-        ParseResult { file, comments: self.comments, errors: self.errors }
+        let file = File {
+            span: Span::new(0, self.src.len() as u32),
+            body,
+        };
+        ParseResult {
+            file,
+            comments: self.comments,
+            errors: self.errors,
+        }
     }
 
     // ------------------------------------------------------------------
@@ -138,7 +151,10 @@ impl<'a> Parser<'a> {
     }
 
     fn error(&mut self, span: Span, message: impl Into<String>) {
-        self.errors.push(Diagnostic { span, message: message.into() });
+        self.errors.push(Diagnostic {
+            span,
+            message: message.into(),
+        });
     }
 
     fn error_at_tok(&mut self, message: &str) {
@@ -186,7 +202,10 @@ impl<'a> Parser<'a> {
     }
 
     fn ident_from_tok(&mut self) -> Identifier<'a> {
-        let id = Identifier { span: self.tok.span, name: Atom::from(self.tok_text()) };
+        let id = Identifier {
+            span: self.tok.span,
+            name: Atom::from(self.tok_text()),
+        };
         self.bump();
         id
     }
@@ -196,7 +215,10 @@ impl<'a> Parser<'a> {
             self.ident_from_tok()
         } else {
             self.error_at_tok(&format!("expected {what}"));
-            Identifier { span: Span::empty(self.tok.span.start), name: Atom::from("") }
+            Identifier {
+                span: Span::empty(self.tok.span.start),
+                name: Atom::from(""),
+            }
         }
     }
 
@@ -283,7 +305,8 @@ impl<'a> Parser<'a> {
     }
 
     fn looks_like_body_item(&self) -> bool {
-        self.tok.kind == Kind::Ident && matches!(self.peek2(), Kind::Eq | Kind::LBrace | Kind::OQuote)
+        self.tok.kind == Kind::Ident
+            && matches!(self.peek2(), Kind::Eq | Kind::LBrace | Kind::OQuote)
     }
 
     /// Recovery inside an object: skip to the end of the item (newline or
@@ -343,8 +366,15 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-        let end = if top { self.src.len() as u32 } else { self.tok.span.start };
-        Body { span: Span::new(start, end.max(start)), items }
+        let end = if top {
+            self.src.len() as u32
+        } else {
+            self.tok.span.start
+        };
+        Body {
+            span: Span::new(start, end.max(start)),
+            items,
+        }
     }
 
     fn parse_body_item(&mut self) -> Option<BodyItem<'a>> {
@@ -355,7 +385,11 @@ impl<'a> Parser<'a> {
                 self.bump();
                 let value = self.parse_expr();
                 let failed = matches!(value, Expression::Error(_));
-                let attr = Attribute { span: self.span_from(start), key: ident, value };
+                let attr = Attribute {
+                    span: self.span_from(start),
+                    key: ident,
+                    value,
+                };
                 if failed {
                     // Already reported; skip the rest of the line quietly.
                     self.recover_line();
@@ -382,11 +416,21 @@ impl<'a> Parser<'a> {
                             let value = match &e {
                                 Expression::String(s) => s.value,
                                 _ => {
-                                    self.error(span, "block labels cannot contain template sequences");
-                                    Atom::from(&self.src[span.start as usize + 1..span.end.saturating_sub(1) as usize])
+                                    self.error(
+                                        span,
+                                        "block labels cannot contain template sequences",
+                                    );
+                                    Atom::from(
+                                        &self.src[span.start as usize + 1
+                                            ..span.end.saturating_sub(1) as usize],
+                                    )
                                 }
                             };
-                            labels.push(BlockLabel { span, value, quoted: true });
+                            labels.push(BlockLabel {
+                                span,
+                                value,
+                                quoted: true,
+                            });
                         }
                         _ => break,
                     }
@@ -402,7 +446,12 @@ impl<'a> Parser<'a> {
                 if self.tok.kind == Kind::RBrace {
                     self.bump();
                 }
-                let block = Block { span: self.span_from(start), ident, labels, body };
+                let block = Block {
+                    span: self.span_from(start),
+                    ident,
+                    labels,
+                    body,
+                };
                 self.expect_item_end("block");
                 Some(BodyItem::Block(self.boxed(block)))
             }
@@ -444,11 +493,21 @@ impl<'a> Parser<'a> {
             self.error_at_tok("expected `:` in conditional expression");
             let span = self.span_from(start);
             let false_expr = self.error_expr(Span::empty(self.prev_end));
-            return Expression::Conditional(self.boxed(Conditional { span, condition, true_expr, false_expr }));
+            return Expression::Conditional(self.boxed(Conditional {
+                span,
+                condition,
+                true_expr,
+                false_expr,
+            }));
         }
         let false_expr = self.parse_expr();
         let span = self.span_from(start);
-        Expression::Conditional(self.boxed(Conditional { span, condition, true_expr, false_expr }))
+        Expression::Conditional(self.boxed(Conditional {
+            span,
+            condition,
+            true_expr,
+            false_expr,
+        }))
     }
 
     fn binary_op(kind: Kind) -> Option<BinaryOperator> {
@@ -483,7 +542,12 @@ impl<'a> Parser<'a> {
             self.bump();
             let right = self.parse_binary(prec + 1);
             let span = self.span_from(start);
-            left = Expression::Binary(self.boxed(BinaryExpr { span, operator, left, right }));
+            left = Expression::Binary(self.boxed(BinaryExpr {
+                span,
+                operator,
+                left,
+                right,
+            }));
         }
         left
     }
@@ -498,7 +562,11 @@ impl<'a> Parser<'a> {
         self.bump();
         let operand = self.parse_unary();
         let span = self.span_from(start);
-        Expression::Unary(self.boxed(UnaryExpr { span, operator, operand }))
+        Expression::Unary(self.boxed(UnaryExpr {
+            span,
+            operator,
+            operand,
+        }))
     }
 
     fn parse_postfix(&mut self) -> Expression<'a> {
@@ -517,12 +585,15 @@ impl<'a> Parser<'a> {
                         Kind::Ident => {
                             let name = self.ident_from_tok();
                             let span = self.span_from(op_start);
-                            operators.push(TraversalOperator::GetAttr(self.boxed(GetAttr { span, name })));
+                            operators.push(TraversalOperator::GetAttr(
+                                self.boxed(GetAttr { span, name }),
+                            ));
                         }
                         Kind::Star => {
                             self.bump();
                             let span = self.span_from(op_start);
-                            operators.push(TraversalOperator::AttrSplat(self.boxed(AttrSplat { span })));
+                            operators
+                                .push(TraversalOperator::AttrSplat(self.boxed(AttrSplat { span })));
                         }
                         Kind::Number => {
                             // `.0` legacy index. The lexer may have read `0.1`
@@ -539,7 +610,9 @@ impl<'a> Parser<'a> {
                             };
                             self.resync((num_start + n) as u32);
                             let span = self.span_from(op_start);
-                            operators.push(TraversalOperator::LegacyIndex(self.boxed(LegacyIndex { span, index })));
+                            operators.push(TraversalOperator::LegacyIndex(
+                                self.boxed(LegacyIndex { span, index }),
+                            ));
                         }
                         _ => {
                             self.error_at_tok("expected an attribute name, `*` or index after `.`");
@@ -555,12 +628,15 @@ impl<'a> Parser<'a> {
                         self.bump();
                         self.close(Kind::RBracket, "]");
                         let span = self.span_from(op_start);
-                        operators.push(TraversalOperator::FullSplat(self.boxed(FullSplat { span })));
+                        operators
+                            .push(TraversalOperator::FullSplat(self.boxed(FullSplat { span })));
                     } else {
                         let index = self.parse_expr();
                         self.close(Kind::RBracket, "]");
                         let span = self.span_from(op_start);
-                        operators.push(TraversalOperator::Index(self.boxed(IndexOp { span, index })));
+                        operators.push(TraversalOperator::Index(
+                            self.boxed(IndexOp { span, index }),
+                        ));
                     }
                 }
                 _ => break,
@@ -570,7 +646,11 @@ impl<'a> Parser<'a> {
             object
         } else {
             let span = self.span_from(start);
-            Expression::Traversal(self.boxed(Traversal { span, object, operators }))
+            Expression::Traversal(self.boxed(Traversal {
+                span,
+                object,
+                operators,
+            }))
         }
     }
 
@@ -596,7 +676,11 @@ impl<'a> Parser<'a> {
                 });
                 let span = self.tok.span;
                 self.bump();
-                Expression::Number(self.boxed(NumberLiteral { span, value, raw: Atom::from(raw) }))
+                Expression::Number(self.boxed(NumberLiteral {
+                    span,
+                    value,
+                    raw: Atom::from(raw),
+                }))
             }
             Kind::Ident => {
                 let span = self.tok.span;
@@ -630,7 +714,10 @@ impl<'a> Parser<'a> {
                             self.error_expr(self.span_from(start))
                         }
                     }
-                    _ => Expression::Variable(self.boxed(VariableExpr { span: name.span, name: name.name })),
+                    _ => Expression::Variable(self.boxed(VariableExpr {
+                        span: name.span,
+                        name: name.name,
+                    })),
                 }
             }
             Kind::OQuote => self.parse_quoted(),
@@ -658,7 +745,12 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_call(&mut self, start: u32, namespace: Vec<'a, Identifier<'a>>, name: Identifier<'a>) -> Expression<'a> {
+    fn parse_call(
+        &mut self,
+        start: u32,
+        namespace: Vec<'a, Identifier<'a>>,
+        name: Identifier<'a>,
+    ) -> Expression<'a> {
         self.push_mode(true);
         self.bump(); // (
         let mut arguments = self.vec();
@@ -700,7 +792,13 @@ impl<'a> Parser<'a> {
             self.close(Kind::RParen, ")");
         }
         let span = self.span_from(start);
-        Expression::FunctionCall(self.boxed(FunctionCall { span, namespace, name, arguments, expand_final }))
+        Expression::FunctionCall(self.boxed(FunctionCall {
+            span,
+            namespace,
+            name,
+            arguments,
+            expand_final,
+        }))
     }
 
     /// `[` : tuple or `[for ...]`.
@@ -815,9 +913,10 @@ impl<'a> Parser<'a> {
         }
         match self.parse_expr() {
             // A bare identifier key is a literal, as in HCL and hcl-edit.
-            Expression::Variable(v) => {
-                ObjectKey::Identifier(self.boxed(Identifier { span: v.span, name: v.name }))
-            }
+            Expression::Variable(v) => ObjectKey::Identifier(self.boxed(Identifier {
+                span: v.span,
+                name: v.name,
+            })),
             e => ObjectKey::Expression(e),
         }
     }
@@ -868,7 +967,11 @@ impl<'a> Parser<'a> {
             None
         };
         if self.peek() != closer {
-            self.error_at_tok(if closer == Kind::RBrace { "expected `}`" } else { "expected `]`" });
+            self.error_at_tok(if closer == Kind::RBrace {
+                "expected `}`"
+            } else {
+                "expected `]`"
+            });
             // Skip to the closer.
             let _ = self.recover_list(closer);
         }
@@ -879,7 +982,16 @@ impl<'a> Parser<'a> {
             self.pop_mode();
         }
         let span = self.span_from(start);
-        Expression::For(self.boxed(ForExpr { span, key_var, value_var, collection, key_expr, value_expr, grouping, condition }))
+        Expression::For(self.boxed(ForExpr {
+            span,
+            key_var,
+            value_var,
+            collection,
+            key_expr,
+            value_expr,
+            grouping,
+            condition,
+        }))
     }
 
     // ------------------------------------------------------------------
@@ -901,7 +1013,10 @@ impl<'a> Parser<'a> {
         };
         self.resync(close_end);
         let span = Span::new(open.start, close_end);
-        let only_literals = template.elements.iter().all(|e| matches!(e, TemplateElement::Literal(_)));
+        let only_literals = template
+            .elements
+            .iter()
+            .all(|e| matches!(e, TemplateElement::Literal(_)));
         if only_literals && template.elements.len() <= 1 {
             let value = match template.elements.first() {
                 Some(TemplateElement::Literal(l)) => l.value,
@@ -917,11 +1032,15 @@ impl<'a> Parser<'a> {
     fn parse_heredoc(&mut self, indented: bool) -> Expression<'a> {
         let open = self.tok.span;
         let delimiter = self.lexer.heredoc_delimiter(open);
-        let (mut template, end) = self.parse_template_top(TemplateCtx::Heredoc { delimiter }, true, open.end);
+        let (mut template, end) =
+            self.parse_template_top(TemplateCtx::Heredoc { delimiter }, true, open.end);
         let close_end = match end {
             TplEnd::Close(_, e) => e,
             TplEnd::Unterminated(at) => {
-                self.error(Span::new(open.start, open.end), format!("unterminated heredoc, expected `{delimiter}`"));
+                self.error(
+                    Span::new(open.start, open.end),
+                    format!("unterminated heredoc, expected `{delimiter}`"),
+                );
                 at
             }
             _ => unreachable!(),
@@ -932,12 +1051,22 @@ impl<'a> Parser<'a> {
         }
         self.resync(close_end);
         let span = Span::new(open.start, close_end);
-        Expression::Heredoc(self.boxed(HeredocExpr { span, delimiter: Atom::from(delimiter), indented, template }))
+        Expression::Heredoc(self.boxed(HeredocExpr {
+            span,
+            delimiter: Atom::from(delimiter),
+            indented,
+            template,
+        }))
     }
 
     /// Top-level template: stray `else`/`endif`/`endfor` are errors and
     /// parsing continues.
-    fn parse_template_top(&mut self, ctx: TemplateCtx<'_>, mut at_line_start: bool, start: u32) -> (Template<'a>, TplEnd) {
+    fn parse_template_top(
+        &mut self,
+        ctx: TemplateCtx<'_>,
+        mut at_line_start: bool,
+        start: u32,
+    ) -> (Template<'a>, TplEnd) {
         let mut elements = self.vec();
         loop {
             let end = self.parse_template_elements(ctx, at_line_start, &mut elements);
@@ -947,14 +1076,21 @@ impl<'a> Parser<'a> {
                     return (Template { span, elements }, end);
                 }
                 TplEnd::Else(s, e, _) | TplEnd::Endif(s, e, _) | TplEnd::Endfor(s, e, _) => {
-                    self.error(Span::new(s, e), "template directive without a matching `if` or `for`");
+                    self.error(
+                        Span::new(s, e),
+                        "template directive without a matching `if` or `for`",
+                    );
                     at_line_start = false;
                 }
             }
         }
     }
 
-    fn push_literal(&mut self, elements: &mut Vec<'a, TemplateElement<'a>>, lit: crate::lexer::Literal) {
+    fn push_literal(
+        &mut self,
+        elements: &mut Vec<'a, TemplateElement<'a>>,
+        lit: crate::lexer::Literal,
+    ) {
         if let Some(span) = lit.bad_escape {
             self.error(span, "invalid escape sequence");
         }
@@ -972,7 +1108,10 @@ impl<'a> Parser<'a> {
                 Atom::from(lit.span.source_text(self.src))
             }
         };
-        elements.push(TemplateElement::Literal(self.boxed(TemplateLiteral { span: lit.span, value })));
+        elements.push(TemplateElement::Literal(self.boxed(TemplateLiteral {
+            span: lit.span,
+            value,
+        })));
     }
 
     /// Parse literal text and template sequences into `elements` until the
@@ -991,7 +1130,9 @@ impl<'a> Parser<'a> {
             let stop_span = lit.stop_span;
             self.push_literal(elements, lit);
             match stop {
-                LitStop::Quote | LitStop::HeredocEnd => return TplEnd::Close(stop_span.start, stop_span.end),
+                LitStop::Quote | LitStop::HeredocEnd => {
+                    return TplEnd::Close(stop_span.start, stop_span.end);
+                }
                 LitStop::Newline | LitStop::Eof => return TplEnd::Unterminated(stop_span.start),
                 LitStop::Interp => {
                     let seq_start = stop_span.start;
@@ -1002,8 +1143,17 @@ impl<'a> Parser<'a> {
                     let strip_end = self.eat_tilde();
                     let end = self.close_template_seq();
                     let span = Span::new(seq_start, end);
-                    let strip = Strip { start: strip_start, end: strip_end };
-                    elements.push(TemplateElement::Interpolation(self.boxed(TemplateInterpolation { span, strip, expression })));
+                    let strip = Strip {
+                        start: strip_start,
+                        end: strip_end,
+                    };
+                    elements.push(TemplateElement::Interpolation(self.boxed(
+                        TemplateInterpolation {
+                            span,
+                            strip,
+                            expression,
+                        },
+                    )));
                 }
                 LitStop::Directive => {
                     let seq_start = stop_span.start;
@@ -1022,22 +1172,34 @@ impl<'a> Parser<'a> {
                             let condition = self.parse_expr();
                             let strip_end = self.eat_tilde();
                             let then_start = self.close_template_seq();
-                            let if_strip = Strip { start: strip_start, end: strip_end };
+                            let if_strip = Strip {
+                                start: strip_start,
+                                end: strip_end,
+                            };
                             let mut then_elems = self.vec();
                             let mut end = self.parse_template_elements(ctx, false, &mut then_elems);
-                            let then_template = Template { span: Span::new(then_start, tpl_end_start(end)), elements: then_elems };
+                            let then_template = Template {
+                                span: Span::new(then_start, tpl_end_start(end)),
+                                elements: then_elems,
+                            };
                             let mut else_strip = None;
                             let mut else_template = None;
                             if let TplEnd::Else(_, else_end, strip) = end {
                                 else_strip = Some(strip);
                                 let mut else_elems = self.vec();
                                 end = self.parse_template_elements(ctx, false, &mut else_elems);
-                                else_template = Some(Template { span: Span::new(else_end, tpl_end_start(end)), elements: else_elems });
+                                else_template = Some(Template {
+                                    span: Span::new(else_end, tpl_end_start(end)),
+                                    elements: else_elems,
+                                });
                             }
                             let (endif_strip, node_end, propagate) = match end {
                                 TplEnd::Endif(_, e, s) => (s, e, None),
                                 other => {
-                                    self.error(Span::new(seq_start, then_start), "`%{ if }` without a matching `%{ endif }`");
+                                    self.error(
+                                        Span::new(seq_start, then_start),
+                                        "`%{ if }` without a matching `%{ endif }`",
+                                    );
                                     (Strip::default(), tpl_end_start(other), Some(other))
                                 }
                             };
@@ -1072,14 +1234,23 @@ impl<'a> Parser<'a> {
                             let collection = self.parse_expr();
                             let strip_end = self.eat_tilde();
                             let body_start = self.close_template_seq();
-                            let for_strip = Strip { start: strip_start, end: strip_end };
+                            let for_strip = Strip {
+                                start: strip_start,
+                                end: strip_end,
+                            };
                             let mut body = self.vec();
                             let end = self.parse_template_elements(ctx, false, &mut body);
-                            let template = Template { span: Span::new(body_start, tpl_end_start(end)), elements: body };
+                            let template = Template {
+                                span: Span::new(body_start, tpl_end_start(end)),
+                                elements: body,
+                            };
                             let (endfor_strip, node_end, propagate) = match end {
                                 TplEnd::Endfor(_, e, s) => (s, e, None),
                                 other => {
-                                    self.error(Span::new(seq_start, body_start), "`%{ for }` without a matching `%{ endfor }`");
+                                    self.error(
+                                        Span::new(seq_start, body_start),
+                                        "`%{ for }` without a matching `%{ endfor }`",
+                                    );
                                     (Strip::default(), tpl_end_start(other), Some(other))
                                 }
                             };
@@ -1101,7 +1272,10 @@ impl<'a> Parser<'a> {
                             self.bump();
                             let strip_end = self.eat_tilde();
                             let end = self.close_template_seq();
-                            let strip = Strip { start: strip_start, end: strip_end };
+                            let strip = Strip {
+                                start: strip_start,
+                                end: strip_end,
+                            };
                             return match kw {
                                 "else" => TplEnd::Else(seq_start, end, strip),
                                 "endif" => TplEnd::Endif(seq_start, end, strip),
@@ -1240,7 +1414,8 @@ impl<'a> Parser<'a> {
 
 /// Remove literals that dedenting emptied.
 fn prune_empty_literals(t: &mut Template<'_>) {
-    t.elements.retain(|e| !matches!(e, TemplateElement::Literal(l) if l.value.is_empty()));
+    t.elements
+        .retain(|e| !matches!(e, TemplateElement::Literal(l) if l.value.is_empty()));
     for el in t.elements.iter_mut() {
         match el {
             TemplateElement::If(i) => {
@@ -1257,7 +1432,11 @@ fn prune_empty_literals(t: &mut Template<'_>) {
 
 fn tpl_end_start(end: TplEnd) -> u32 {
     match end {
-        TplEnd::Close(s, _) | TplEnd::Unterminated(s) | TplEnd::Else(s, _, _) | TplEnd::Endif(s, _, _) | TplEnd::Endfor(s, _, _) => s,
+        TplEnd::Close(s, _)
+        | TplEnd::Unterminated(s)
+        | TplEnd::Else(s, _, _)
+        | TplEnd::Endif(s, _, _)
+        | TplEnd::Endfor(s, _, _) => s,
     }
 }
 

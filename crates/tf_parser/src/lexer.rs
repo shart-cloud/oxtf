@@ -22,7 +22,9 @@ pub enum Kind {
     OQuote,
     /// `<<EOT\n` or `<<-EOT\n` (the span covers the whole opener including the
     /// newline).
-    HeredocStart { indented: bool },
+    HeredocStart {
+        indented: bool,
+    },
     LBrace,
     RBrace,
     LBracket,
@@ -130,7 +132,10 @@ impl<'s> Lexer<'s> {
     }
 
     fn tok(&self, kind: Kind, start: usize) -> Token {
-        Token { kind, span: Span::new(start as u32, self.pos as u32) }
+        Token {
+            kind,
+            span: Span::new(start as u32, self.pos as u32),
+        }
     }
 
     /// Next token in normal mode. Skips spaces and tabs; emits comments and
@@ -172,19 +177,19 @@ impl<'s> Lexer<'s> {
                 self.tok(Kind::Newline, start)
             }
             b'#' => self.line_comment(start, tf_ast::CommentKind::Hash),
-            b'/' if self.peek_byte(1) == b'/' => self.line_comment(start, tf_ast::CommentKind::DoubleSlash),
-            b'/' if self.peek_byte(1) == b'*' => {
-                match self.src[self.pos + 2..].find("*/") {
-                    Some(i) => {
-                        self.pos += 2 + i + 2;
-                        self.tok(Kind::Comment(tf_ast::CommentKind::Block), start)
-                    }
-                    None => {
-                        self.pos = b.len();
-                        self.tok(Kind::Invalid, start)
-                    }
-                }
+            b'/' if self.peek_byte(1) == b'/' => {
+                self.line_comment(start, tf_ast::CommentKind::DoubleSlash)
             }
+            b'/' if self.peek_byte(1) == b'*' => match self.src[self.pos + 2..].find("*/") {
+                Some(i) => {
+                    self.pos += 2 + i + 2;
+                    self.tok(Kind::Comment(tf_ast::CommentKind::Block), start)
+                }
+                None => {
+                    self.pos = b.len();
+                    self.tok(Kind::Invalid, start)
+                }
+            },
             b'{' => one!(Kind::LBrace),
             b'}' => one!(Kind::RBrace),
             b'[' => one!(Kind::LBracket),
@@ -199,25 +204,24 @@ impl<'s> Lexer<'s> {
                 }
                 one!(Kind::Dot)
             }
-            b'=' => {
-                match self.peek_byte(1) {
-                    b'=' => {
-                        self.pos += 2;
-                        self.tok(Kind::EqEq, start)
-                    }
-                    b'>' => {
-                        self.pos += 2;
-                        self.tok(Kind::FatArrow, start)
-                    }
-                    _ => one!(Kind::Eq),
+            b'=' => match self.peek_byte(1) {
+                b'=' => {
+                    self.pos += 2;
+                    self.tok(Kind::EqEq, start)
                 }
-            }
+                b'>' => {
+                    self.pos += 2;
+                    self.tok(Kind::FatArrow, start)
+                }
+                _ => one!(Kind::Eq),
+            },
             b'!' => two!(b'=', Kind::BangEq, Kind::Bang),
             b'<' => {
                 if self.peek_byte(1) == b'<'
-                    && let Some(t) = self.try_heredoc_start(start) {
-                        return t;
-                    }
+                    && let Some(t) = self.try_heredoc_start(start)
+                {
+                    return t;
+                }
                 two!(b'=', Kind::Le, Kind::Lt)
             }
             b'>' => two!(b'=', Kind::Ge, Kind::Gt),
@@ -266,7 +270,10 @@ impl<'s> Lexer<'s> {
             end -= 1;
             self.pos = end;
         }
-        Token { kind: Kind::Comment(kind), span: Span::new(start as u32, end as u32) }
+        Token {
+            kind: Kind::Comment(kind),
+            span: Span::new(start as u32, end as u32),
+        }
     }
 
     fn ident_rest(&mut self) {
@@ -322,7 +329,10 @@ impl<'s> Lexer<'s> {
 
     /// Length of the leading run of ASCII digits at `pos`.
     pub fn digit_run_len(&self, pos: usize) -> usize {
-        self.bytes()[pos..].iter().take_while(|b| b.is_ascii_digit()).count()
+        self.bytes()[pos..]
+            .iter()
+            .take_while(|b| b.is_ascii_digit())
+            .count()
     }
 
     /// At `<<`: `<<` `-`? ident newline.
@@ -383,7 +393,11 @@ impl<'s> Lexer<'s> {
     ///
     /// `at_line_start` must be true when `pos` is at the beginning of a
     /// heredoc line (so a terminator there is recognised).
-    pub fn scan_template_literal(&mut self, ctx: TemplateCtx<'_>, mut at_line_start: bool) -> Literal {
+    pub fn scan_template_literal(
+        &mut self,
+        ctx: TemplateCtx<'_>,
+        mut at_line_start: bool,
+    ) -> Literal {
         let b = self.bytes();
         let start = self.pos;
         let mut decoded: Option<String> = None;
@@ -392,7 +406,13 @@ impl<'s> Lexer<'s> {
         // `seg` is the start of not-yet-copied raw text (only used once
         // `decoded` is Some).
         let mut seg = p;
-        let finish = |this: &mut Self, p: usize, stop: LitStop, stop_end: usize, decoded: Option<String>, seg: usize, bad_escape| {
+        let finish = |this: &mut Self,
+                      p: usize,
+                      stop: LitStop,
+                      stop_end: usize,
+                      decoded: Option<String>,
+                      seg: usize,
+                      bad_escape| {
             let decoded = decoded.map(|mut d| {
                 d.push_str(&this.src[seg..p]);
                 d
@@ -409,9 +429,10 @@ impl<'s> Lexer<'s> {
         loop {
             if let TemplateCtx::Heredoc { delimiter } = ctx
                 && at_line_start
-                    && let Some(e) = self.heredoc_end_at(p, delimiter) {
-                        return finish(self, p, LitStop::HeredocEnd, e, decoded, seg, bad_escape);
-                    }
+                && let Some(e) = self.heredoc_end_at(p, delimiter)
+            {
+                return finish(self, p, LitStop::HeredocEnd, e, decoded, seg, bad_escape);
+            }
             at_line_start = false;
             if p >= b.len() {
                 return finish(self, p, LitStop::Eof, p, decoded, seg, bad_escape);
@@ -420,7 +441,11 @@ impl<'s> Lexer<'s> {
                 b'$' | b'%' => {
                     let next = b.get(p + 1).copied();
                     if next == Some(b'{') {
-                        let stop = if b[p] == b'$' { LitStop::Interp } else { LitStop::Directive };
+                        let stop = if b[p] == b'$' {
+                            LitStop::Interp
+                        } else {
+                            LitStop::Directive
+                        };
                         return finish(self, p, stop, p + 2, decoded, seg, bad_escape);
                     }
                     // `$${` -> `${`, `%%{` -> `%{`
@@ -458,19 +483,29 @@ impl<'s> Lexer<'s> {
                         Some(b'\\') => d.push('\\'),
                         Some(c @ (b'u' | b'U')) => {
                             let n = if *c == b'u' { 4 } else { 8 };
-                            let hex = self.src.get(p + 1..p + 1 + n).filter(|h| h.bytes().all(|x| x.is_ascii_hexdigit()));
-                            match hex.and_then(|h| u32::from_str_radix(h, 16).ok()).and_then(char::from_u32) {
+                            let hex = self
+                                .src
+                                .get(p + 1..p + 1 + n)
+                                .filter(|h| h.bytes().all(|x| x.is_ascii_hexdigit()));
+                            match hex
+                                .and_then(|h| u32::from_str_radix(h, 16).ok())
+                                .and_then(char::from_u32)
+                            {
                                 Some(ch) => {
                                     d.push(ch);
                                     p += n;
                                 }
                                 None => {
-                                    bad_escape.get_or_insert(Span::new(esc_start as u32, (p + 1) as u32));
+                                    bad_escape
+                                        .get_or_insert(Span::new(esc_start as u32, (p + 1) as u32));
                                 }
                             }
                         }
                         _ => {
-                            bad_escape.get_or_insert(Span::new(esc_start as u32, (p + 1).min(b.len()) as u32));
+                            bad_escape.get_or_insert(Span::new(
+                                esc_start as u32,
+                                (p + 1).min(b.len()) as u32,
+                            ));
                             // Keep the raw text.
                             d.push('\\');
                             p -= 1;

@@ -23,13 +23,21 @@ pub struct Options {
 }
 
 pub fn dump_file(file: &File<'_>, opts: Options) -> String {
-    let mut d = Dumper { out: String::new(), opts, indent: 0 };
+    let mut d = Dumper {
+        out: String::new(),
+        opts,
+        indent: 0,
+    };
     d.body(&file.body);
     d.out
 }
 
 pub fn dump_expr(expr: &Expression<'_>, opts: Options) -> String {
-    let mut d = Dumper { out: String::new(), opts, indent: 0 };
+    let mut d = Dumper {
+        out: String::new(),
+        opts,
+        indent: 0,
+    };
     d.expr(expr);
     d.out
 }
@@ -48,13 +56,21 @@ pub enum NItem {
 
 /// Format a number canonically.
 pub fn fmt_num(v: f64) -> String {
-    if v.fract() == 0.0 && v.abs() < 1e15 { format!("{}", v as i64) } else { format!("{v}") }
+    if v.fract() == 0.0 && v.abs() < 1e15 {
+        format!("{}", v as i64)
+    } else {
+        format!("{v}")
+    }
 }
 
 /// Apply strip flags and merge adjacent literals. `items` carry, per
 /// element, `(item, strip_before, strip_after)`; `strip_before` trims the
 /// literal immediately before a sequence, `strip_after` the one after.
-pub fn normalize_template(items: Vec<(NItem, bool, bool)>, lead_trim: bool, trail_trim: bool) -> Vec<NItem> {
+pub fn normalize_template(
+    items: Vec<(NItem, bool, bool)>,
+    lead_trim: bool,
+    trail_trim: bool,
+) -> Vec<NItem> {
     let n = items.len();
     let mut trim_start = vec![false; n];
     let mut trim_end = vec![false; n];
@@ -158,7 +174,11 @@ impl Dumper {
     }
 
     fn sub(&self, e: &Expression<'_>) -> String {
-        let mut d = Dumper { out: String::new(), opts: self.opts, indent: self.indent };
+        let mut d = Dumper {
+            out: String::new(),
+            opts: self.opts,
+            indent: self.indent,
+        };
         d.expr(e);
         d.out
     }
@@ -196,7 +216,17 @@ impl Dumper {
                 self.out.push(')');
             }
             Expression::Heredoc(h) => {
-                write!(self.out, "(heredoc {}{}", if h.indented && !self.opts.normalize { "-" } else { "" }, h.delimiter).unwrap();
+                write!(
+                    self.out,
+                    "(heredoc {}{}",
+                    if h.indented && !self.opts.normalize {
+                        "-"
+                    } else {
+                        ""
+                    },
+                    h.delimiter
+                )
+                .unwrap();
                 self.sp(h.span);
                 let s = self.template(&h.template, false, false);
                 if !s.is_empty() {
@@ -217,13 +247,17 @@ impl Dumper {
                 for op in t.operators.iter() {
                     self.out.push(' ');
                     match op {
-                        TraversalOperator::GetAttr(g) => write!(self.out, ".{}", g.name.name).unwrap(),
+                        TraversalOperator::GetAttr(g) => {
+                            write!(self.out, ".{}", g.name.name).unwrap()
+                        }
                         TraversalOperator::Index(i) => {
                             self.out.push('[');
                             self.expr(&i.index);
                             self.out.push(']');
                         }
-                        TraversalOperator::LegacyIndex(l) => write!(self.out, ".{}", l.index).unwrap(),
+                        TraversalOperator::LegacyIndex(l) => {
+                            write!(self.out, ".{}", l.index).unwrap()
+                        }
                         TraversalOperator::AttrSplat(_) => self.out.push_str(".*"),
                         TraversalOperator::FullSplat(_) => self.out.push_str("[*]"),
                     }
@@ -326,7 +360,16 @@ impl Dumper {
                     self.out.push_str(&fmt_num(-n.value));
                     return;
                 }
-                write!(self.out, "({}", if u.operator == UnaryOperator::Not { "!" } else { "neg" }).unwrap();
+                write!(
+                    self.out,
+                    "({}",
+                    if u.operator == UnaryOperator::Not {
+                        "!"
+                    } else {
+                        "neg"
+                    }
+                )
+                .unwrap();
                 self.sp(u.span);
                 self.out.push(' ');
                 self.expr(&u.operand);
@@ -388,7 +431,12 @@ impl Dumper {
                     let mut s = String::from("%{if ");
                     s.push_str(&self.sub(&i.condition));
                     if !n {
-                        write!(s, " strip={}{}", i.if_strip.start as u8, i.if_strip.end as u8).unwrap();
+                        write!(
+                            s,
+                            " strip={}{}",
+                            i.if_strip.start as u8, i.if_strip.end as u8
+                        )
+                        .unwrap();
                     }
                     let then_trail = i.else_strip.map_or(i.endif_strip.start, |e| e.start);
                     let then = self.template(&i.then_template, i.if_strip.end, then_trail);
@@ -401,7 +449,12 @@ impl Dumper {
                         write!(s, " else[{els}]").unwrap();
                     }
                     if !n {
-                        write!(s, " endif-strip={}{}", i.endif_strip.start as u8, i.endif_strip.end as u8).unwrap();
+                        write!(
+                            s,
+                            " endif-strip={}{}",
+                            i.endif_strip.start as u8, i.endif_strip.end as u8
+                        )
+                        .unwrap();
                     }
                     s.push('}');
                     if self.opts.spans {
@@ -417,12 +470,22 @@ impl Dumper {
                     }
                     write!(s, "{} in {}", f.value_var.name, self.sub(&f.collection)).unwrap();
                     if !n {
-                        write!(s, " strip={}{}", f.for_strip.start as u8, f.for_strip.end as u8).unwrap();
+                        write!(
+                            s,
+                            " strip={}{}",
+                            f.for_strip.start as u8, f.for_strip.end as u8
+                        )
+                        .unwrap();
                     }
                     let body = self.template(&f.template, f.for_strip.end, f.endfor_strip.start);
                     write!(s, " do[{body}]").unwrap();
                     if !n {
-                        write!(s, " endfor-strip={}{}", f.endfor_strip.start as u8, f.endfor_strip.end as u8).unwrap();
+                        write!(
+                            s,
+                            " endfor-strip={}{}",
+                            f.endfor_strip.start as u8, f.endfor_strip.end as u8
+                        )
+                        .unwrap();
                     }
                     s.push('}');
                     if self.opts.spans {

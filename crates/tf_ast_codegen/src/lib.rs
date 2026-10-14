@@ -61,8 +61,12 @@ fn has_lifetime(g: &syn::Generics) -> bool {
 }
 
 fn classify(ty: &syn::Type, visitable: &BTreeSet<String>) -> FieldTy {
-    let syn::Type::Path(p) = ty else { return FieldTy::Leaf };
-    let Some(seg) = p.path.segments.last() else { return FieldTy::Leaf };
+    let syn::Type::Path(p) = ty else {
+        return FieldTy::Leaf;
+    };
+    let Some(seg) = p.path.segments.last() else {
+        return FieldTy::Leaf;
+    };
     let name = seg.ident.to_string();
     let first_type_arg = || -> Option<&syn::Type> {
         if let syn::PathArguments::AngleBracketed(args) = &seg.arguments {
@@ -94,15 +98,17 @@ fn parse_schema(src: &str) -> Schema {
     for item in &file.items {
         match item {
             syn::Item::Struct(s) => {
-                let has_span = s.fields.iter().any(|f| f.ident.as_ref().is_some_and(|i| i == "span"));
+                let has_span = s
+                    .fields
+                    .iter()
+                    .any(|f| f.ident.as_ref().is_some_and(|i| i == "span"));
                 if has_span {
                     visitable.insert(s.ident.to_string());
                 }
             }
-            syn::Item::Enum(e)
-                if e.variants.iter().any(|v| !v.fields.is_empty()) => {
-                    visitable.insert(e.ident.to_string());
-                }
+            syn::Item::Enum(e) if e.variants.iter().any(|v| !v.fields.is_empty()) => {
+                visitable.insert(e.ident.to_string());
+            }
             _ => {}
         }
     }
@@ -130,8 +136,16 @@ fn parse_schema(src: &str) -> Schema {
                     .variants
                     .iter()
                     .map(|v| {
-                        let f = v.fields.iter().next().expect("dispatch enum variants hold one field");
-                        assert_eq!(v.fields.len(), 1, "dispatch enum variants hold exactly one field");
+                        let f = v
+                            .fields
+                            .iter()
+                            .next()
+                            .expect("dispatch enum variants hold one field");
+                        assert_eq!(
+                            v.fields.len(),
+                            1,
+                            "dispatch enum variants hold exactly one field"
+                        );
                         (v.ident.to_string(), classify(&f.ty, &visitable))
                     })
                     .collect();
@@ -168,15 +182,26 @@ fn ident(s: &str) -> Ident {
 
 impl Schema {
     fn lt_of(&self, name: &str) -> bool {
-        self.structs.iter().find(|s| s.name == name).map(|s| s.has_lifetime).or_else(|| {
-            self.enums.iter().find(|e| e.name == name).map(|e| e.has_lifetime)
-        })
-        .unwrap_or(false)
+        self.structs
+            .iter()
+            .find(|s| s.name == name)
+            .map(|s| s.has_lifetime)
+            .or_else(|| {
+                self.enums
+                    .iter()
+                    .find(|e| e.name == name)
+                    .map(|e| e.has_lifetime)
+            })
+            .unwrap_or(false)
     }
 
     fn ty_tokens(&self, name: &str) -> TokenStream {
         let id = ident(name);
-        if self.lt_of(name) { quote!(#id<'a>) } else { quote!(#id) }
+        if self.lt_of(name) {
+            quote!(#id<'a>)
+        } else {
+            quote!(#id)
+        }
     }
 }
 
@@ -261,8 +286,18 @@ fn gen_ast_kind(s: &Schema) -> TokenStream {
 fn gen_visit(s: &Schema, mutable: bool) -> TokenStream {
     let mut methods = Vec::new();
     let mut walks = Vec::new();
-    let (trait_name, suffix) = if mutable { (ident("VisitMut"), "_mut") } else { (ident("Visit"), "") };
-    let refty = |ty: &TokenStream| if mutable { quote!(&mut #ty) } else { quote!(&'a #ty) };
+    let (trait_name, suffix) = if mutable {
+        (ident("VisitMut"), "_mut")
+    } else {
+        (ident("Visit"), "")
+    };
+    let refty = |ty: &TokenStream| {
+        if mutable {
+            quote!(&mut #ty)
+        } else {
+            quote!(&'a #ty)
+        }
+    };
 
     for st in &s.structs {
         let sn = snake(&st.name);
@@ -285,14 +320,21 @@ fn gen_visit(s: &Schema, mutable: bool) -> TokenStream {
             })
             .collect();
         let (enter, leave) = if mutable {
-            (quote!(visitor.enter_node(AstType::#v);), quote!(visitor.leave_node(AstType::#v);))
+            (
+                quote!(visitor.enter_node(AstType::#v);),
+                quote!(visitor.leave_node(AstType::#v);),
+            )
         } else {
             (
                 quote!(let kind = AstKind::#v(it); visitor.enter_node(kind);),
                 quote!(visitor.leave_node(kind);),
             )
         };
-        let unused = if fields.is_empty() && mutable { quote!(let _ = it;) } else { quote!() };
+        let unused = if fields.is_empty() && mutable {
+            quote!(let _ = it;)
+        } else {
+            quote!()
+        };
         walks.push(quote! {
             #[inline]
             pub fn #w<'a, V: #trait_name<'a>>(visitor: &mut V, it: #r) {
@@ -335,7 +377,9 @@ fn gen_visit(s: &Schema, mutable: bool) -> TokenStream {
                 #[inline]
                 fn leave_node(&mut self, ty: AstType) { let _ = ty; }
             },
-            quote!(use crate::generated::ast_kind::AstType;),
+            quote!(
+                use crate::generated::ast_kind::AstType;
+            ),
         )
     } else {
         (
@@ -345,10 +389,16 @@ fn gen_visit(s: &Schema, mutable: bool) -> TokenStream {
                 #[inline]
                 fn leave_node(&mut self, kind: AstKind<'a>) { let _ = kind; }
             },
-            quote!(use crate::generated::ast_kind::AstKind;),
+            quote!(
+                use crate::generated::ast_kind::AstKind;
+            ),
         )
     };
-    let walk_mod = if mutable { ident("walk_mut") } else { ident("walk") };
+    let walk_mod = if mutable {
+        ident("walk_mut")
+    } else {
+        ident("walk")
+    };
     quote! {
         #![allow(unused_variables, clippy::needless_lifetimes)]
         use crate::ast::*;
@@ -371,7 +421,11 @@ fn gen_get_span(s: &Schema) -> TokenStream {
     let mut impls = Vec::new();
     for st in &s.structs {
         let ty = s.ty_tokens(&st.name);
-        let generics = if st.has_lifetime { quote!(<'a>) } else { quote!() };
+        let generics = if st.has_lifetime {
+            quote!(<'a>)
+        } else {
+            quote!()
+        };
         impls.push(quote! {
             impl #generics GetSpan for #ty {
                 #[inline]
@@ -382,7 +436,11 @@ fn gen_get_span(s: &Schema) -> TokenStream {
     for en in &s.enums {
         let ty = s.ty_tokens(&en.name);
         let e = ident(&en.name);
-        let generics = if en.has_lifetime { quote!(<'a>) } else { quote!() };
+        let generics = if en.has_lifetime {
+            quote!(<'a>)
+        } else {
+            quote!()
+        };
         let arms = en.variants.iter().map(|(vn, _)| {
             let v = ident(vn);
             quote!(#e::#v(it) => it.span())
@@ -422,7 +480,10 @@ pub fn generate_files(ast_src: &str) -> Vec<(String, String)> {
         .into_iter()
         .map(|(name, tokens)| {
             let file: syn::File = syn::parse2(tokens).expect("generated code must parse");
-            (format!("{name}.rs"), format!("{HEADER}{}", prettyplease::unparse(&file)))
+            (
+                format!("{name}.rs"),
+                format!("{HEADER}{}", prettyplease::unparse(&file)),
+            )
         })
         .collect()
 }

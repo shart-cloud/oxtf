@@ -11,7 +11,9 @@ use std::time::Instant;
 
 fn corpus_files() -> Vec<PathBuf> {
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
-        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return;
+        };
         for e in rd.flatten() {
             let p = e.path();
             let ft = e.file_type().unwrap();
@@ -26,17 +28,32 @@ fn corpus_files() -> Vec<PathBuf> {
         }
     }
     let mut out = Vec::new();
-    walk(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/repos"), &mut out);
+    walk(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/repos"),
+        &mut out,
+    );
     out.sort();
     out
 }
 
 fn main() {
-    let iters: usize = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(10);
-    let sources: Vec<String> = corpus_files().iter().map(|p| std::fs::read_to_string(p).unwrap()).collect();
+    let iters: usize = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
+    let sources: Vec<String> = corpus_files()
+        .iter()
+        .map(|p| std::fs::read_to_string(p).unwrap())
+        .collect();
     let total_bytes: usize = sources.iter().map(String::len).sum();
     let mb = total_bytes as f64 / 1e6;
-    println!("corpus: {} files, {} bytes ({:.2} MB), {} iterations", sources.len(), total_bytes, mb, iters);
+    println!(
+        "corpus: {} files, {} bytes ({:.2} MB), {} iterations",
+        sources.len(),
+        total_bytes,
+        mb,
+        iters
+    );
 
     // Arena footprint: parse everything into one arena without resetting.
     {
@@ -52,7 +69,13 @@ fn main() {
         // Bytes actually used inside the chunks (allocated_bytes() is the
         // sum of chunk capacities, which over-counts the last chunk).
         // SAFETY: no allocation happens while iterating; we only read lengths.
-        let used: usize = unsafe { alloc.bump().iter_allocated_chunks_raw().map(|(_, len)| len).sum() };
+        let used: usize = unsafe {
+            alloc
+                .bump()
+                .iter_allocated_chunks_raw()
+                .map(|(_, len)| len)
+                .sum()
+        };
         println!(
             "arena: {} bytes used ({} bytes in chunks) for {} source bytes = {:.2} used arena bytes per source byte ({} errors, {} comments)",
             used,

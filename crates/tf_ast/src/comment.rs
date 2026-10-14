@@ -27,7 +27,10 @@ impl Comment {
         match self.kind {
             CommentKind::Hash => &s[1..],
             CommentKind::DoubleSlash => &s[2..],
-            CommentKind::Block => s.strip_prefix("/*").and_then(|s| s.strip_suffix("*/")).unwrap_or(s),
+            CommentKind::Block => s
+                .strip_prefix("/*")
+                .and_then(|s| s.strip_suffix("*/"))
+                .unwrap_or(s),
         }
     }
 }

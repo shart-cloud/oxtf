@@ -3,7 +3,7 @@
 
 mod common;
 
-use tf_parser::dump::{dump_file, Options};
+use tf_parser::dump::{Options, dump_file};
 
 /// (name, source). Cases whose name starts with `err_` are expected to
 /// produce diagnostics.
@@ -156,10 +156,19 @@ d = "$ and % alone, ${"nested ${"deep"}"}"
         "newlines_in_brackets",
         "a = [\n  1,\n  2,\n]\nb = (\n  1 +\n  2\n)\nc = f(\n)\nd = [\n]\ne = var.x ? [\n  1\n] : []\nf = {\n\n  a = 1\n\n}\n",
     ),
-    ("tfvars", "region = \"us-east-1\"\ncidrs  = [\"10.0.0.0/16\"]\ntags   = { env = \"prod\" }\ncount  = 3\nratio  = 1.5e3\n"),
-    ("crlf", "a = 1\r\nb = \"x\"\r\nc {\r\n  d = <<EOT\r\nhi\r\nEOT\r\n}\r\n"),
+    (
+        "tfvars",
+        "region = \"us-east-1\"\ncidrs  = [\"10.0.0.0/16\"]\ntags   = { env = \"prod\" }\ncount  = 3\nratio  = 1.5e3\n",
+    ),
+    (
+        "crlf",
+        "a = 1\r\nb = \"x\"\r\nc {\r\n  d = <<EOT\r\nhi\r\nEOT\r\n}\r\n",
+    ),
     // ---- error recovery ----
-    ("err_missing_rbrace", "resource \"a\" \"b\" {\n  x = 1\n\nresource \"c\" \"d\" {\n  y = 2\n}\n"),
+    (
+        "err_missing_rbrace",
+        "resource \"a\" \"b\" {\n  x = 1\n\nresource \"c\" \"d\" {\n  y = 2\n}\n",
+    ),
     ("err_unterminated_string", "a = \"abc\nb = 2\nc = 3\n"),
     ("err_stray_token", "a = 1\n) ] ;\nb = 2\n"),
     ("err_missing_eq", "a 1\nb = 2\n"),
@@ -169,7 +178,10 @@ d = "$ and % alone, ${"nested ${"deep"}"}"
     ("err_unclosed_interp", "a = \"x ${var.y\"\nb = 2\n"),
     ("err_missing_endif", "a = \"%{ if x }yes\"\nb = 2\n"),
     ("err_unexpected_rbrace", "}\na = 1\n"),
-    ("err_object_missing_eq", "a = {\n  k v\n  ok = 1\n}\nb = 2\n"),
+    (
+        "err_object_missing_eq",
+        "a = {\n  k v\n  ok = 1\n}\nb = 2\n",
+    ),
     ("err_unterminated_heredoc", "a = <<EOT\nhello\nb = 2\n"),
 ];
 
@@ -206,7 +218,13 @@ fn snapshot_spans() {
     let src = "resource \"x\" \"y\" {\n  a = var.b[0].c\n  t = \"p${q}\"\n}\n";
     let alloc = tf_allocator::Allocator::new();
     let ret = tf_parser::parse(&alloc, src);
-    insta::assert_snapshot!(dump_file(&ret.file, Options { spans: true, ..Options::default() }));
+    insta::assert_snapshot!(dump_file(
+        &ret.file,
+        Options {
+            spans: true,
+            ..Options::default()
+        }
+    ));
 }
 
 /// Cases where tf_parser intentionally differs from hcl-edit 0.9.7.
@@ -221,7 +239,11 @@ const KNOWN_HCL_EDIT_DIVERGENCES: &[&str] = &["heredoc_indented_directive"];
 
 #[test]
 fn valid_cases_parse_cleanly_and_match_hcl_edit() {
-    let opts = Options { spans: false, normalize: true, dedupe_object_keys: true };
+    let opts = Options {
+        spans: false,
+        normalize: true,
+        dedupe_object_keys: true,
+    };
     for (name, src) in CASES {
         if name.starts_with("err_") {
             continue;
@@ -230,10 +252,14 @@ fn valid_cases_parse_cleanly_and_match_hcl_edit() {
         let ret = tf_parser::parse(&alloc, src);
         assert!(ret.errors.is_empty(), "{name}: {:?}", ret.errors);
         let mine = dump_file(&ret.file, opts);
-        let body = hcl_edit::parser::parse_body(src).unwrap_or_else(|e| panic!("hcl-edit rejected {name}: {e}"));
+        let body = hcl_edit::parser::parse_body(src)
+            .unwrap_or_else(|e| panic!("hcl-edit rejected {name}: {e}"));
         let theirs = common::hcl_body(&body);
         if KNOWN_HCL_EDIT_DIVERGENCES.contains(name) {
-            assert_ne!(mine, theirs, "{name}: known divergence no longer diverges; update the list");
+            assert_ne!(
+                mine, theirs,
+                "{name}: known divergence no longer diverges; update the list"
+            );
             continue;
         }
         assert_eq!(mine, theirs, "{name} diverges from hcl-edit");

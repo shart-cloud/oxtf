@@ -118,7 +118,10 @@ impl<'a> ObjectKey<'a> {
 impl<'a> Object<'a> {
     /// First item whose key is statically `name`.
     pub fn find(&self, name: &str) -> Option<&Expression<'a>> {
-        self.items.iter().find(|i| i.key.as_static_str() == Some(name)).map(|i| &i.value)
+        self.items
+            .iter()
+            .find(|i| i.key.as_static_str() == Some(name))
+            .map(|i| &i.value)
     }
 }
 

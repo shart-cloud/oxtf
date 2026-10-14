@@ -32,10 +32,30 @@ const CASES: &[Case] = &[
         valid: &["b", "c"],
         ideal: (1, 5),
     },
-    Case { name: "stray tokens line", src: "a = 1\n) ] ;\nb = 2\n", valid: &["a", "b"], ideal: (2, 1) },
-    Case { name: "missing `=`", src: "a 1\nb = 2\nc = 3\n", valid: &["b", "c"], ideal: (1, 3) },
-    Case { name: "missing `]`", src: "a = [1, 2\nb = 3\nc = 4\n", valid: &["b", "c"], ideal: (1, 5) },
-    Case { name: "missing `)`", src: "a = f(1, 2\nb = 3\nc = 4\n", valid: &["b", "c"], ideal: (1, 6) },
+    Case {
+        name: "stray tokens line",
+        src: "a = 1\n) ] ;\nb = 2\n",
+        valid: &["a", "b"],
+        ideal: (2, 1),
+    },
+    Case {
+        name: "missing `=`",
+        src: "a 1\nb = 2\nc = 3\n",
+        valid: &["b", "c"],
+        ideal: (1, 3),
+    },
+    Case {
+        name: "missing `]`",
+        src: "a = [1, 2\nb = 3\nc = 4\n",
+        valid: &["b", "c"],
+        ideal: (1, 5),
+    },
+    Case {
+        name: "missing `)`",
+        src: "a = f(1, 2\nb = 3\nc = 4\n",
+        valid: &["b", "c"],
+        ideal: (1, 6),
+    },
     Case {
         name: "dangling operator",
         src: "a = 1 +\nb = 2\nc = 3\n",
@@ -129,7 +149,9 @@ fn hcl_edit_keys(body: &hcl_edit::structure::Body, out: &mut Vec<String>) {
 
 #[test]
 fn recovery_quality_table() {
-    println!("| case | tf_parser tree | tf_parser recovered | tf_parser errors | tf_parser 1st error (ideal) | hcl-edit tree | hcl-edit recovered | hcl-edit error (ideal) |");
+    println!(
+        "| case | tf_parser tree | tf_parser recovered | tf_parser errors | tf_parser 1st error (ideal) | hcl-edit tree | hcl-edit recovered | hcl-edit error (ideal) |"
+    );
     println!("|---|---|---|---|---|---|---|---|");
     let mut total_valid = 0;
     let mut total_mine = 0;
@@ -154,7 +176,11 @@ fn recovery_quality_table() {
             Ok(body) => {
                 let mut names = Vec::new();
                 hcl_edit_keys(&body, &mut names);
-                let rec = case.valid.iter().filter(|v| names.iter().any(|n| n == *v)).count();
+                let rec = case
+                    .valid
+                    .iter()
+                    .filter(|v| names.iter().any(|n| n == *v))
+                    .count();
                 (true, rec, None)
             }
             Err(e) => {
@@ -189,5 +215,8 @@ fn recovery_quality_table() {
         n = CASES.len()
     );
     // Regression guard: recover at least 90% of valid attributes.
-    assert!(total_mine * 10 >= total_valid * 9, "recovered {total_mine}/{total_valid}");
+    assert!(
+        total_mine * 10 >= total_valid * 9,
+        "recovered {total_mine}/{total_valid}"
+    );
 }

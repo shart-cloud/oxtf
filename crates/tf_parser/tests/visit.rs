@@ -46,7 +46,16 @@ fn visit_collects_references() {
     let file = alloc.alloc(ret.file);
     let mut refs = Refs::default();
     refs.visit_file(file);
-    assert_eq!(refs.0, ["var.cidr", "var.rules", "local.open", "var.extra", "ingress.value.port"]);
+    assert_eq!(
+        refs.0,
+        [
+            "var.cidr",
+            "var.rules",
+            "local.open",
+            "var.extra",
+            "ingress.value.port"
+        ]
+    );
 }
 
 #[test]
@@ -59,7 +68,12 @@ fn ast_kind_enter_leave_balanced_and_spans_nested() {
         fn enter_node(&mut self, kind: AstKind<'a>) {
             if let Some(parent) = self.stack.last() {
                 let (p, c) = (parent.span(), kind.span());
-                assert!(p.start <= c.start && c.end <= p.end, "{:?} {p:?} does not contain {:?} {c:?}", parent.ty(), kind.ty());
+                assert!(
+                    p.start <= c.start && c.end <= p.end,
+                    "{:?} {p:?} does not contain {:?} {c:?}",
+                    parent.ty(),
+                    kind.ty()
+                );
             }
             self.stack.push(kind);
             self.count += 1;
@@ -71,7 +85,10 @@ fn ast_kind_enter_leave_balanced_and_spans_nested() {
     let alloc = tf_allocator::Allocator::new();
     let ret = tf_parser::parse(&alloc, SRC);
     let file = alloc.alloc(ret.file);
-    let mut c = Check { stack: vec![], count: 0 };
+    let mut c = Check {
+        stack: vec![],
+        count: 0,
+    };
     c.visit_file(file);
     assert!(c.stack.is_empty());
     assert!(c.count > 40, "{}", c.count);
@@ -97,7 +114,10 @@ fn visit_mut_renames_and_body_helpers() {
     let open = locals.body.find_attribute("open").unwrap();
     assert_eq!(open.value.as_reference().unwrap().0, "input");
     let sg = ret.file.body.blocks_of_type("resource").next().unwrap();
-    assert_eq!((sg.label(0), sg.label(1)), (Some("aws_security_group"), Some("sg")));
+    assert_eq!(
+        (sg.label(0), sg.label(1)),
+        (Some("aws_security_group"), Some("sg"))
+    );
     let dynamic = sg.body.find_block("dynamic").unwrap();
     assert_eq!(dynamic.label(0), Some("ingress"));
 }

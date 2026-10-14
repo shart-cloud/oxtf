@@ -10,7 +10,11 @@ use std::path::PathBuf;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let check = args.iter().any(|a| a == "--check");
-    let opt = |name: &str| args.iter().position(|a| a == name).map(|i| PathBuf::from(&args[i + 1]));
+    let opt = |name: &str| {
+        args.iter()
+            .position(|a| a == name)
+            .map(|i| PathBuf::from(&args[i + 1]))
+    };
     let ast_crate = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tf_ast");
     let input = opt("--input").unwrap_or_else(|| ast_crate.join("src/ast.rs"));
     let out_dir = opt("--out-dir").unwrap_or_else(|| ast_crate.join("src/generated"));
