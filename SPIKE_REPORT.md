@@ -58,7 +58,7 @@ _Answers are filled in as each workstream produces evidence._
 3. **Schema IR cost: embed all three providers.** ([W2 findings](docs/findings/W2.md)) All 5,763 resource and data-source schemas (aws 6.68.0, azurerm 5.9.0, google 8.7.0) fit in a 1,453,065 B postcard blob plus a 499,872 B shared-symbol table (interning cut 5.3 MB → 1.95 MB; xz would give 358 KB, not applied). Embedding grows a tiny stripped binary from 344,848 B to 3,517,272 B (+3.0 MiB). Generated code is 17,518 lines. `tf_schema` clean release build is 2.04 s with the generated code vs 0.75 s without (incremental 1.86 s vs 0.78 s). Startup: per-resource lazy decode; first lookup 0.9–1.2 ms, a typical cold lookup 21–42 µs, warm lookup ~0.5 µs, the largest schema (`aws_wafv2_web_acl_rule`) 3.3–4.6 ms; decoding everything eagerly would cost 22.5–33.6 ms. Nothing here argues for runtime loading.
 4. **Typed views: allowlist only.** Allowlist (11 types): 4,022 lines, 0.36 s clean release build, 118 MB peak rustc RSS, 0.76 MB rlib. All AWS except 6 giants (1,724 types): 461k lines, 49.6 s, 2.3 GB, 108 MB rlib. All 1,730 AWS types: 2.87M lines and **rustc OOM at 7.46 GB** (10 GB cap); the 3 `wafv2` and 3 `quicksight` resources alone are 2.41M lines because of deeply recursive nested blocks. Generating views for every resource is not viable; generate for resources that have rules.
 5. **Defaults overlay: mostly derivable for a draft, not for rule-critical entries.** Extraction from provider docs (`Defaults to ...` phrases) and Go source (`Default:` in schema definitions) recovers 1,927 (resource, path) defaults on 590 AWS resources and 1,000 on 375 Google resources. Where both sources yield a value they agree 641/648 (AWS) and 151/155 (Google); a hand-checked sample was 59/60 correct. 18 of the 22 hand-written overlay entries are recovered. The misses are exactly the security-relevant kind: API-side defaults not in source (`aws_db_instance.storage_encrypted`) and "absent means none" semantics (`aws_security_group.ingress`). Recommendation: generate a draft overlay automatically and require hand review for anything a rule reads.
-6. Evaluator depth — pending (W3)
+6. **Evaluator depth: the long tail is provider-computed values and remote modules, not functions.** ([W3 findings](docs/findings/W3.md), `cargo run -p tf_semantic --release --example q6_eval_depth -- corpus/repos`) Across 504 root modules, 1,039 security-relevant attribute locations and 4,353 evaluations: **77.3% wholly Known**, 6.7% partially Known, 15.8% Unknown, 0.2% Tainted. The first run was 60.3% Known; four measurement-driven fixes (`optional()` type defaults, `nullable`, `setproduct`/`base64*`, rendering `data.aws_iam_policy_document`) raised it. Function ranking over all 11,727 corpus call sites: `try` 30.1%, `lookup` 24.3%, `length` 6.4%, `merge` 6.2%, `keys` 4.4%, `coalesce` 3.0%; the top 10 cover 81.0%, and the 77 implemented functions cover 99.1%. Unimplemented are `regex`/`regexall`, `file`/`templatefile`, hash and time functions. Unknown origins: computed by provider 13.3% (plus data-source attributes such as `.partition` 3.1%, `.arn` 1.3%), remote module outputs 2.5%, unexpanded `count.index` 1.1%, unsupported functions 3 evaluations of 4,353. Next investments: more deterministic data sources, optional resolution of registry modules from a local cache, per-instance `count` expansion.
 7. Arena lifetime across PyO3 — pending (W6)
 8. Rule portability — pending (W6)
 9. Speed versus incumbents — pending
@@ -69,15 +69,25 @@ _Answers are filled in as each workstream produces evidence._
 | --- | --- |
 | Parser handles 100% of corpus files; `hcl-edit` differential clean | **met**: 2,192/2,192 files, 0 errors, 0 divergences |
 | `Expression` size test passes at 16 bytes | **met**: `tf_ast` `size_tests::expression_is_16_bytes` |
-| All five seed rules pass fixtures incl. variable-indirection and `dynamic` | pending |
-| A finding shows a full provenance chain back to a `.tfvars` line | pending |
+| All five seed rules pass fixtures incl. variable-indirection and `dynamic` | **met**: 31/31 cases (29 original + 2 added for `aws_iam_policy_document`), `cargo test -p tf_linter --test fixtures` |
+| A finding shows a full provenance chain back to a `.tfvars` line | **met**: `oxtf scan fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local` shows `terraform.tfvars:1` → `variables.tf:1` → `locals.tf:2` → `main.tf:6`; also asserted by `tf_semantic/tests/exit.rs` |
 | Python: pip install wheel, scan, expression rule, Arrow findings | pending |
 | Benchmarks vs Trivy and Checkov recorded with specs and commands | pending |
 
 ## Scope cuts
 
+- W3: `.tf.json`, `override.tf` merging and `terraform.tfvars.json` not handled; `count > 1` evaluated as one instance with `count.index` Unknown; `for_each` expansion capped at 64 keys; `regex`, `regexall`, `file`, `templatefile`, hash and time functions unimplemented; references into another resource's nested blocks, `self` and `terraform.workspace` are Unknown.
+- W4: IAM rule ignores `NotAction`/`NotResource` and partial wildcards (`s3:*`); S3 rule ignores account-level public access blocks and bucket policies; remote module outputs never produce findings; no `--fail-on` exit code; a module called by several roots is analysed once per root (findings carry their `root`).
+
 - W2: no azurerm defaults file (no seed rule targets azurerm); derived defaults measured but not merged into the runtime overlay; "all views" measured in a throwaway crate rather than a feature flag; defaults are scalars only (no list/map/object values); descriptions are not stored in the runtime IR.
 - W1: diagnostics are plain structs (miette rendering moved to W4); no lossless/trivia tree (autofix and formatting are non-goals); the proc-macro visitor prototype was deleted after measuring.
+
+## W3/W4 results in brief
+
+- Crates: `tf_eval` (value lattice, provenance, 77 built-ins, four-valued truth; no module or schema knowledge) and `tf_semantic` (module assembly, symbols and reference edges, `count`/`for_each`/`dynamic` expansion, schema-aware evaluation, owned model); `tf_linter` (rule trait, rayon per root module, miette/JSON output); `tf_cli` (`oxtf`).
+- Value lattice: `Known`, `Unknown { origin }`, `OneOf`, `Tainted`. **Tainted** = derived from an unconstrained input (root variable with no default and no tfvars value). Rules map a Tainted-dependent violation to **Conditional** severity; a verdict that depends on `Unknown` (provider-computed, remote module) produces no finding.
+- Provenance: an `Arc`'d linked list of steps (8 bytes per value), each with kind, file span, label, and resource address when applicable.
+- Corpus run, `oxtf scan --recursive corpus/repos`: 504 root modules, 1,498 module instances, 2,176 files, 5,227 resources, no panics, **2 findings** (both `aws-rds-unencrypted`, both true positives: examples set `storage_encrypted = false`). 0.33–0.57 s wall (4 threads), 0.86–0.98 s (1 thread), release; concurrent load caveat, final numbers in the benchmark section. 10 spot-checked non-findings were correct. The low count reflects secure-by-default modules and five narrow rules, not silent evaluator failure (see `crates/tf_linter/examples/audit.rs` in [W4 findings](docs/findings/W4.md)).
 
 ## Go / no-go
 
