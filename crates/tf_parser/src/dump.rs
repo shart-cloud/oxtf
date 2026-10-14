@@ -16,6 +16,10 @@ pub struct Options {
     pub spans: bool,
     /// Canonicalise for structural comparison (see module docs).
     pub normalize: bool,
+    /// Mimic `hcl-edit`'s object representation (an ordered map): a repeated
+    /// key keeps its first position and takes the last value. Only for the
+    /// differential test; the tf_ast tree keeps every item.
+    pub dedupe_object_keys: bool,
 }
 
 pub fn dump_file(file: &File<'_>, opts: Options) -> String {
@@ -192,7 +196,7 @@ impl Dumper {
                 self.out.push(')');
             }
             Expression::Heredoc(h) => {
-                write!(self.out, "(heredoc {}{}", if h.indented { "-" } else { "" }, h.delimiter).unwrap();
+                write!(self.out, "(heredoc {}{}", if h.indented && !self.opts.normalize { "-" } else { "" }, h.delimiter).unwrap();
                 self.sp(h.span);
                 let s = self.template(&h.template, false, false);
                 if !s.is_empty() {
@@ -256,20 +260,24 @@ impl Dumper {
                 self.out.push_str("(object");
                 self.sp(o.span);
                 self.indent += 1;
+                let mut rendered: Vec<(String, String)> = Vec::new();
                 for item in o.items.iter() {
-                    self.nl();
-                    self.out.push('(');
-                    match &item.key {
-                        ObjectKey::Identifier(i) => write!(self.out, "{}", i.name).unwrap(),
-                        ObjectKey::Expression(k) => {
-                            self.out.push_str("(key ");
-                            self.expr(k);
-                            self.out.push(')');
-                        }
+                    let key = match &item.key {
+                        ObjectKey::Identifier(i) => i.name.to_string(),
+                        ObjectKey::Expression(k) => format!("(key {})", self.sub(k)),
+                    };
+                    let value = self.sub(&item.value);
+                    if self.opts.dedupe_object_keys
+                        && let Some(slot) = rendered.iter_mut().find(|(k, _)| *k == key)
+                    {
+                        slot.1 = value;
+                        continue;
                     }
-                    self.out.push(' ');
-                    self.expr(&item.value);
-                    self.out.push(')');
+                    rendered.push((key, value));
+                }
+                for (k, v) in rendered {
+                    self.nl();
+                    write!(self.out, "({k} {v})").unwrap();
                 }
                 self.indent -= 1;
                 self.out.push(')');

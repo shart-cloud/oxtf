@@ -5,6 +5,7 @@ fn main() {
     let opts = tf_parser::dump::Options {
         spans: args.iter().any(|a| a == "--spans"),
         normalize: args.iter().any(|a| a == "--norm"),
+        dedupe_object_keys: false,
     };
     let alloc = tf_allocator::Allocator::new();
     let ret = tf_parser::parse(&alloc, &src);
