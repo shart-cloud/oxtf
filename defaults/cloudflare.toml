@@ -1,0 +1,11 @@
+# Defaults overlay for cloudflare/cloudflare 5.28.0. See defaults/aws.toml for format.
+# Sources: internal/services/*/schema.go at tag v5.28.0
+# (commit fa63ebaea80e153d0d9325f818adc36187a8e12a). Framework defaults
+# (booldefault.StaticBool etc.); paths may go through nested attributes.
+
+[cloudflare_dns_record]
+proxied = { value = false, note = "source dns_record/schema.go:352-357 booldefault.StaticBool(false): record is DNS-only, no WAF/proxy" }
+
+[cloudflare_ruleset]
+rules = { value = [], note = "source ruleset/schema.go:131-135 listdefault.StaticValue(empty list)" }
+"rules.enabled" = { value = true, note = "source ruleset/schema.go:2252-2257 booldefault.StaticBool(true)" }

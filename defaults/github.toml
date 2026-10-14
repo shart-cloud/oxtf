@@ -1,0 +1,13 @@
+# Defaults overlay for integrations/github 6.13.0. See defaults/aws.toml for format.
+# Sources: github/*.go and templates/resources/*.md.tmpl at tag v6.13.0
+# (commit 20728bb30c112287ac3e8243cdb0307a45c6a0a0).
+
+[github_repository]
+visibility = { value = "public", note = "source resource_github_repository.go:523 calculateVisibility returns \"public\" when neither visibility nor private is set; optional+computed, so only valid when `private` is also absent" }
+private = { value = false, note = "docs repository.md.tmpl:37 'Repositories are created as public (e.g. open source) by default.'; deprecated, conflicts with visibility" }
+
+[github_branch_protection]
+enforce_admins = { value = false, note = "source resource_github_branch_protection.go:43-47 PROTECTION_IS_ADMIN_ENFORCED Default: false" }
+allows_force_pushes = { value = false, note = "source resource_github_branch_protection.go:37-41 Default: false" }
+allows_deletions = { value = false, note = "source resource_github_branch_protection.go:31-35 Default: false" }
+require_signed_commits = { value = false, note = "source resource_github_branch_protection.go:49-53 Default: false" }

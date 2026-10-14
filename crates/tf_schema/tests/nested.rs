@@ -262,3 +262,55 @@ fn views_for_new_providers() {
             .is_none()
     );
 }
+
+#[test]
+fn defaults_for_new_providers() {
+    use DefaultValue::*;
+    assert_eq!(default_for("cloudflare_ruleset", "rules"), Some(Empty));
+    assert_eq!(
+        default_for("cloudflare_ruleset", "rules.enabled"),
+        Some(Bool(true))
+    );
+    assert_eq!(
+        default_for("cloudflare_dns_record", "proxied"),
+        Some(Bool(false))
+    );
+    assert_eq!(
+        default_for(
+            "kubernetes_pod_v1",
+            "spec.container.security_context.privileged"
+        ),
+        Some(Bool(false))
+    );
+    assert_eq!(
+        default_for(
+            "kubernetes_pod_v1",
+            "spec.container.security_context.allow_privilege_escalation"
+        ),
+        Some(Bool(true))
+    );
+    assert_eq!(
+        default_for("github_branch_protection", "enforce_admins"),
+        Some(Bool(false))
+    );
+    assert_eq!(
+        default_for("github_repository", "visibility"),
+        Some(String("public"))
+    );
+    let n = [
+        "cloudflare_dns_record",
+        "cloudflare_ruleset",
+        "kubernetes_pod_v1",
+        "github_repository",
+        "github_branch_protection",
+    ]
+    .iter()
+    .map(|r| defaults_for(r).len())
+    .sum::<usize>();
+    assert_eq!(n, 15);
+    assert!(
+        defaults_for("github_repository")
+            .iter()
+            .all(|e| !e.note.is_empty())
+    );
+}
