@@ -94,7 +94,7 @@ fn plan_fixtures_match_source() {
             None => (stem.clone(), None),
         };
         let case_dir = repo.join("fixtures/rules").join(&rule).join(&case);
-        let src = scan_dir(&case_dir, &ScanOptions::default());
+        let src = scan_dir(&case_dir, &ScanOptions::default()).unwrap();
         let src_rows = rows(&src, &rule);
         assert_eq!(src_rows, expect_rows(&case_dir), "source scan of {case}");
         let expected: BTreeSet<Row> = match variant.as_deref() {

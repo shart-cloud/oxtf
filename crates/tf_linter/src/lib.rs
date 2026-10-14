@@ -2,7 +2,7 @@
 //!
 //! ```no_run
 //! use tf_linter::{scan_dir, ScanOptions};
-//! let r = scan_dir("fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local".as_ref(), &ScanOptions::default());
+//! let r = scan_dir("fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local".as_ref(), &ScanOptions::default()).unwrap();
 //! for f in &r.findings {
 //!     println!("{}", tf_linter::render::render_finding(&r.files, f, false));
 //! }
@@ -23,7 +23,7 @@ pub mod rule;
 pub mod rules;
 pub mod scan;
 
-pub use engine::Linter;
+pub use engine::{Linter, RuleSelectionError, select_rules};
 pub use rule::{
     Category, DynRule, Finding, Level, Rule, RuleContext, RuleInfo, RuleMeta, Severity,
 };

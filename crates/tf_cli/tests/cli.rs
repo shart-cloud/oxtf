@@ -167,3 +167,26 @@ fn scan_plan_maps_to_source() {
         .unwrap();
     assert_eq!(out.status.code(), Some(2));
 }
+
+#[test]
+fn unknown_rule_ids_are_errors_even_with_valid_ids() {
+    for ids in [
+        vec!["aws-rds-unencryptd"],
+        vec!["aws-rds-unencrypted", "aws-rds-unencryptd"],
+    ] {
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_oxtf"));
+        cmd.args([
+            "scan",
+            &fixture("aws-rds-unencrypted/fail_absent_uses_default"),
+            "--format",
+            "json",
+        ]);
+        for id in ids {
+            cmd.args(["--rule", id]);
+        }
+        let out = cmd.output().unwrap();
+        assert_eq!(out.status.code(), Some(2));
+        assert!(String::from_utf8_lossy(&out.stderr).contains("aws-rds-unencryptd"));
+        assert!(out.stdout.is_empty());
+    }
+}

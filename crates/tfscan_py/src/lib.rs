@@ -854,10 +854,8 @@ fn build_rules(
 ) -> PyResult<(Rules, CallbackError, CallCount)> {
     let mut rules: Vec<Box<dyn DynRule>> = match &builtin {
         None => tf_linter::rules::all(),
-        Some(ids) => tf_linter::rules::all()
-            .into_iter()
-            .filter(|r| ids.iter().any(|i| *i == *r.info().name))
-            .collect(),
+        Some(ids) => tf_linter::select_rules(tf_linter::rules::all(), ids)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?,
     };
     for j in &ir_rules {
         for r in tf_rule_ir::compile_json(j).map_err(PyValueError::new_err)? {

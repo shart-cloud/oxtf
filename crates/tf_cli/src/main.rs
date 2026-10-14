@@ -159,36 +159,44 @@ fn scan(a: Args) -> ExitCode {
             }
         }
     }
-    let linter = match &a.opts.rules {
-        Some(ids) => Linter::filtered(rules, ids),
-        None => Linter::new(rules),
-    };
-    let r = if let Some(plan) = &a.plan {
-        let opts = tf_plan::PlanOptions {
-            source: a.source.clone(),
-        };
-        match tf_plan::scan_plan(&linter, plan, &opts) {
-            Ok(r) => r,
-            Err(e) => {
-                eprintln!("error: {e}");
-                return ExitCode::from(2);
-            }
+    let run = |rules| scan_rules(&a, rules);
+    let result = run(rules);
+    match result {
+        Ok(r) => print_result(&r, &a),
+        Err(e) => {
+            eprintln!("error: {e}");
+            ExitCode::from(2)
         }
-    } else {
-        match scan_dirs(&linter, &a) {
-            Ok(r) => r,
-            Err(code) => return code,
-        }
-    };
-    print_result(&r, &a)
+    }
 }
 
-fn scan_dirs(linter: &Linter, a: &Args) -> Result<tf_linter::ScanResult, ExitCode> {
+fn scan_rules(
+    a: &Args,
+    rules: Vec<Box<dyn tf_linter::rule::DynRule>>,
+) -> Result<tf_linter::ScanResult, String> {
+    let linter = match &a.opts.rules {
+        Some(ids) => Linter::filtered(rules, ids).map_err(|e| e.to_string())?,
+        None => Linter::new(rules),
+    };
+    if let Some(plan) = &a.plan {
+        tf_plan::scan_plan(
+            &linter,
+            plan,
+            &tf_plan::PlanOptions {
+                source: a.source.clone(),
+            },
+        )
+        .map_err(|e| e.to_string())
+    } else {
+        scan_dirs(&linter, a)
+    }
+}
+
+fn scan_dirs(linter: &Linter, a: &Args) -> Result<tf_linter::ScanResult, String> {
     let mut roots = Vec::new();
     for p in &a.paths {
         if !p.is_dir() {
-            eprintln!("error: {} is not a directory", p.display());
-            return Err(ExitCode::from(2));
+            return Err(format!("{} is not a directory", p.display()));
         }
         roots.extend(discover_roots(p, a.opts.recursive));
     }

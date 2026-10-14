@@ -36,7 +36,7 @@ resource "aws_db_instance" "always" {
 "#,
     )
     .unwrap();
-    let res = scan_dir(&d, &ScanOptions::default());
+    let res = scan_dir(&d, &ScanOptions::default()).unwrap();
     let addrs: Vec<_> = res.findings.iter().map(|f| f.address.to_string()).collect();
     assert_eq!(addrs, ["aws_db_instance.always"], "{addrs:?}");
     std::fs::remove_dir_all(&d).unwrap();

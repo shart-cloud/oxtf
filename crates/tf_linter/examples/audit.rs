@@ -66,7 +66,8 @@ fn main() {
             recursive: true,
             ..Default::default()
         },
-    );
+    )
+    .expect("valid rule selection");
     let mut counts: BTreeMap<(String, String, String), usize> = BTreeMap::new();
     let mut instances: BTreeMap<String, usize> = BTreeMap::new();
     for a in &analyses {

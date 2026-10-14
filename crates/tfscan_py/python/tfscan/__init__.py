@@ -226,7 +226,8 @@ def scan(
     ``recursive``: every directory under ``path`` containing ``.tf`` files is
     a root module. ``builtin``: ``True`` (all built-in rules), ``False``, or a
     list of built-in rule ids. ``rules``: expression rules (``tfscan.rule``),
-    compiled IR rules, and callback rules."""
+    compiled IR rules, and callback rules. Unknown built-in rule IDs raise
+    ``ValueError``; an empty list intentionally disables built-in rules."""
     ir: list[str] = []
     callbacks: list[CallbackRule] = []
     for r in rules:

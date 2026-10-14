@@ -31,7 +31,7 @@ fn ir_sg_open_ssh_matches_builtin_on_fixtures() {
     let json = std::fs::read_to_string(ws.join("crates/tfscan_py/rules/sg_open_ssh.json")).unwrap();
     let ir = tf_rule_ir::compile_json(&json).unwrap();
     let ir = Linter::new(ir.into_iter().map(|r| Box::new(r) as _).collect());
-    let builtin = Linter::filtered(tf_linter::rules::all(), &["aws-sg-open-ssh".into()]);
+    let builtin = Linter::filtered(tf_linter::rules::all(), &["aws-sg-open-ssh".into()]).unwrap();
     let dir = ws.join("fixtures/rules/aws-sg-open-ssh");
     let mut cases: Vec<_> = std::fs::read_dir(&dir)
         .unwrap()

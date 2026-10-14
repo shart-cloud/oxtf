@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use rayon::prelude::*;
 use tf_semantic::{Analysis, AnalyzeOptions, Diagnostic, FileTable, analyze_module};
 
-use crate::engine::Linter;
+use crate::engine::{Linter, RuleSelectionError};
 use crate::rule::{Finding, Severity};
 
 #[derive(Clone, Debug, Default)]
@@ -21,6 +21,7 @@ pub struct ScanOptions {
     /// Extra `-var-file`s for the root module(s).
     pub var_files: Vec<PathBuf>,
     /// Only run these rule ids (all seed rules when `None`).
+    /// Used by `scan_dir` and `scan_dir_with_model`; `scan_with` uses its explicit linter.
     pub rules: Option<Vec<String>>,
     /// Worker threads (rayon); `None` = number of CPUs.
     pub threads: Option<usize>,
@@ -87,19 +88,26 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
 }
 
 /// Scan `path` and return findings only.
-pub fn scan_dir(path: &Path, opts: &ScanOptions) -> ScanResult {
-    scan_dir_with_model(path, opts).0
+pub fn scan_dir(path: &Path, opts: &ScanOptions) -> Result<ScanResult, RuleSelectionError> {
+    scan_dir_with_model(path, opts).map(|(result, _)| result)
 }
 
 /// Scan `path` and also return the analysed model of every root module
 /// (resources with evaluated attributes, variables, outputs, symbols).
-pub fn scan_dir_with_model(path: &Path, opts: &ScanOptions) -> (ScanResult, Vec<Analysis>) {
+pub fn scan_dir_with_model(
+    path: &Path,
+    opts: &ScanOptions,
+) -> Result<(ScanResult, Vec<Analysis>), RuleSelectionError> {
     let rules = crate::rules::all();
     let linter = match &opts.rules {
-        Some(ids) => Linter::filtered(rules, ids),
+        Some(ids) => Linter::filtered(rules, ids)?,
         None => Linter::new(rules),
     };
-    scan_with(&linter, &discover_roots(path, opts.recursive), opts)
+    Ok(scan_with(
+        &linter,
+        &discover_roots(path, opts.recursive),
+        opts,
+    ))
 }
 
 /// Scan explicit root module directories with a given linter (custom or

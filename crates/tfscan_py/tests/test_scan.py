@@ -112,3 +112,13 @@ def test_defaults_overlay_and_unknown():
     (pab,) = [x for x in r.resources if x.type == "aws_s3_bucket_public_access_block"]
     b = pab["bucket"]
     assert b.kind == "unknown" and "computed by provider" in b.origin
+
+
+@pytest.mark.parametrize("ids", [["typo"], ["aws-sg-open-ssh", "typo"]])
+def test_unknown_builtin_rule_is_an_error(ids):
+    with pytest.raises(ValueError, match="unknown rule ID.*typo"):
+        tfscan.scan(SSH_FIXTURES / "fail_inline_literal", builtin=ids)
+
+
+def test_explicit_empty_builtin_selection():
+    assert tfscan.scan(SSH_FIXTURES / "fail_inline_literal", builtin=[]).findings == []

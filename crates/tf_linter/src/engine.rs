@@ -43,14 +43,13 @@ impl Linter {
         Linter::new(crate::rules::all())
     }
 
-    /// Keep only rules whose id is in `ids`.
-    pub fn filtered(rules: Vec<Box<dyn DynRule>>, ids: &[String]) -> Self {
-        Linter::new(
-            rules
-                .into_iter()
-                .filter(|r| ids.iter().any(|i| *i == *r.info().name))
-                .collect(),
-        )
+    /// Select rules by ID, rejecting every unknown ID before dispatch is built.
+    /// An explicitly empty selection is valid and runs no rules.
+    pub fn filtered(
+        rules: Vec<Box<dyn DynRule>>,
+        ids: &[String],
+    ) -> Result<Self, RuleSelectionError> {
+        select_rules(rules, ids).map(Self::new)
     }
 
     pub fn rules(&self) -> &[RuleInfo] {
@@ -95,4 +94,41 @@ impl Linter {
             out,
         }
     }
+}
+
+/// Invalid explicit rule selection. No partial selection is executed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuleSelectionError {
+    pub unknown_ids: Vec<String>,
+}
+
+impl std::fmt::Display for RuleSelectionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "unknown rule ID(s): {}", self.unknown_ids.join(", "))
+    }
+}
+
+impl std::error::Error for RuleSelectionError {}
+
+/// Validate and select from the caller's catalog. CLI callers pass built-in
+/// and loaded rules; Python's `builtin` option passes only built-in rules.
+pub fn select_rules(
+    rules: Vec<Box<dyn DynRule>>,
+    ids: &[String],
+) -> Result<Vec<Box<dyn DynRule>>, RuleSelectionError> {
+    let names: Vec<_> = rules.iter().map(|r| r.info().name).collect();
+    let mut unknown_ids = Vec::new();
+    for id in ids {
+        if !names.iter().any(|name| name.as_ref() == id) && !unknown_ids.contains(id) {
+            unknown_ids.push(id.clone());
+        }
+    }
+    if !unknown_ids.is_empty() {
+        return Err(RuleSelectionError { unknown_ids });
+    }
+    Ok(rules
+        .into_iter()
+        .zip(names)
+        .filter_map(|(rule, name)| ids.iter().any(|id| name.as_ref() == id).then_some(rule))
+        .collect())
 }

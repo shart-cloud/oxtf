@@ -42,7 +42,7 @@ fn seed_rule_fixtures() {
                     (p[0].to_string(), p[1].to_string(), p[2].to_string())
                 })
                 .collect();
-            let r = scan_dir(&case, &ScanOptions::default());
+            let r = scan_dir(&case, &ScanOptions::default()).unwrap();
             let errors: Vec<_> = r
                 .diagnostics
                 .iter()
