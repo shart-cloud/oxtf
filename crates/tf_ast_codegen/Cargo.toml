@@ -12,9 +12,16 @@ path = "src/lib.rs"
 [[bin]]
 name = "tf_ast_codegen"
 path = "src/main.rs"
+required-features = ["files"]
+
+[features]
+default = ["files"]
+# Writing formatted files needs prettyplease; the proc-macro prototype only
+# needs token streams.
+files = ["dep:prettyplease"]
 
 [dependencies]
 syn = { version = "2", features = ["full"] }
 quote = "1"
 proc-macro2 = "1"
-prettyplease = "0.2"
+prettyplease = { version = "0.2", optional = true }

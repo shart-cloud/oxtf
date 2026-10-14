@@ -1,0 +1,16 @@
+[package]
+name = "tf_ast_macros"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "PROTOTYPE for open question 2: the tf_ast visitor generator run as a proc macro"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+tf_ast_codegen = { path = "../tf_ast_codegen", default-features = false }
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full"] }
