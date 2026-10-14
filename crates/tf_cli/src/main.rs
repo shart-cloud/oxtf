@@ -3,6 +3,7 @@
 //! ```text
 //! oxtf scan [PATH...] [-r|--recursive] [--format text|json] [--var-file FILE]...
 //!           [--rule ID]... [--rule-file FILE]... [--threads N] [--color] [--no-diagnostics] [--quiet]
+//! oxtf scan --plan PLAN.json [--source DIR] [options]
 //! oxtf rules
 //! ```
 
@@ -15,6 +16,10 @@ use tf_linter::{Linter, ScanOptions, discover_roots, scan_with};
 
 const USAGE: &str = "usage:
   oxtf scan [PATH...] [options]   scan Terraform module directories (default: .)
+  oxtf scan --plan PLAN.json [--source DIR] [options]
+                                  scan `terraform show -json` output; findings are mapped
+                                  back to .tf spans in DIR (default: the plan's directory
+                                  if it has .tf files, else locations point into the JSON)
   oxtf rules                      list rules
 
 scan options:
@@ -31,6 +36,8 @@ scan options:
 
 struct Args {
     paths: Vec<PathBuf>,
+    plan: Option<PathBuf>,
+    source: Option<PathBuf>,
     rule_files: Vec<PathBuf>,
     opts: ScanOptions,
     json: bool,
@@ -42,6 +49,8 @@ struct Args {
 fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut a = Args {
         paths: Vec::new(),
+        plan: None,
+        source: None,
         rule_files: Vec::new(),
         opts: ScanOptions::default(),
         json: false,
@@ -69,6 +78,8 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
             "--rule-file" => a
                 .rule_files
                 .push(it.next().ok_or("--rule-file needs a value")?.into()),
+            "--plan" => a.plan = Some(it.next().ok_or("--plan needs a value")?.into()),
+            "--source" => a.source = Some(it.next().ok_or("--source needs a value")?.into()),
             "--threads" => {
                 a.opts.threads = Some(
                     it.next()
@@ -83,6 +94,13 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
             s if s.starts_with('-') => return Err(format!("unknown option {s}")),
             p => a.paths.push(p.into()),
         }
+    }
+    if a.plan.is_some() {
+        if !a.paths.is_empty() || a.opts.recursive || !a.opts.var_files.is_empty() {
+            return Err("--plan takes no PATH, --recursive or --var-file".into());
+        }
+    } else if a.source.is_some() {
+        return Err("--source needs --plan".into());
     }
     if a.paths.is_empty() {
         a.paths.push(".".into());
@@ -145,22 +163,46 @@ fn scan(a: Args) -> ExitCode {
         Some(ids) => Linter::filtered(rules, ids),
         None => Linter::new(rules),
     };
+    let r = if let Some(plan) = &a.plan {
+        let opts = tf_plan::PlanOptions {
+            source: a.source.clone(),
+        };
+        match tf_plan::scan_plan(&linter, plan, &opts) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("error: {e}");
+                return ExitCode::from(2);
+            }
+        }
+    } else {
+        match scan_dirs(&linter, &a) {
+            Ok(r) => r,
+            Err(code) => return code,
+        }
+    };
+    print_result(&r, &a)
+}
+
+fn scan_dirs(linter: &Linter, a: &Args) -> Result<tf_linter::ScanResult, ExitCode> {
     let mut roots = Vec::new();
     for p in &a.paths {
         if !p.is_dir() {
             eprintln!("error: {} is not a directory", p.display());
-            return ExitCode::from(2);
+            return Err(ExitCode::from(2));
         }
         roots.extend(discover_roots(p, a.opts.recursive));
     }
-    let (r, _) = scan_with(&linter, &roots, &a.opts);
+    Ok(scan_with(linter, &roots, &a.opts).0)
+}
+
+fn print_result(r: &tf_linter::ScanResult, a: &Args) -> ExitCode {
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
     if a.json {
         let _ = writeln!(
             out,
             "{}",
-            serde_json::to_string_pretty(&result_json(&r)).unwrap()
+            serde_json::to_string_pretty(&result_json(r)).unwrap()
         );
         return ExitCode::SUCCESS;
     }

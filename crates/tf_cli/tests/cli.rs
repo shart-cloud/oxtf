@@ -128,3 +128,42 @@ fn scan_rule_file() {
         .unwrap();
     assert_eq!(bad.status.code(), Some(2));
 }
+
+/// W5: `oxtf scan --plan` maps a plan finding back to the source span.
+#[test]
+fn scan_plan_maps_to_source() {
+    let plan = format!(
+        "{}/../../fixtures/plans/aws-s3-public-access-block/fail_permissive_block.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .args([
+            "scan",
+            "--plan",
+            &plan,
+            "--source",
+            &fixture("aws-s3-public-access-block/fail_permissive_block"),
+            "--format",
+            "json",
+        ])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let j: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let f = &j["findings"][0];
+    assert_eq!(f["address"], "aws_s3_bucket.data");
+    assert_eq!(f["severity"], "definite");
+    assert!(
+        f["location"]["file"]
+            .as_str()
+            .unwrap()
+            .ends_with("fail_permissive_block/main.tf"),
+        "{f}"
+    );
+    assert_eq!(f["location"]["line"], 1);
+    let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .args(["scan", "--plan", &plan, "."])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+}
