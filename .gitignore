@@ -5,3 +5,5 @@
 .venv/
 /corpus/repos/
 schemas/providers/.terraform/
+/dist
+*.whl

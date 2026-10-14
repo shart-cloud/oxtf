@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! oxtf scan [PATH...] [-r|--recursive] [--format text|json] [--var-file FILE]...
-//!           [--rule ID]... [--threads N] [--color] [--no-diagnostics] [--quiet]
+//!           [--rule ID]... [--rule-file FILE]... [--threads N] [--color] [--no-diagnostics] [--quiet]
 //! oxtf rules
 //! ```
 
@@ -22,6 +22,8 @@ scan options:
   -f, --format FMT        text (default) or json
       --var-file FILE     extra .tfvars for the root module(s) (repeatable)
       --rule ID           only run this rule (repeatable)
+      --rule-file FILE    also run rules from a JSON rule-IR file (repeatable; e.g. written
+                          by the tfscan Python expression API)
       --threads N         worker threads (default: all CPUs)
       --color             force colored output
       --no-diagnostics    do not print parse / strict-bool / module diagnostics
@@ -29,6 +31,7 @@ scan options:
 
 struct Args {
     paths: Vec<PathBuf>,
+    rule_files: Vec<PathBuf>,
     opts: ScanOptions,
     json: bool,
     color: bool,
@@ -39,6 +42,7 @@ struct Args {
 fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut a = Args {
         paths: Vec::new(),
+        rule_files: Vec::new(),
         opts: ScanOptions::default(),
         json: false,
         color: std::io::stdout().is_terminal(),
@@ -62,6 +66,9 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
                 .rules
                 .get_or_insert_with(Vec::new)
                 .push(it.next().ok_or("--rule needs a value")?),
+            "--rule-file" => a
+                .rule_files
+                .push(it.next().ok_or("--rule-file needs a value")?.into()),
             "--threads" => {
                 a.opts.threads = Some(
                     it.next()
@@ -119,7 +126,21 @@ fn main() -> ExitCode {
 }
 
 fn scan(a: Args) -> ExitCode {
-    let rules = tf_linter::rules::all();
+    let mut rules = tf_linter::rules::all();
+    for f in &a.rule_files {
+        match tf_rule_ir::load_rules_file(f).and_then(|specs| {
+            specs
+                .into_iter()
+                .map(tf_rule_ir::compile)
+                .collect::<Result<Vec<_>, _>>()
+        }) {
+            Ok(rs) => rules.extend(rs.into_iter().map(|r| Box::new(r) as _)),
+            Err(e) => {
+                eprintln!("error: {e}");
+                return ExitCode::from(2);
+            }
+        }
+    }
     let linter = match &a.opts.rules {
         Some(ids) => Linter::filtered(rules, ids),
         None => Linter::new(rules),

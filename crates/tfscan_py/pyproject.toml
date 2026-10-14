@@ -1,0 +1,22 @@
+[build-system]
+requires = ["maturin>=1.15,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "tfscan"
+version = "0.0.1"
+description = "Terraform security scanner (oxtf spike): Rust engine, polars-style rule expressions, Arrow output"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+classifiers = ["Programming Language :: Rust", "Programming Language :: Python :: 3"]
+
+[project.optional-dependencies]
+arrow = ["pyarrow>=14"]
+test = ["pytest", "pyarrow>=14"]
+
+[tool.maturin]
+python-source = "python"
+module-name = "tfscan._tfscan"
+features = ["extension-module"]
+bindings = "pyo3"
+strip = true

@@ -77,3 +77,54 @@ fn var_file_wins_over_terraform_tfvars() {
     assert_eq!(run(&[]), 0);
     assert_eq!(run(&["--var-file", vf.to_str().unwrap()]), 1);
 }
+
+/// `--rule-file`: a rule written with the Python expression API (rule IR
+/// JSON) runs with no Python runtime and matches the built-in rule.
+#[test]
+fn scan_rule_file() {
+    let rules = format!(
+        "{}/../tfscan_py/rules/sg_open_ssh.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let run = |rule: &str| {
+        let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+            .args([
+                "scan",
+                &fixture("aws-sg-open-ssh/conditional_unconstrained_variable"),
+                "--rule-file",
+                &rules,
+                "--rule",
+                rule,
+                "--format",
+                "json",
+            ])
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        v["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| {
+                (
+                    f["address"].clone(),
+                    f["severity"].clone(),
+                    f["message"].clone(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let ir = run("py-sg-open-ssh");
+    assert_eq!(ir.len(), 1);
+    assert_eq!(ir, run("aws-sg-open-ssh"));
+    let bad = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .args(["scan", ".", "--rule-file", "/nonexistent.json"])
+        .output()
+        .unwrap();
+    assert_eq!(bad.status.code(), Some(2));
+}
