@@ -32,8 +32,10 @@ fn main() -> ExitCode {
         Some("check") => cmd_generate(&paths, true),
         Some("diff") if args.len() >= 3 => cmd_diff(&paths, &args[1], &args[2]),
         Some("coverage") => cmd_coverage(&paths, args.iter().any(|a| a == "--list")),
-        Some("views-all") if args.len() >= 3 => cmd_views_all(&paths, &args[1], &args[2]),
-        _ => Err("usage: tf_schema_codegen generate|check|diff OLD NEW|coverage [--list]|views-all PROVIDER OUT.rs".into()),
+        Some("views-all") if args.len() >= 3 => {
+            cmd_views_all(&paths, &args[1], &args[2], args.get(3).map(String::as_str).unwrap_or(""))
+        }
+        _ => Err("usage: tf_schema_codegen generate|check|diff OLD NEW|coverage [--list]|views-all PROVIDER OUT.rs [EXCLUDE,..]".into()),
     };
     match res {
         Ok(code) => code,
@@ -192,7 +194,10 @@ fn cmd_coverage(paths: &Paths, list: bool) -> Result<ExitCode> {
     })
 }
 
-fn cmd_views_all(paths: &Paths, provider: &str, out: &str) -> Result<ExitCode> {
+/// Q4 experiment: views for every resource of `provider`, minus the
+/// comma-separated `exclude` list.
+fn cmd_views_all(paths: &Paths, provider: &str, out: &str, exclude: &str) -> Result<ExitCode> {
+    let exclude: Vec<&str> = exclude.split(',').filter(|s| !s.is_empty()).collect();
     let p = provider_from_name(provider).ok_or("unknown provider")?;
     let loaded = [load_schema_file(
         &paths.schemas_dir().join(format!("{provider}.json")),
@@ -200,7 +205,7 @@ fn cmd_views_all(paths: &Paths, provider: &str, out: &str) -> Result<ExitCode> {
     let entries = build_entries(&loaded)?;
     let allow: Vec<AllowEntry> = entries
         .iter()
-        .filter(|e| e.kind == SchemaKind::Resource && e.provider == p)
+        .filter(|e| e.kind == SchemaKind::Resource && e.provider == p && !exclude.contains(&e.name))
         .map(|e| AllowEntry {
             ty: e.name.to_string(),
             kind: "resource".into(),

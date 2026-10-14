@@ -14,6 +14,12 @@ fn main() {
     let second = t1.elapsed();
     assert!(db.attribute("storage_encrypted").unwrap().is_bool());
 
+    // Largest record in the blob (220 KB of postcard; deeply nested wafv2 statements).
+    let tw = Instant::now();
+    let waf = tf_schema::lookup_resource("aws_wafv2_web_acl_rule").unwrap();
+    let largest = tw.elapsed();
+    assert!(!waf.block_types().is_empty());
+
     let t2 = Instant::now();
     let names: Vec<_> = tf_schema::entries().collect();
     let mut attrs = 0usize;
@@ -30,11 +36,20 @@ fn main() {
     }
     let all_warm = t3.elapsed();
 
-    // Largest single schema decode, measured on a fresh decode (bypassing the cache).
     let (blob, syms) = tf_schema::blob_len();
-    println!("blob bytes: schema {blob} + symbols {syms} = {}", blob + syms);
+    println!(
+        "blob bytes: schema {blob} + symbols {syms} = {}",
+        blob + syms
+    );
     println!("first lookup (symbol table + 1 schema): {first:?}");
     println!("second lookup (1 schema): {second:?}");
-    println!("lookup+decode all {} schemas (cold): {all_cold:?} ({attrs} top-level attributes)", names.len());
-    println!("lookup all {} schemas again (cached) + attribute(\"id\"): {all_warm:?} ({hits} have id)", names.len());
+    println!("largest schema (aws_wafv2_web_acl_rule) first lookup: {largest:?}");
+    println!(
+        "lookup+decode all {} schemas (cold): {all_cold:?} ({attrs} top-level attributes)",
+        names.len()
+    );
+    println!(
+        "lookup all {} schemas again (cached) + attribute(\"id\"): {all_warm:?} ({hits} have id)",
+        names.len()
+    );
 }

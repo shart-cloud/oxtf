@@ -5,5 +5,5 @@
 uniform_bucket_level_access = { value = false, note = "docs '(Optional, Default: false)'; attribute is optional+computed (org policy may force true)" }
 public_access_prevention = { value = "inherited", note = "docs 'Defaults to \"inherited\".'" }
 force_destroy = { value = false, note = "source Default: false" }
-requester_pays = { value = false, note = "API default" }
+requester_pays = { value = false, note = "docs '(Optional, Default: false)'" }
 "versioning.enabled" = { value = false, note = "versioning block absent: versioning off (API default)" }
