@@ -277,3 +277,27 @@ fn error_cases_report_errors() {
         assert!(!ret.errors.is_empty(), "{name} should report an error");
     }
 }
+
+/// Documented behavioural difference: a literal newline inside a quoted
+/// string. Terraform (Go HCL) rejects this ("Invalid multi-line string");
+/// tf_parser reports an error and recovers. Records what hcl-edit does.
+#[test]
+fn multiline_quoted_string() {
+    let src = "a = \"line1\nline2\"\n";
+    let alloc = tf_allocator::Allocator::new();
+    let ret = tf_parser::parse(&alloc, src);
+    assert!(!ret.errors.is_empty());
+    let hcl = hcl_edit::parser::parse_body(src);
+    println!(
+        "hcl-edit on multi-line quoted string: {}",
+        if hcl.is_ok() { "accepted" } else { "rejected" }
+    );
+    let src2 = "b = \"%{ if x }\nyes%{ endif }\"\n";
+    let hcl2 = hcl_edit::parser::parse_body(src2);
+    println!(
+        "hcl-edit on newline inside quoted template after directive: {}",
+        if hcl2.is_ok() { "accepted" } else { "rejected" }
+    );
+    // Pinned observation for hcl-edit 0.9.7 (see docs/findings/W1.md).
+    assert!(hcl.is_ok() && hcl2.is_ok());
+}
