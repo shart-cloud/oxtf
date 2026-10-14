@@ -1,5 +1,5 @@
-# Defaults overlay for hashicorp/google 7.46.1. See defaults/aws.toml for format.
-# Sources: website/docs/r/*.html.markdown and google/services/** at tag v7.46.1.
+# Defaults overlay for hashicorp/google 8.7.0. See defaults/aws.toml for format.
+# Sources: website/docs/r/*.html.markdown and google/services/** at tag v8.7.0.
 
 [google_storage_bucket]
 uniform_bucket_level_access = { value = false, note = "docs '(Optional, Default: false)'; attribute is optional+computed (org policy may force true)" }

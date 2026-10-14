@@ -13,8 +13,8 @@ fn counts_match_snapshots() {
     assert_eq!(count(Provider::Aws, SchemaKind::DataSource), 685);
     assert_eq!(count(Provider::Azurerm, SchemaKind::Resource), 1106);
     assert_eq!(count(Provider::Azurerm, SchemaKind::DataSource), 396);
-    assert_eq!(count(Provider::Google, SchemaKind::Resource), 1346);
-    assert_eq!(count(Provider::Google, SchemaKind::DataSource), 465);
+    assert_eq!(count(Provider::Google, SchemaKind::Resource), 1375);
+    assert_eq!(count(Provider::Google, SchemaKind::DataSource), 471);
 }
 
 #[test]
