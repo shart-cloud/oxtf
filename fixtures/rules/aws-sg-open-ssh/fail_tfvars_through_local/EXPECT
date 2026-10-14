@@ -1,0 +1,2 @@
+aws-sg-open-ssh aws_security_group.admin definite
+# provenance must include terraform.tfvars:2, variables.tf (variable admin_cidr), locals.tf (local.ssh_sources), main.tf cidr_blocks
