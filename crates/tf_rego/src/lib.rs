@@ -338,7 +338,7 @@ mod tests {
                 let mut evidence = Evidence::default();
                 let input = json!({"replica":{"kind":"missing"},"effective":evidence.tag(Some(value.clone()))});
                 let actual = evaluate(&engine, &input, &evidence.0).unwrap();
-                let expected = truth::test(&value, &|v| v.as_bool() != Some(true));
+                let expected = truth::test(value, &|v| v.as_bool() != Some(true));
                 assert_eq!(actual.truth, expected.truth, "{value:?}");
                 assert_eq!(
                     format!("{:?}", actual.witness),
