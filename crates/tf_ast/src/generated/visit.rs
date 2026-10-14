@@ -184,7 +184,7 @@ pub mod walk {
     pub fn walk_body<'a, V: Visit<'a>>(visitor: &mut V, it: &'a Body<'a>) {
         let kind = AstKind::Body(it);
         visitor.enter_node(kind);
-        for el in (&it.items).iter() {
+        for el in it.items.iter() {
             visitor.visit_body_item(el);
         }
         visitor.leave_node(kind);
@@ -202,7 +202,7 @@ pub mod walk {
         let kind = AstKind::Block(it);
         visitor.enter_node(kind);
         visitor.visit_identifier(&it.ident);
-        for el in (&it.labels).iter() {
+        for el in it.labels.iter() {
             visitor.visit_block_label(el);
         }
         visitor.visit_body(&it.body);
@@ -277,7 +277,7 @@ pub mod walk {
     pub fn walk_template<'a, V: Visit<'a>>(visitor: &mut V, it: &'a Template<'a>) {
         let kind = AstKind::Template(it);
         visitor.enter_node(kind);
-        for el in (&it.elements).iter() {
+        for el in it.elements.iter() {
             visitor.visit_template_element(el);
         }
         visitor.leave_node(kind);
@@ -341,7 +341,7 @@ pub mod walk {
         let kind = AstKind::Traversal(it);
         visitor.enter_node(kind);
         visitor.visit_expression(&it.object);
-        for el in (&it.operators).iter() {
+        for el in it.operators.iter() {
             visitor.visit_traversal_operator(el);
         }
         visitor.leave_node(kind);
@@ -385,11 +385,11 @@ pub mod walk {
     ) {
         let kind = AstKind::FunctionCall(it);
         visitor.enter_node(kind);
-        for el in (&it.namespace).iter() {
+        for el in it.namespace.iter() {
             visitor.visit_identifier(el);
         }
         visitor.visit_identifier(&it.name);
-        for el in (&it.arguments).iter() {
+        for el in it.arguments.iter() {
             visitor.visit_expression(el);
         }
         visitor.leave_node(kind);
@@ -398,7 +398,7 @@ pub mod walk {
     pub fn walk_tuple<'a, V: Visit<'a>>(visitor: &mut V, it: &'a Tuple<'a>) {
         let kind = AstKind::Tuple(it);
         visitor.enter_node(kind);
-        for el in (&it.elements).iter() {
+        for el in it.elements.iter() {
             visitor.visit_expression(el);
         }
         visitor.leave_node(kind);
@@ -407,7 +407,7 @@ pub mod walk {
     pub fn walk_object<'a, V: Visit<'a>>(visitor: &mut V, it: &'a Object<'a>) {
         let kind = AstKind::Object(it);
         visitor.enter_node(kind);
-        for el in (&it.items).iter() {
+        for el in it.items.iter() {
             visitor.visit_object_item(el);
         }
         visitor.leave_node(kind);

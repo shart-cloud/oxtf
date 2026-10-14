@@ -214,11 +214,10 @@ impl<'s> Lexer<'s> {
             }
             b'!' => two!(b'=', Kind::BangEq, Kind::Bang),
             b'<' => {
-                if self.peek_byte(1) == b'<' {
-                    if let Some(t) = self.try_heredoc_start(start) {
+                if self.peek_byte(1) == b'<'
+                    && let Some(t) = self.try_heredoc_start(start) {
                         return t;
                     }
-                }
                 two!(b'=', Kind::Le, Kind::Lt)
             }
             b'>' => two!(b'=', Kind::Ge, Kind::Gt),
@@ -408,13 +407,11 @@ impl<'s> Lexer<'s> {
             }
         };
         loop {
-            if let TemplateCtx::Heredoc { delimiter } = ctx {
-                if at_line_start {
-                    if let Some(e) = self.heredoc_end_at(p, delimiter) {
+            if let TemplateCtx::Heredoc { delimiter } = ctx
+                && at_line_start
+                    && let Some(e) = self.heredoc_end_at(p, delimiter) {
                         return finish(self, p, LitStop::HeredocEnd, e, decoded, seg, bad_escape);
                     }
-                }
-            }
             at_line_start = false;
             if p >= b.len() {
                 return finish(self, p, LitStop::Eof, p, decoded, seg, bad_escape);

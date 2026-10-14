@@ -99,11 +99,10 @@ fn parse_schema(src: &str) -> Schema {
                     visitable.insert(s.ident.to_string());
                 }
             }
-            syn::Item::Enum(e) => {
-                if e.variants.iter().any(|v| !v.fields.is_empty()) {
+            syn::Item::Enum(e)
+                if e.variants.iter().any(|v| !v.fields.is_empty()) => {
                     visitable.insert(e.ident.to_string());
                 }
-            }
             _ => {}
         }
     }
@@ -181,26 +180,34 @@ impl Schema {
     }
 }
 
-/// Code that visits the value referenced by `expr` (an expression of
-/// reference type) of type `ty`.
-fn visit_code(expr: TokenStream, ty: &FieldTy, mutable: bool) -> TokenStream {
+/// Code that visits `place` of type `ty`. `place` is either a field place
+/// expression (`it.field`, `is_ref == false`) or a binding that already holds
+/// a reference (`is_ref == true`).
+fn visit_code(place: TokenStream, is_ref: bool, ty: &FieldTy, mutable: bool) -> TokenStream {
+    let borrow = |p: &TokenStream| match (is_ref, mutable) {
+        (true, _) => quote!(#p),
+        (false, false) => quote!(&#p),
+        (false, true) => quote!(&mut #p),
+    };
     match ty {
         FieldTy::Leaf => quote!(),
         FieldTy::Node(name) => {
             let m = format_ident!("visit_{}", snake(name));
-            quote!(visitor.#m(#expr);)
+            let arg = borrow(&place);
+            quote!(visitor.#m(#arg);)
         }
         FieldTy::Vec(inner) => {
-            let body = visit_code(quote!(el), inner, mutable);
+            let body = visit_code(quote!(el), true, inner, mutable);
             if mutable {
-                quote!(for el in (#expr).iter_mut() { #body })
+                quote!(for el in #place.iter_mut() { #body })
             } else {
-                quote!(for el in (#expr).iter() { #body })
+                quote!(for el in #place.iter() { #body })
             }
         }
         FieldTy::Option(inner) => {
-            let body = visit_code(quote!(el), inner, mutable);
-            quote!(if let Some(el) = #expr { #body })
+            let body = visit_code(quote!(el), true, inner, mutable);
+            let arg = borrow(&place);
+            quote!(if let Some(el) = #arg { #body })
         }
     }
 }
@@ -274,8 +281,7 @@ fn gen_visit(s: &Schema, mutable: bool) -> TokenStream {
             .filter(|(_, t)| !t.is_leaf())
             .map(|(f, t)| {
                 let fi = ident(f);
-                let e = if mutable { quote!(&mut it.#fi) } else { quote!(&it.#fi) };
-                visit_code(e, t, mutable)
+                visit_code(quote!(it.#fi), false, t, mutable)
             })
             .collect();
         let (enter, leave) = if mutable {
@@ -310,7 +316,7 @@ fn gen_visit(s: &Schema, mutable: bool) -> TokenStream {
         });
         let arms = en.variants.iter().map(|(vn, t)| {
             let v = ident(vn);
-            let code = visit_code(quote!(inner), t, mutable);
+            let code = visit_code(quote!(inner), true, t, mutable);
             quote!(#e::#v(inner) => { #code })
         });
         walks.push(quote! {

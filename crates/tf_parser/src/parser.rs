@@ -354,8 +354,14 @@ impl<'a> Parser<'a> {
             Kind::Eq => {
                 self.bump();
                 let value = self.parse_expr();
+                let failed = matches!(value, Expression::Error(_));
                 let attr = Attribute { span: self.span_from(start), key: ident, value };
-                self.expect_item_end("attribute");
+                if failed {
+                    // Already reported; skip the rest of the line quietly.
+                    self.recover_line();
+                } else {
+                    self.expect_item_end("attribute");
+                }
                 Some(BodyItem::Attribute(self.boxed(attr)))
             }
             Kind::OQuote | Kind::Ident | Kind::LBrace => {
@@ -469,8 +475,7 @@ impl<'a> Parser<'a> {
     fn parse_binary(&mut self, min_prec: u8) -> Expression<'a> {
         let start = self.start();
         let mut left = self.parse_unary();
-        loop {
-            let Some(operator) = Self::binary_op(self.peek()) else { break };
+        while let Some(operator) = Self::binary_op(self.peek()) {
             let prec = operator.precedence();
             if prec < min_prec {
                 break;
@@ -1153,7 +1158,7 @@ impl<'a> Parser<'a> {
         fn flatten<'t, 'a>(t: &'t mut Template<'a>, out: &mut std::vec::Vec<Piece<'t, 'a>>) {
             for el in t.elements.iter_mut() {
                 match el {
-                    TemplateElement::Literal(l) => out.push(Piece::Lit(&mut **l)),
+                    TemplateElement::Literal(l) => out.push(Piece::Lit(l)),
                     TemplateElement::Interpolation(_) => out.push(Piece::Seq),
                     TemplateElement::If(i) => {
                         let i = &mut **i;

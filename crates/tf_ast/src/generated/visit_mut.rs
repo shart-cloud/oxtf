@@ -182,7 +182,7 @@ pub mod walk_mut {
     #[inline]
     pub fn walk_body_mut<'a, V: VisitMut<'a>>(visitor: &mut V, it: &mut Body<'a>) {
         visitor.enter_node(AstType::Body);
-        for el in (&mut it.items).iter_mut() {
+        for el in it.items.iter_mut() {
             visitor.visit_body_item(el);
         }
         visitor.leave_node(AstType::Body);
@@ -201,7 +201,7 @@ pub mod walk_mut {
     pub fn walk_block_mut<'a, V: VisitMut<'a>>(visitor: &mut V, it: &mut Block<'a>) {
         visitor.enter_node(AstType::Block);
         visitor.visit_identifier(&mut it.ident);
-        for el in (&mut it.labels).iter_mut() {
+        for el in it.labels.iter_mut() {
             visitor.visit_block_label(el);
         }
         visitor.visit_body(&mut it.body);
@@ -285,7 +285,7 @@ pub mod walk_mut {
         it: &mut Template<'a>,
     ) {
         visitor.enter_node(AstType::Template);
-        for el in (&mut it.elements).iter_mut() {
+        for el in it.elements.iter_mut() {
             visitor.visit_template_element(el);
         }
         visitor.leave_node(AstType::Template);
@@ -351,7 +351,7 @@ pub mod walk_mut {
     ) {
         visitor.enter_node(AstType::Traversal);
         visitor.visit_expression(&mut it.object);
-        for el in (&mut it.operators).iter_mut() {
+        for el in it.operators.iter_mut() {
             visitor.visit_traversal_operator(el);
         }
         visitor.leave_node(AstType::Traversal);
@@ -407,11 +407,11 @@ pub mod walk_mut {
         it: &mut FunctionCall<'a>,
     ) {
         visitor.enter_node(AstType::FunctionCall);
-        for el in (&mut it.namespace).iter_mut() {
+        for el in it.namespace.iter_mut() {
             visitor.visit_identifier(el);
         }
         visitor.visit_identifier(&mut it.name);
-        for el in (&mut it.arguments).iter_mut() {
+        for el in it.arguments.iter_mut() {
             visitor.visit_expression(el);
         }
         visitor.leave_node(AstType::FunctionCall);
@@ -419,7 +419,7 @@ pub mod walk_mut {
     #[inline]
     pub fn walk_tuple_mut<'a, V: VisitMut<'a>>(visitor: &mut V, it: &mut Tuple<'a>) {
         visitor.enter_node(AstType::Tuple);
-        for el in (&mut it.elements).iter_mut() {
+        for el in it.elements.iter_mut() {
             visitor.visit_expression(el);
         }
         visitor.leave_node(AstType::Tuple);
@@ -427,7 +427,7 @@ pub mod walk_mut {
     #[inline]
     pub fn walk_object_mut<'a, V: VisitMut<'a>>(visitor: &mut V, it: &mut Object<'a>) {
         visitor.enter_node(AstType::Object);
-        for el in (&mut it.items).iter_mut() {
+        for el in it.items.iter_mut() {
             visitor.visit_object_item(el);
         }
         visitor.leave_node(AstType::Object);

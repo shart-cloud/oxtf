@@ -159,12 +159,11 @@ pub fn expr_into(s: &mut String, e: &E, indent: usize) {
         }
         E::UnaryOp(u) => {
             let op = u.operator.value().as_str();
-            if op == "-" {
-                if let E::Number(n) = &u.expr {
+            if op == "-"
+                && let E::Number(n) = &u.expr {
                     s.push_str(&fmt_num(-n.value().as_f64().unwrap()));
                     return;
                 }
-            }
             write!(s, "({} ", if op == "!" { "!" } else { "neg" }).unwrap();
             expr_into(s, &u.expr, indent);
             s.push(')');
