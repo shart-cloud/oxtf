@@ -149,7 +149,7 @@ Trivy's two outliers are not network: a 60 s `--debug` run on GKE logged 79,008 
 **Why go.** Every piece of the thesis that the spike set out to test held up with measurements:
 
 - *Architecture.* The oxc-style stack works for Terraform: a 16-byte `Expression`, a hand-written parser that is ~7× faster than `hcl-edit` and recovers from errors, build-time generated visitors, and parallel per-module analysis. The whole 17-repo corpus (504 root modules, 5,227 resources) scans in about 0.5 s, against 887 s for Checkov and 1,588 s for Trivy, which also cannot scan one repo at all with default settings (Q9).
-- *Schema codegen.* Six providers' schemas embed in 2.15 MB and +3.9 MB of binary with ~1 ms first lookup (Q3), and the generator's diff mode catches provider churn (Google 7 → 8 removed 16 resource types). Typed views must stay allowlisted and pruned (Q4).
+- *Schema codegen.* Six providers' schemas embed in 2.15 MB of data, growing a stripped binary by 3.56 MB (344,848 → 3,908,152 B), with ~1 ms first lookup (Q3), and the generator's diff mode catches provider churn (Google 7 → 8 removed 16 resource types). Typed views must stay allowlisted and pruned (Q4).
 - *Explained findings.* The provenance chain from attribute back to the `.tfvars` line, and the Definite vs Conditional split, work end to end and are the clearest differentiator from all three incumbents.
 - *One rule engine, two front ends.* The same rules run unchanged on source and on plan JSON (W5).
 - *Python.* A polars-style expression rule compiles to a JSON IR, runs as fast as built-in Rust, and runs in the Rust CLI with no Python (Q8); the owned-model boundary needs no `unsafe` (Q7).
