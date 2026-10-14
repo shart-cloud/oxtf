@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Time trivy and checkov on the corpus (Q9). 1 warm-up run each, then 3 timed runs.
+# Both tools run without fetching remote modules (trivy,
+# checkov --download-external-modules false), matching oxtf, which treats them as opaque.
 # Usage: bench/incumbents.sh [target-dir]   (default: corpus/repos)
 set -uo pipefail
 cd "$(dirname "$0")/.."
