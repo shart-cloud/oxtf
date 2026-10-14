@@ -56,3 +56,24 @@ fn scan_json_and_recursive() {
     assert_eq!(sev.iter().filter(|s| **s == "definite").count(), 3);
     assert_eq!(sev.iter().filter(|s| **s == "conditional").count(), 1);
 }
+
+#[test]
+fn var_file_wins_over_terraform_tfvars() {
+    let dir = std::env::temp_dir().join(format!("oxtf-cli-varfile-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let vf = dir.join("open.tfvars");
+    std::fs::write(&vf, "admin_cidr = \"0.0.0.0/0\"\n").unwrap();
+    let case = fixture("aws-sg-open-ssh/pass_tfvars_overrides_open_default");
+    let run = |extra: &[&str]| {
+        let mut args = vec!["scan", "--format", "json", case.as_str()];
+        args.extend_from_slice(extra);
+        let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+            .args(&args)
+            .output()
+            .unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        v["findings"].as_array().unwrap().len()
+    };
+    assert_eq!(run(&[]), 0);
+    assert_eq!(run(&["--var-file", vf.to_str().unwrap()]), 1);
+}

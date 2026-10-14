@@ -265,3 +265,75 @@ fn tempdir(name: &str) -> PathBuf {
     std::fs::create_dir_all(&d).unwrap();
     d
 }
+
+#[test]
+fn references_count_for_each_and_tainted_dynamic() {
+    let dir = tempdir("semantic_expand");
+    std::fs::write(
+        dir.join("main.tf"),
+        r#"
+variable "rules" {}
+variable "names" { default = ["a", "b"] }
+locals { enabled = false }
+resource "aws_s3_bucket" "each" {
+  for_each = toset(var.names)
+  bucket   = "bucket-${each.key}"
+}
+resource "aws_s3_bucket" "off" {
+  count  = local.enabled ? 1 : 0
+  bucket = "off"
+}
+resource "aws_security_group" "dyn" {
+  dynamic "ingress" {
+    for_each = var.rules
+    iterator = r
+    content {
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = [r.value]
+    }
+  }
+}
+output "first" { value = aws_s3_bucket.each["a"].bucket }
+"#,
+    )
+    .unwrap();
+    let files = FileTable::new();
+    let a = analyze_module(&dir, &AnalyzeOptions::default(), &files);
+    let m = &a.modules[0];
+    let addrs: Vec<&str> = m.resources.iter().map(|r| &*r.address).collect();
+    assert_eq!(
+        addrs,
+        [
+            "aws_s3_bucket.each[\"a\"]",
+            "aws_s3_bucket.each[\"b\"]",
+            "aws_security_group.dyn"
+        ]
+    );
+    assert_eq!(
+        m.resources[1].value("bucket").unwrap().as_str(),
+        Some("bucket-b")
+    );
+    assert_eq!(m.outputs[0].value.as_str(), Some("bucket-a"));
+    // dynamic over an unconstrained variable: one abstract, maybe-absent element
+    let ing = m.resources[2].value("ingress").unwrap();
+    let e = &ing.as_list().unwrap()[0];
+    assert!(matches!(&e.kind, Kind::OneOf(o) if o.tainted), "{e:?}");
+    // reference edges, with implicit roots
+    let refs: Vec<String> = m
+        .references
+        .iter()
+        .map(|r| format!("{} -> {}", r.from, r.to))
+        .collect();
+    for want in [
+        "aws_s3_bucket.each -> var.names",
+        "aws_s3_bucket.each -> each (implicit)",
+        "aws_s3_bucket.off -> local.enabled",
+        "aws_security_group.dyn -> var.rules",
+        "aws_security_group.dyn -> r (implicit)",
+        "output.first -> aws_s3_bucket.each",
+    ] {
+        assert!(refs.iter().any(|r| r == want), "missing {want}: {refs:#?}");
+    }
+}
