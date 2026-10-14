@@ -786,6 +786,12 @@ impl<'a, 'o> Analyzer<'a, 'o> {
             || format!("{base}.{attr}"),
             || {
                 let decl: &ResourceDecl<'a> = &inst.def.resources[ri];
+                if decl.mode == Mode::Data
+                    && decl.ty == "aws_iam_policy_document"
+                    && (attr == "json" || attr == "minified_json")
+                {
+                    return self.iam_policy_document(inst_id, ri, key.as_deref(), base);
+                }
                 if let Some(a) = decl
                     .block
                     .body
@@ -949,6 +955,144 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         }
     }
 
+    // ---- data sources evaluated statically ------------------------------
+
+    /// `data.aws_iam_policy_document.x.json`: the provider renders the
+    /// `statement` blocks (and `source_policy_documents` /
+    /// `override_policy_documents`) to JSON deterministically, so it is
+    /// evaluated here instead of being left Unknown. `condition` blocks are
+    /// not rendered; override documents are appended (not merged by Sid).
+    fn iam_policy_document(
+        &self,
+        inst_id: usize,
+        ri: usize,
+        key: Option<&str>,
+        base: &str,
+    ) -> Value {
+        let inst = self.inst(inst_id);
+        let decl = &inst.def.resources[ri];
+        let insts = self.res_instances(inst_id, ri);
+        let binds: Vec<(&str, Value)> = key
+            .and_then(|k| insts.0.iter().find(|b| b.key.as_deref() == Some(k)))
+            .or(if insts.0.len() == 1 {
+                insts.0.first()
+            } else {
+                None
+            })
+            .map(|b| b.binds.clone())
+            .unwrap_or_default();
+        let ctx = BodyCtx {
+            inst: inst_id,
+            file: decl.file,
+            addr: base.into(),
+            base: base.into(),
+            ty: decl.ty,
+            mode: decl.mode,
+            strict_bool: false,
+            observe: false,
+        };
+        let body = Scope::EMPTY.with_all(&binds, |sc| {
+            self.eval_body(
+                &ctx,
+                &decl.block.body,
+                decl.schema.map(|s| s.block()),
+                sc,
+                "",
+                true,
+            )
+        });
+        let mut statements: Vec<Value> = Vec::new();
+        for src in ["source_policy_documents", "override_policy_documents"] {
+            let Some(docs) = body.value(src) else {
+                continue;
+            };
+            match docs.as_list() {
+                Some(l) => {
+                    for d in l {
+                        let d = d.child_of(docs);
+                        let parsed = match &d.kind {
+                            Kind::Known(Known::Json(j)) => (**j).clone(),
+                            Kind::Known(Known::String(_)) => {
+                                tf_eval::functions::call("jsondecode", vec![d.clone()])
+                            }
+                            _ => {
+                                return Value::other(format!("{base}.json: {src} not known"))
+                                    .with_prov(d.prov.clone());
+                            }
+                        };
+                        let st = parsed.get_attr("Statement");
+                        match st.as_list() {
+                            Some(sl) => statements.extend(sl.iter().map(|x| x.child_of(&st))),
+                            None if st.is_known() => statements.push(st),
+                            None => return st,
+                        }
+                    }
+                }
+                None if docs.is_null() => {}
+                None => return docs.clone(),
+            }
+        }
+        let rename = [
+            ("sid", "Sid"),
+            ("effect", "Effect"),
+            ("actions", "Action"),
+            ("not_actions", "NotAction"),
+            ("resources", "Resource"),
+            ("not_resources", "NotResource"),
+        ];
+        for b in body.blocks_of("statement") {
+            let mut m = Map::new();
+            for (from, to) in rename {
+                if let Some(v) = b.body.value(from)
+                    && !v.is_null()
+                {
+                    m.insert(to.into(), v.clone());
+                }
+            }
+            m.entry("Effect".into())
+                .or_insert_with(|| Value::string("Allow"));
+            for (blk, key) in [
+                ("principals", "Principal"),
+                ("not_principals", "NotPrincipal"),
+            ] {
+                let mut p = Map::new();
+                for pb in b.body.blocks_of(blk) {
+                    if let (Some(t), Some(ids)) = (
+                        pb.body.value("type").and_then(|t| t.to_str()),
+                        pb.body.value("identifiers"),
+                    ) {
+                        p.insert(t, ids.clone());
+                    }
+                }
+                if !p.is_empty() {
+                    m.insert(key.into(), Value::object(p));
+                }
+            }
+            let st = Value::object(m);
+            statements.push(match b.existence {
+                Truth::True => st,
+                e => Value::one_of(vec![st, Value::null()], e == Truth::Tainted),
+            });
+        }
+        let mut doc = Map::new();
+        doc.insert(
+            "Version".into(),
+            body.value("version")
+                .filter(|v| !v.is_null())
+                .cloned()
+                .unwrap_or_else(|| Value::string("2012-10-17")),
+        );
+        doc.insert("Statement".into(), Value::list(statements));
+        Value::json(Value::object(doc)).push(
+            Step::new(
+                StepKind::Attribute,
+                FileSpan::new(decl.file, header_span(decl.block)),
+                format!("{base}.json (rendered from statement blocks)"),
+            )
+            .with_resource(base.into()),
+        )
+    }
+
     // ---- model building -------------------------------------------------
 
     fn build_module(&self, inst_id: usize) -> model::Module {
@@ -977,6 +1121,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                     strict_bool: decl
                         .schema
                         .is_some_and(|s| s.provider == tf_schema::Provider::Aws),
+                    observe: true,
                 };
                 let body = Scope::EMPTY.with_all(&b.binds, |sc| {
                     self.eval_body(
@@ -1251,6 +1396,9 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         expr: &'a Expression<'a>,
         v: &Value,
     ) {
+        if !ctx.observe {
+            return;
+        }
         self.attr_count.set(self.attr_count.get() + 1);
         if let Some(obs) = self.observer.borrow_mut().as_mut() {
             let full = format!("{path}{name}");
@@ -1275,6 +1423,8 @@ struct BodyCtx<'a> {
     ty: &'a str,
     mode: Mode,
     strict_bool: bool,
+    /// Report attributes to the observer (off for internal re-evaluation).
+    observe: bool,
 }
 
 fn nested_schema(

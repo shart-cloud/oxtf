@@ -97,6 +97,7 @@ fn seed_rule_fixtures() {
         table.join("\n")
     );
     println!("{} cases, {} failures", cases, failures.len());
-    assert_eq!(cases, 29, "expected 29 fixture cases");
+    // 29 original cases + 2 added in W4 (aws_iam_policy_document data source).
+    assert_eq!(cases, 31, "expected 31 fixture cases");
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

@@ -1,0 +1,2 @@
+aws-iam-wildcard-policy aws_iam_policy.admin definite
+# added in W4: policy rendered from a data "aws_iam_policy_document" (effect defaults to Allow)
