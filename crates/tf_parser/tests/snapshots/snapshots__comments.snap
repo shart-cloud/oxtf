@@ -1,0 +1,18 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "# hash comment\n// slash comment\n/* block\n   comment */\na = 1 # trailing hash\nb = [\n  1, // inside list\n  /* inline */ 2,\n]\nc = {\n  k = \"v\" # inside object\n}\n"
+---
+(body
+  (attr a 1)
+  (attr b (tuple 1 2))
+  (attr c (object
+    (k "v"))))
+--- comments
+Hash "# hash comment"
+DoubleSlash "// slash comment"
+Block "/* block\n   comment */"
+Hash "# trailing hash"
+DoubleSlash "// inside list"
+Block "/* inline */"
+Hash "# inside object"
+--- errors

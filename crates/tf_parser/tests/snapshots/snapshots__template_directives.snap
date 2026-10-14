@@ -1,0 +1,11 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "a = \"%{ if var.enabled }on%{ else }off%{ endif }\"\nb = \"%{ for i, v in var.list ~} ${i}=${v}, %{~ endfor }\"\nc = \"pre ${~ var.x ~} post\"\nd = \"%{ if a }%{ for x in b }${x}%{ endfor }%{ endif }\"\n"
+---
+(body
+  (attr a (tpl %{if (trav var .enabled) strip=00 then["on"] else-strip=00 else["off"] endif-strip=00}))
+  (attr b (tpl %{for i, v in (trav var .list) strip=01 do[" " ${i} "=" ${v} ", "] endfor-strip=10}))
+  (attr c (tpl "pre " ${~(trav var .x)~} " post"))
+  (attr d (tpl %{if a strip=00 then[%{for x in b strip=00 do[${x}] endfor-strip=00}] endif-strip=00})))
+--- comments
+--- errors

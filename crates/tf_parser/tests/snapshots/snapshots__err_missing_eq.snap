@@ -1,0 +1,9 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "a 1\nb = 2\n"
+---
+(body
+  (attr b 2))
+--- comments
+--- errors
+1:3 expected `=` or a block after `a`, found `1`

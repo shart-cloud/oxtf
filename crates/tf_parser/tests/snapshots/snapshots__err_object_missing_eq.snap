@@ -1,0 +1,11 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "a = {\n  k v\n  ok = 1\n}\nb = 2\n"
+---
+(body
+  (attr a (object
+    (ok 1)))
+  (attr b 2))
+--- comments
+--- errors
+2:5 expected `=` or `:` after object key, found `v`

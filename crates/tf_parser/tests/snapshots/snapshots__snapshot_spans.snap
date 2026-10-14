@@ -1,0 +1,8 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+expression: "dump_file(&ret.file, Options { spans: true, ..Options::default() })"
+---
+(body@0..52
+  (block resource@0..51 "x" "y" (body@18..50
+    (attr a@21..35 (trav@25..35 var@25..28 .b@28..30 [0@31..32]@30..33 .c@33..35))
+    (attr t@38..49 (tpl@42..49 "p"@43..44 ${q@46..47}@44..48)))))

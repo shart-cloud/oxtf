@@ -1,0 +1,8 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "with_directive = <<-EOT\n  %{ for s in var.subnets ~}\n  subnet ${s}\n  %{ endfor ~}\n  EOT\n"
+---
+(body
+  (attr with_directive (heredoc -EOT %{for s in (trav var .subnets) strip=01 do["\nsubnet " ${s} "\n"] endfor-strip=01} "\n")))
+--- comments
+--- errors

@@ -1,0 +1,9 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "}\na = 1\n"
+---
+(body
+  (attr a 1))
+--- comments
+--- errors
+1:1 unexpected `}` at top level

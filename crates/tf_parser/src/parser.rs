@@ -318,13 +318,15 @@ impl<'a> Parser<'a> {
                 Kind::Newline => self.bump(),
                 Kind::Eof => {
                     if !top {
-                        self.error(Span::empty(self.tok.span.start), "expected `}` to close the block, found end of file");
+                        // Point at the unclosed `{` (start - 1), not at EOF.
+                        let open = Span::new(start.saturating_sub(1), start);
+                        self.error(open, "unclosed block: expected `}` before end of file");
                     }
                     break;
                 }
                 Kind::RBrace => {
                     if top {
-                        self.error_at_tok("unexpected `}`");
+                        self.error(self.tok.span, "unexpected `}` at top level");
                         self.bump();
                     } else {
                         break;
@@ -921,6 +923,7 @@ impl<'a> Parser<'a> {
         };
         if indented {
             self.dedent(&mut template);
+            prune_empty_literals(&mut template);
         }
         self.resync(close_end);
         let span = Span::new(open.start, close_end);
@@ -1226,6 +1229,23 @@ impl<'a> Parser<'a> {
                 }
                 Piece::Seq => newline = false,
             }
+        }
+    }
+}
+
+/// Remove literals that dedenting emptied.
+fn prune_empty_literals(t: &mut Template<'_>) {
+    t.elements.retain(|e| !matches!(e, TemplateElement::Literal(l) if l.value.is_empty()));
+    for el in t.elements.iter_mut() {
+        match el {
+            TemplateElement::If(i) => {
+                prune_empty_literals(&mut i.then_template);
+                if let Some(e) = &mut i.else_template {
+                    prune_empty_literals(e);
+                }
+            }
+            TemplateElement::For(f) => prune_empty_literals(&mut f.template),
+            _ => {}
         }
     }
 }

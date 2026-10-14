@@ -1,0 +1,13 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "region = \"us-east-1\"\ncidrs  = [\"10.0.0.0/16\"]\ntags   = { env = \"prod\" }\ncount  = 3\nratio  = 1.5e3\n"
+---
+(body
+  (attr region "us-east-1")
+  (attr cidrs (tuple "10.0.0.0/16"))
+  (attr tags (object
+    (env "prod")))
+  (attr count 3)
+  (attr ratio 1.5e3))
+--- comments
+--- errors

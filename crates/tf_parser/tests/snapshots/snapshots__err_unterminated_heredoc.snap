@@ -1,0 +1,9 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "a = <<EOT\nhello\nb = 2\n"
+---
+(body
+  (attr a (heredoc EOT "hello\nb = 2\n")))
+--- comments
+--- errors
+1:5 unterminated heredoc, expected `EOT`

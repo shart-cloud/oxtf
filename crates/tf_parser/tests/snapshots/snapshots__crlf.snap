@@ -1,0 +1,11 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "a = 1\r\nb = \"x\"\r\nc {\r\n  d = <<EOT\r\nhi\r\nEOT\r\n}\r\n"
+---
+(body
+  (attr a 1)
+  (attr b "x")
+  (block c (body
+    (attr d (heredoc EOT "hi\r\n")))))
+--- comments
+--- errors
