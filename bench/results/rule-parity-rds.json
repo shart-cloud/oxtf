@@ -1,0 +1,915 @@
+{
+  "input_sha256": {
+    "fixtures/parity/rds-replica/main.tf": "e840e138909785d3c829eebd5edb73ef25056930bd2c804fd83b07725b5acd88",
+    "fixtures/parity/rds-skip/main.tf": "5090dbd8a01e2756c302f1e0a42e114fd17d4d528c09e968342002f21756c62d",
+    "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable/main.tf": "ad8321ae67325b42821628def1531af5c1dc9fc25293444444d00809ae4101d6",
+    "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default/main.tf": "b78bb84c1a91ae711487a4fe7f223e8286ad879203011f8be1817d4df4040a35",
+    "fixtures/rules/aws-rds-unencrypted/fail_explicit_false/main.tf": "b73c9f87e2a351b7dea4b56761cab870f0d8e7184096cd3073d8d3cc32f5866e",
+    "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false/main.tf": "9951e47e770f5c104bcdb2f66553c179b0e2654d03add9833a4eee6eb5953121",
+    "fixtures/rules/aws-rds-unencrypted/pass_encrypted/main.tf": "ffb8edb36ab5adba50471cb68a6e8b6d4cfde912890561dc2c3d225ef2288b94",
+    "fixtures/rules/aws-rds-unencrypted/pass_encrypted/terraform.tfvars": "051bdc020f3828c561b815682db437325f1aabbdca2028dee09911b043e6bc39"
+  },
+  "interpretation": "Finding agreement only. no_finding is not proof of a native pass; Conditional is retained, not equated with Checkov certainty.",
+  "manifest": {
+    "cases": [
+      {
+        "resources": [
+          "aws_db_instance.db"
+        ],
+        "root": "fixtures/rules/aws-rds-unencrypted/fail_explicit_false"
+      },
+      {
+        "resources": [
+          "aws_db_instance.db"
+        ],
+        "root": "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default"
+      },
+      {
+        "resources": [
+          "aws_db_instance.db"
+        ],
+        "root": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false"
+      },
+      {
+        "resources": [
+          "aws_db_instance.a",
+          "aws_db_instance.b"
+        ],
+        "root": "fixtures/rules/aws-rds-unencrypted/pass_encrypted"
+      },
+      {
+        "resources": [
+          "aws_db_instance.db"
+        ],
+        "root": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable"
+      },
+      {
+        "resources": [
+          "aws_db_instance.replica"
+        ],
+        "root": "fixtures/parity/rds-replica"
+      },
+      {
+        "resources": [
+          "aws_db_instance.db"
+        ],
+        "root": "fixtures/parity/rds-skip"
+      }
+    ],
+    "checkov_rule": "CKV_AWS_16",
+    "checkov_version": "3.2.328",
+    "native_rule": "aws-rds-unencrypted",
+    "version": 1
+  },
+  "native_binary_sha256": "898d5b829c0be3d4cb45e6f8035441e785499f702fee9cd73255fc435e666808",
+  "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "python": "3.12.3",
+  "raw_artifact_directory": "bench/results/out/parity-rds-verified",
+  "rows": [
+    {
+      "address": "aws_db_instance.db",
+      "check_id": "CKV_AWS_16",
+      "checkov": "failed",
+      "checkov_records": [
+        {
+          "record": {
+            "bc_category": null,
+            "bc_check_id": null,
+            "benchmarks": {},
+            "caller_file_line_range": null,
+            "caller_file_path": null,
+            "check_class": "checkov.terraform.checks.resource.aws.RDSEncryption",
+            "check_id": "CKV_AWS_16",
+            "check_len": null,
+            "check_name": "Ensure all data stored in the RDS is securely encrypted at rest",
+            "check_result": {
+              "evaluated_keys": [
+                "storage_encrypted"
+              ],
+              "result": "FAILED"
+            },
+            "code_block": null,
+            "connected_node": null,
+            "definition_context_file_path": "fixtures/rules/aws-rds-unencrypted/fail_explicit_false/main.tf",
+            "description": null,
+            "details": [],
+            "entity_tags": null,
+            "evaluations": null,
+            "file_abs_path": "fixtures/rules/aws-rds-unencrypted/fail_explicit_false/main.tf",
+            "file_line_range": [
+              1,
+              7
+            ],
+            "file_path": "/main.tf",
+            "fixed_definition": null,
+            "guideline": null,
+            "repo_file_path": "/fixtures/rules/aws-rds-unencrypted/fail_explicit_false/main.tf",
+            "resource": "aws_db_instance.db",
+            "resource_address": null,
+            "severity": null,
+            "short_description": null,
+            "vulnerability_details": null
+          },
+          "status": "failed"
+        }
+      ],
+      "native": "definite",
+      "native_findings": [
+        {
+          "address": "aws_db_instance.db",
+          "level": "high",
+          "location": {
+            "column": 3,
+            "end": 182,
+            "file": "fixtures/rules/aws-rds-unencrypted/fail_explicit_false/main.tf",
+            "line": 6,
+            "start": 157
+          },
+          "message": "storage_encrypted is false",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 182,
+              "file": "fixtures/rules/aws-rds-unencrypted/fail_explicit_false/main.tf",
+              "kind": "attribute",
+              "label": "aws_db_instance.db storage_encrypted",
+              "line": 6,
+              "start": 157
+            }
+          ],
+          "resource_type": "aws_db_instance",
+          "root": "fixtures/rules/aws-rds-unencrypted/fail_explicit_false",
+          "rule": "aws-rds-unencrypted",
+          "severity": "definite"
+        }
+      ],
+      "outcome": "both_reported",
+      "reason": null,
+      "root": "fixtures/rules/aws-rds-unencrypted/fail_explicit_false"
+    },
+    {
+      "address": "aws_db_instance.db",
+      "check_id": "CKV_AWS_16",
+      "checkov": "failed",
+      "checkov_records": [
+        {
+          "record": {
+            "bc_category": null,
+            "bc_check_id": null,
+            "benchmarks": {},
+            "caller_file_line_range": null,
+            "caller_file_path": null,
+            "check_class": "checkov.terraform.checks.resource.aws.RDSEncryption",
+            "check_id": "CKV_AWS_16",
+            "check_len": null,
+            "check_name": "Ensure all data stored in the RDS is securely encrypted at rest",
+            "check_result": {
+              "evaluated_keys": [
+                "storage_encrypted"
+              ],
+              "result": "FAILED"
+            },
+            "code_block": null,
+            "connected_node": null,
+            "definition_context_file_path": "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default/main.tf",
+            "description": null,
+            "details": [],
+            "entity_tags": null,
+            "evaluations": null,
+            "file_abs_path": "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default/main.tf",
+            "file_line_range": [
+              1,
+              6
+            ],
+            "file_path": "/main.tf",
+            "fixed_definition": null,
+            "guideline": null,
+            "repo_file_path": "/fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default/main.tf",
+            "resource": "aws_db_instance.db",
+            "resource_address": null,
+            "severity": null,
+            "short_description": null,
+            "vulnerability_details": null
+          },
+          "status": "failed"
+        }
+      ],
+      "native": "definite",
+      "native_findings": [
+        {
+          "address": "aws_db_instance.db",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 31,
+            "file": "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default/main.tf",
+            "line": 1,
+            "start": 0
+          },
+          "message": "storage_encrypted is not set (provider default: false)",
+          "module": "",
+          "provenance": [
+            {
+              "column": 1,
+              "end": 31,
+              "file": "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default/main.tf",
+              "kind": "default",
+              "label": "aws_db_instance.db storage_encrypted not set: provider default false (defaults overlay; docs: 'The default is `false` if not specified.' (no Default: in source; AWS API default))",
+              "line": 1,
+              "start": 0
+            }
+          ],
+          "resource_type": "aws_db_instance",
+          "root": "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default",
+          "rule": "aws-rds-unencrypted",
+          "severity": "definite"
+        }
+      ],
+      "outcome": "both_reported",
+      "reason": null,
+      "root": "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default"
+    },
+    {
+      "address": "aws_db_instance.db",
+      "check_id": "CKV_AWS_16",
+      "checkov": "failed",
+      "checkov_records": [
+        {
+          "record": {
+            "bc_category": null,
+            "bc_check_id": null,
+            "benchmarks": {},
+            "breadcrumbs": {
+              "storage_encrypted": [
+                {
+                  "module_connection": false,
+                  "name": "encrypt",
+                  "path": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false/main.tf",
+                  "type": "variable"
+                }
+              ]
+            },
+            "caller_file_line_range": null,
+            "caller_file_path": null,
+            "check_class": "checkov.terraform.checks.resource.aws.RDSEncryption",
+            "check_id": "CKV_AWS_16",
+            "check_len": null,
+            "check_name": "Ensure all data stored in the RDS is securely encrypted at rest",
+            "check_result": {
+              "evaluated_keys": [
+                "storage_encrypted"
+              ],
+              "result": "FAILED"
+            },
+            "code_block": null,
+            "connected_node": null,
+            "definition_context_file_path": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false/main.tf",
+            "description": null,
+            "details": [],
+            "entity_tags": null,
+            "evaluations": null,
+            "file_abs_path": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false/main.tf",
+            "file_line_range": [
+              6,
+              12
+            ],
+            "file_path": "/main.tf",
+            "fixed_definition": null,
+            "guideline": null,
+            "repo_file_path": "/fixtures/rules/aws-rds-unencrypted/fail_variable_default_false/main.tf",
+            "resource": "aws_db_instance.db",
+            "resource_address": null,
+            "severity": null,
+            "short_description": null,
+            "vulnerability_details": null
+          },
+          "status": "failed"
+        }
+      ],
+      "native": "definite",
+      "native_findings": [
+        {
+          "address": "aws_db_instance.db",
+          "level": "high",
+          "location": {
+            "column": 3,
+            "end": 247,
+            "file": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false/main.tf",
+            "line": 11,
+            "start": 216
+          },
+          "message": "storage_encrypted is false",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 55,
+              "file": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false/main.tf",
+              "kind": "variable_default",
+              "label": "variable encrypt default",
+              "line": 3,
+              "start": 40
+            },
+            {
+              "column": 3,
+              "end": 247,
+              "file": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false/main.tf",
+              "kind": "attribute",
+              "label": "aws_db_instance.db storage_encrypted",
+              "line": 11,
+              "start": 216
+            }
+          ],
+          "resource_type": "aws_db_instance",
+          "root": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false",
+          "rule": "aws-rds-unencrypted",
+          "severity": "definite"
+        }
+      ],
+      "outcome": "both_reported",
+      "reason": null,
+      "root": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false"
+    },
+    {
+      "address": "aws_db_instance.a",
+      "check_id": "CKV_AWS_16",
+      "checkov": "passed",
+      "checkov_records": [
+        {
+          "record": {
+            "bc_category": null,
+            "bc_check_id": null,
+            "benchmarks": {},
+            "caller_file_line_range": null,
+            "caller_file_path": null,
+            "check_class": "checkov.terraform.checks.resource.aws.RDSEncryption",
+            "check_id": "CKV_AWS_16",
+            "check_len": null,
+            "check_name": "Ensure all data stored in the RDS is securely encrypted at rest",
+            "check_result": {
+              "evaluated_keys": [
+                "storage_encrypted"
+              ],
+              "result": "PASSED"
+            },
+            "code_block": null,
+            "connected_node": null,
+            "definition_context_file_path": "fixtures/rules/aws-rds-unencrypted/pass_encrypted/main.tf",
+            "description": null,
+            "details": [],
+            "entity_tags": null,
+            "evaluations": null,
+            "file_abs_path": "fixtures/rules/aws-rds-unencrypted/pass_encrypted/main.tf",
+            "file_line_range": [
+              6,
+              12
+            ],
+            "file_path": "/main.tf",
+            "fixed_definition": null,
+            "guideline": null,
+            "repo_file_path": "/fixtures/rules/aws-rds-unencrypted/pass_encrypted/main.tf",
+            "resource": "aws_db_instance.a",
+            "resource_address": null,
+            "severity": null,
+            "short_description": null,
+            "vulnerability_details": null
+          },
+          "status": "passed"
+        }
+      ],
+      "native": "no_finding",
+      "native_findings": [],
+      "outcome": "neither_reported",
+      "reason": null,
+      "root": "fixtures/rules/aws-rds-unencrypted/pass_encrypted"
+    },
+    {
+      "address": "aws_db_instance.b",
+      "check_id": "CKV_AWS_16",
+      "checkov": "passed",
+      "checkov_records": [
+        {
+          "record": {
+            "bc_category": null,
+            "bc_check_id": null,
+            "benchmarks": {},
+            "breadcrumbs": {
+              "storage_encrypted": [
+                {
+                  "module_connection": false,
+                  "name": "encrypt",
+                  "path": "fixtures/rules/aws-rds-unencrypted/pass_encrypted/terraform.tfvars",
+                  "type": "tfvar"
+                },
+                {
+                  "module_connection": false,
+                  "name": "encrypt",
+                  "path": "fixtures/rules/aws-rds-unencrypted/pass_encrypted/main.tf",
+                  "type": "variable"
+                }
+              ]
+            },
+            "caller_file_line_range": null,
+            "caller_file_path": null,
+            "check_class": "checkov.terraform.checks.resource.aws.RDSEncryption",
+            "check_id": "CKV_AWS_16",
+            "check_len": null,
+            "check_name": "Ensure all data stored in the RDS is securely encrypted at rest",
+            "check_result": {
+              "evaluated_keys": [
+                "storage_encrypted"
+              ],
+              "result": "PASSED"
+            },
+            "code_block": null,
+            "connected_node": null,
+            "definition_context_file_path": "fixtures/rules/aws-rds-unencrypted/pass_encrypted/main.tf",
+            "description": null,
+            "details": [],
+            "entity_tags": null,
+            "evaluations": null,
+            "file_abs_path": "fixtures/rules/aws-rds-unencrypted/pass_encrypted/main.tf",
+            "file_line_range": [
+              14,
+              20
+            ],
+            "file_path": "/main.tf",
+            "fixed_definition": null,
+            "guideline": null,
+            "repo_file_path": "/fixtures/rules/aws-rds-unencrypted/pass_encrypted/main.tf",
+            "resource": "aws_db_instance.b",
+            "resource_address": null,
+            "severity": null,
+            "short_description": null,
+            "vulnerability_details": null
+          },
+          "status": "passed"
+        }
+      ],
+      "native": "no_finding",
+      "native_findings": [],
+      "outcome": "neither_reported",
+      "reason": null,
+      "root": "fixtures/rules/aws-rds-unencrypted/pass_encrypted"
+    },
+    {
+      "address": "aws_db_instance.db",
+      "check_id": "CKV_AWS_16",
+      "checkov": "not_observed",
+      "checkov_records": [],
+      "native": "conditional",
+      "native_findings": [
+        {
+          "address": "aws_db_instance.db",
+          "level": "high",
+          "location": {
+            "column": 3,
+            "end": 226,
+            "file": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable/main.tf",
+            "line": 10,
+            "start": 195
+          },
+          "message": "storage_encrypted may be false (depends on unconstrained variable var.encrypt)",
+          "module": "",
+          "provenance": [
+            {
+              "column": 1,
+              "end": 18,
+              "file": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable/main.tf",
+              "kind": "variable",
+              "label": "variable encrypt (no default, no tfvars value: unconstrained)",
+              "line": 1,
+              "start": 0
+            },
+            {
+              "column": 3,
+              "end": 226,
+              "file": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable/main.tf",
+              "kind": "attribute",
+              "label": "aws_db_instance.db storage_encrypted",
+              "line": 10,
+              "start": 195
+            }
+          ],
+          "resource_type": "aws_db_instance",
+          "root": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable",
+          "rule": "aws-rds-unencrypted",
+          "severity": "conditional"
+        }
+      ],
+      "outcome": "unsupported",
+      "reason": "Checkov did not report a two-valued outcome",
+      "root": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable"
+    },
+    {
+      "address": "aws_db_instance.replica",
+      "check_id": "CKV_AWS_16",
+      "checkov": "failed",
+      "checkov_records": [
+        {
+          "record": {
+            "bc_category": null,
+            "bc_check_id": null,
+            "benchmarks": {},
+            "caller_file_line_range": null,
+            "caller_file_path": null,
+            "check_class": "checkov.terraform.checks.resource.aws.RDSEncryption",
+            "check_id": "CKV_AWS_16",
+            "check_len": null,
+            "check_name": "Ensure all data stored in the RDS is securely encrypted at rest",
+            "check_result": {
+              "evaluated_keys": [
+                "storage_encrypted"
+              ],
+              "result": "FAILED"
+            },
+            "code_block": null,
+            "connected_node": null,
+            "definition_context_file_path": "fixtures/parity/rds-replica/main.tf",
+            "description": null,
+            "details": [],
+            "entity_tags": null,
+            "evaluations": null,
+            "file_abs_path": "fixtures/parity/rds-replica/main.tf",
+            "file_line_range": [
+              1,
+              4
+            ],
+            "file_path": "/main.tf",
+            "fixed_definition": null,
+            "guideline": null,
+            "repo_file_path": "/fixtures/parity/rds-replica/main.tf",
+            "resource": "aws_db_instance.replica",
+            "resource_address": null,
+            "severity": null,
+            "short_description": null,
+            "vulnerability_details": null
+          },
+          "status": "failed"
+        }
+      ],
+      "native": "no_finding",
+      "native_findings": [],
+      "outcome": "checkov_only",
+      "reason": null,
+      "root": "fixtures/parity/rds-replica"
+    },
+    {
+      "address": "aws_db_instance.db",
+      "check_id": "CKV_AWS_16",
+      "checkov": "skipped",
+      "checkov_records": [
+        {
+          "record": {
+            "bc_category": null,
+            "bc_check_id": null,
+            "benchmarks": {},
+            "caller_file_line_range": null,
+            "caller_file_path": null,
+            "check_class": "checkov.terraform.checks.resource.aws.RDSEncryption",
+            "check_id": "CKV_AWS_16",
+            "check_len": null,
+            "check_name": "Ensure all data stored in the RDS is securely encrypted at rest",
+            "check_result": {
+              "result": "SKIPPED",
+              "suppress_comment": "Parity harness skip control"
+            },
+            "code_block": null,
+            "connected_node": null,
+            "definition_context_file_path": "fixtures/parity/rds-skip/main.tf",
+            "description": null,
+            "details": [],
+            "entity_tags": null,
+            "evaluations": null,
+            "file_abs_path": "fixtures/parity/rds-skip/main.tf",
+            "file_line_range": [
+              1,
+              7
+            ],
+            "file_path": "/main.tf",
+            "fixed_definition": null,
+            "guideline": null,
+            "repo_file_path": "/fixtures/parity/rds-skip/main.tf",
+            "resource": "aws_db_instance.db",
+            "resource_address": null,
+            "severity": null,
+            "short_description": null,
+            "vulnerability_details": null
+          },
+          "status": "skipped"
+        }
+      ],
+      "native": "definite",
+      "native_findings": [
+        {
+          "address": "aws_db_instance.db",
+          "level": "high",
+          "location": {
+            "column": 3,
+            "end": 196,
+            "file": "fixtures/parity/rds-skip/main.tf",
+            "line": 6,
+            "start": 171
+          },
+          "message": "storage_encrypted is false",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 196,
+              "file": "fixtures/parity/rds-skip/main.tf",
+              "kind": "attribute",
+              "label": "aws_db_instance.db storage_encrypted",
+              "line": 6,
+              "start": 171
+            }
+          ],
+          "resource_type": "aws_db_instance",
+          "root": "fixtures/parity/rds-skip",
+          "rule": "aws-rds-unencrypted",
+          "severity": "definite"
+        }
+      ],
+      "outcome": "skipped",
+      "reason": "Checkov suppression; not compared as pass",
+      "root": "fixtures/parity/rds-skip"
+    }
+  ],
+  "runs": [
+    {
+      "artifact": "00-native.json",
+      "command": [
+        "target/debug/oxtf",
+        "scan",
+        "fixtures/rules/aws-rds-unencrypted/fail_explicit_false",
+        "--format",
+        "json",
+        "--rule",
+        "aws-rds-unencrypted"
+      ],
+      "error": null,
+      "exit_code": 0,
+      "root": "fixtures/rules/aws-rds-unencrypted/fail_explicit_false",
+      "tool": "native"
+    },
+    {
+      "artifact": "00-checkov.json",
+      "command": [
+        "/home/jg/.local/bin/checkov",
+        "-d",
+        "fixtures/rules/aws-rds-unencrypted/fail_explicit_false",
+        "--framework",
+        "terraform",
+        "--check",
+        "CKV_AWS_16",
+        "--compact",
+        "-o",
+        "json",
+        "--skip-download",
+        "--download-external-modules",
+        "false"
+      ],
+      "error": null,
+      "exit_code": 1,
+      "root": "fixtures/rules/aws-rds-unencrypted/fail_explicit_false",
+      "tool": "checkov"
+    },
+    {
+      "artifact": "01-native.json",
+      "command": [
+        "target/debug/oxtf",
+        "scan",
+        "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default",
+        "--format",
+        "json",
+        "--rule",
+        "aws-rds-unencrypted"
+      ],
+      "error": null,
+      "exit_code": 0,
+      "root": "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default",
+      "tool": "native"
+    },
+    {
+      "artifact": "01-checkov.json",
+      "command": [
+        "/home/jg/.local/bin/checkov",
+        "-d",
+        "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default",
+        "--framework",
+        "terraform",
+        "--check",
+        "CKV_AWS_16",
+        "--compact",
+        "-o",
+        "json",
+        "--skip-download",
+        "--download-external-modules",
+        "false"
+      ],
+      "error": null,
+      "exit_code": 1,
+      "root": "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default",
+      "tool": "checkov"
+    },
+    {
+      "artifact": "02-native.json",
+      "command": [
+        "target/debug/oxtf",
+        "scan",
+        "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false",
+        "--format",
+        "json",
+        "--rule",
+        "aws-rds-unencrypted"
+      ],
+      "error": null,
+      "exit_code": 0,
+      "root": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false",
+      "tool": "native"
+    },
+    {
+      "artifact": "02-checkov.json",
+      "command": [
+        "/home/jg/.local/bin/checkov",
+        "-d",
+        "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false",
+        "--framework",
+        "terraform",
+        "--check",
+        "CKV_AWS_16",
+        "--compact",
+        "-o",
+        "json",
+        "--skip-download",
+        "--download-external-modules",
+        "false"
+      ],
+      "error": null,
+      "exit_code": 1,
+      "root": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false",
+      "tool": "checkov"
+    },
+    {
+      "artifact": "03-native.json",
+      "command": [
+        "target/debug/oxtf",
+        "scan",
+        "fixtures/rules/aws-rds-unencrypted/pass_encrypted",
+        "--format",
+        "json",
+        "--rule",
+        "aws-rds-unencrypted"
+      ],
+      "error": null,
+      "exit_code": 0,
+      "root": "fixtures/rules/aws-rds-unencrypted/pass_encrypted",
+      "tool": "native"
+    },
+    {
+      "artifact": "03-checkov.json",
+      "command": [
+        "/home/jg/.local/bin/checkov",
+        "-d",
+        "fixtures/rules/aws-rds-unencrypted/pass_encrypted",
+        "--framework",
+        "terraform",
+        "--check",
+        "CKV_AWS_16",
+        "--compact",
+        "-o",
+        "json",
+        "--skip-download",
+        "--download-external-modules",
+        "false"
+      ],
+      "error": null,
+      "exit_code": 0,
+      "root": "fixtures/rules/aws-rds-unencrypted/pass_encrypted",
+      "tool": "checkov"
+    },
+    {
+      "artifact": "04-native.json",
+      "command": [
+        "target/debug/oxtf",
+        "scan",
+        "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable",
+        "--format",
+        "json",
+        "--rule",
+        "aws-rds-unencrypted"
+      ],
+      "error": null,
+      "exit_code": 0,
+      "root": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable",
+      "tool": "native"
+    },
+    {
+      "artifact": "04-checkov.json",
+      "command": [
+        "/home/jg/.local/bin/checkov",
+        "-d",
+        "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable",
+        "--framework",
+        "terraform",
+        "--check",
+        "CKV_AWS_16",
+        "--compact",
+        "-o",
+        "json",
+        "--skip-download",
+        "--download-external-modules",
+        "false"
+      ],
+      "error": null,
+      "exit_code": 0,
+      "root": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable",
+      "tool": "checkov"
+    },
+    {
+      "artifact": "05-native.json",
+      "command": [
+        "target/debug/oxtf",
+        "scan",
+        "fixtures/parity/rds-replica",
+        "--format",
+        "json",
+        "--rule",
+        "aws-rds-unencrypted"
+      ],
+      "error": null,
+      "exit_code": 0,
+      "root": "fixtures/parity/rds-replica",
+      "tool": "native"
+    },
+    {
+      "artifact": "05-checkov.json",
+      "command": [
+        "/home/jg/.local/bin/checkov",
+        "-d",
+        "fixtures/parity/rds-replica",
+        "--framework",
+        "terraform",
+        "--check",
+        "CKV_AWS_16",
+        "--compact",
+        "-o",
+        "json",
+        "--skip-download",
+        "--download-external-modules",
+        "false"
+      ],
+      "error": null,
+      "exit_code": 1,
+      "root": "fixtures/parity/rds-replica",
+      "tool": "checkov"
+    },
+    {
+      "artifact": "06-native.json",
+      "command": [
+        "target/debug/oxtf",
+        "scan",
+        "fixtures/parity/rds-skip",
+        "--format",
+        "json",
+        "--rule",
+        "aws-rds-unencrypted"
+      ],
+      "error": null,
+      "exit_code": 0,
+      "root": "fixtures/parity/rds-skip",
+      "tool": "native"
+    },
+    {
+      "artifact": "06-checkov.json",
+      "command": [
+        "/home/jg/.local/bin/checkov",
+        "-d",
+        "fixtures/parity/rds-skip",
+        "--framework",
+        "terraform",
+        "--check",
+        "CKV_AWS_16",
+        "--compact",
+        "-o",
+        "json",
+        "--skip-download",
+        "--download-external-modules",
+        "false"
+      ],
+      "error": null,
+      "exit_code": 0,
+      "root": "fixtures/parity/rds-skip",
+      "tool": "checkov"
+    }
+  ],
+  "summary": {
+    "both_reported": 3,
+    "checkov_only": 1,
+    "neither_reported": 2,
+    "skipped": 1,
+    "unsupported": 1
+  },
+  "version": 1
+}

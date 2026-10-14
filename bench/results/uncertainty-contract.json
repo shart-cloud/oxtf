@@ -1,0 +1,983 @@
+{
+  "cases": [
+    {
+      "case": "known_false",
+      "existence": "True",
+      "input": {
+        "display_tainted": false,
+        "lhs": {
+          "kind": "known",
+          "value": false
+        },
+        "op": "single",
+        "plain": {
+          "lhs": false,
+          "rhs": true
+        },
+        "predicate": "not_true",
+        "rhs": {
+          "kind": "known",
+          "value": true
+        }
+      },
+      "native": {
+        "findings": [
+          "definite"
+        ],
+        "truth_rank": 3
+      },
+      "strategies": {
+        "evidence": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        },
+        "path": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        },
+        "tagged": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        }
+      }
+    },
+    {
+      "case": "known_true",
+      "existence": "True",
+      "input": {
+        "display_tainted": false,
+        "lhs": {
+          "kind": "known",
+          "value": true
+        },
+        "op": "single",
+        "plain": {
+          "lhs": true,
+          "rhs": true
+        },
+        "predicate": "not_true",
+        "rhs": {
+          "kind": "known",
+          "value": true
+        }
+      },
+      "native": {
+        "findings": [],
+        "truth_rank": 0
+      },
+      "strategies": {
+        "evidence": {
+          "findings": [],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 0
+        },
+        "path": {
+          "findings": [],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 0
+        },
+        "tagged": {
+          "findings": [],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 0
+        }
+      }
+    },
+    {
+      "case": "known_null",
+      "existence": "True",
+      "input": {
+        "display_tainted": false,
+        "lhs": {
+          "kind": "known",
+          "value": null
+        },
+        "op": "single",
+        "plain": {
+          "lhs": null,
+          "rhs": true
+        },
+        "predicate": "not_true",
+        "rhs": {
+          "kind": "known",
+          "value": true
+        }
+      },
+      "native": {
+        "findings": [
+          "definite"
+        ],
+        "truth_rank": 3
+      },
+      "strategies": {
+        "evidence": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        },
+        "path": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        },
+        "tagged": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        }
+      }
+    },
+    {
+      "case": "provider_unknown",
+      "existence": "True",
+      "input": {
+        "display_tainted": false,
+        "lhs": {
+          "kind": "unknown"
+        },
+        "op": "single",
+        "plain": {
+          "lhs": null,
+          "rhs": true
+        },
+        "predicate": "not_true",
+        "rhs": {
+          "kind": "known",
+          "value": true
+        }
+      },
+      "native": {
+        "findings": [],
+        "truth_rank": 1
+      },
+      "strategies": {
+        "evidence": {
+          "findings": [],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 1
+        },
+        "path": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": false,
+          "truth_matches": false,
+          "truth_rank": 3
+        },
+        "tagged": {
+          "findings": [],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 1
+        }
+      }
+    },
+    {
+      "case": "unconstrained_input",
+      "existence": "True",
+      "input": {
+        "display_tainted": false,
+        "lhs": {
+          "kind": "tainted"
+        },
+        "op": "single",
+        "plain": {
+          "lhs": null,
+          "rhs": true
+        },
+        "predicate": "not_true",
+        "rhs": {
+          "kind": "known",
+          "value": true
+        }
+      },
+      "native": {
+        "findings": [
+          "conditional"
+        ],
+        "truth_rank": 2
+      },
+      "strategies": {
+        "evidence": {
+          "findings": [
+            "conditional"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 2
+        },
+        "path": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": false,
+          "truth_matches": false,
+          "truth_rank": 3
+        },
+        "tagged": {
+          "findings": [
+            "conditional"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 2
+        }
+      }
+    },
+    {
+      "case": "one_of_tainted",
+      "existence": "True",
+      "input": {
+        "display_tainted": false,
+        "lhs": {
+          "alternatives": [
+            false,
+            true
+          ],
+          "kind": "one_of",
+          "tainted": true
+        },
+        "op": "single",
+        "plain": {
+          "lhs": null,
+          "rhs": true
+        },
+        "predicate": "not_true",
+        "rhs": {
+          "kind": "known",
+          "value": true
+        }
+      },
+      "native": {
+        "findings": [
+          "conditional"
+        ],
+        "truth_rank": 2
+      },
+      "strategies": {
+        "evidence": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": false,
+          "truth_matches": false,
+          "truth_rank": 3
+        },
+        "path": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": false,
+          "truth_matches": false,
+          "truth_rank": 3
+        },
+        "tagged": {
+          "findings": [
+            "conditional"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 2
+        }
+      }
+    },
+    {
+      "case": "one_of_unknown",
+      "existence": "True",
+      "input": {
+        "display_tainted": false,
+        "lhs": {
+          "alternatives": [
+            false,
+            true
+          ],
+          "kind": "one_of",
+          "tainted": false
+        },
+        "op": "single",
+        "plain": {
+          "lhs": null,
+          "rhs": true
+        },
+        "predicate": "not_true",
+        "rhs": {
+          "kind": "known",
+          "value": true
+        }
+      },
+      "native": {
+        "findings": [],
+        "truth_rank": 1
+      },
+      "strategies": {
+        "evidence": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": false,
+          "truth_matches": false,
+          "truth_rank": 3
+        },
+        "path": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": false,
+          "truth_matches": false,
+          "truth_rank": 3
+        },
+        "tagged": {
+          "findings": [],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 1
+        }
+      }
+    },
+    {
+      "case": "all_alternatives_unsafe",
+      "existence": "True",
+      "input": {
+        "display_tainted": false,
+        "lhs": {
+          "alternatives": [
+            false,
+            null
+          ],
+          "kind": "one_of",
+          "tainted": true
+        },
+        "op": "single",
+        "plain": {
+          "lhs": null,
+          "rhs": true
+        },
+        "predicate": "not_true",
+        "rhs": {
+          "kind": "known",
+          "value": true
+        }
+      },
+      "native": {
+        "findings": [
+          "definite"
+        ],
+        "truth_rank": 3
+      },
+      "strategies": {
+        "evidence": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        },
+        "path": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        },
+        "tagged": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        }
+      }
+    },
+    {
+      "case": "missing_boolean_result",
+      "existence": "True",
+      "input": {
+        "display_tainted": false,
+        "lhs": {
+          "kind": "tainted"
+        },
+        "op": "single",
+        "plain": {
+          "lhs": null,
+          "rhs": true
+        },
+        "predicate": "equals_true",
+        "rhs": {
+          "kind": "known",
+          "value": true
+        }
+      },
+      "native": {
+        "findings": [
+          "conditional"
+        ],
+        "truth_rank": 2
+      },
+      "strategies": {
+        "evidence": {
+          "findings": [],
+          "findings_match": false,
+          "truth_matches": false,
+          "truth_rank": 0
+        },
+        "path": {
+          "findings": [],
+          "findings_match": false,
+          "truth_matches": false,
+          "truth_rank": 0
+        },
+        "tagged": {
+          "findings": [
+            "conditional"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 2
+        }
+      }
+    },
+    {
+      "case": "unrelated_display_taint",
+      "existence": "True",
+      "input": {
+        "display_tainted": true,
+        "lhs": {
+          "kind": "known",
+          "value": false
+        },
+        "op": "single",
+        "plain": {
+          "lhs": false,
+          "rhs": true
+        },
+        "predicate": "not_true",
+        "rhs": {
+          "kind": "known",
+          "value": true
+        }
+      },
+      "native": {
+        "findings": [
+          "definite"
+        ],
+        "truth_rank": 3
+      },
+      "strategies": {
+        "evidence": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        },
+        "path": {
+          "findings": [
+            "conditional"
+          ],
+          "findings_match": false,
+          "truth_matches": false,
+          "truth_rank": 2
+        },
+        "tagged": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        }
+      }
+    },
+    {
+      "case": "false_and_tainted",
+      "existence": "True",
+      "input": {
+        "display_tainted": false,
+        "lhs": {
+          "kind": "known",
+          "value": true
+        },
+        "op": "and",
+        "plain": {
+          "lhs": true,
+          "rhs": null
+        },
+        "predicate": "not_true",
+        "rhs": {
+          "kind": "tainted"
+        }
+      },
+      "native": {
+        "findings": [],
+        "truth_rank": 0
+      },
+      "strategies": {
+        "evidence": {
+          "findings": [],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 0
+        },
+        "path": {
+          "findings": [],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 0
+        },
+        "tagged": {
+          "findings": [],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 0
+        }
+      }
+    },
+    {
+      "case": "true_or_tainted",
+      "existence": "True",
+      "input": {
+        "display_tainted": false,
+        "lhs": {
+          "kind": "known",
+          "value": false
+        },
+        "op": "or",
+        "plain": {
+          "lhs": false,
+          "rhs": null
+        },
+        "predicate": "not_true",
+        "rhs": {
+          "kind": "tainted"
+        }
+      },
+      "native": {
+        "findings": [
+          "definite"
+        ],
+        "truth_rank": 3
+      },
+      "strategies": {
+        "evidence": {
+          "findings": [
+            "conditional"
+          ],
+          "findings_match": false,
+          "truth_matches": false,
+          "truth_rank": 2
+        },
+        "path": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        },
+        "tagged": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        }
+      }
+    },
+    {
+      "case": "tainted_and_unknown",
+      "existence": "True",
+      "input": {
+        "display_tainted": false,
+        "lhs": {
+          "kind": "tainted"
+        },
+        "op": "and",
+        "plain": {
+          "lhs": null,
+          "rhs": null
+        },
+        "predicate": "not_true",
+        "rhs": {
+          "kind": "unknown"
+        }
+      },
+      "native": {
+        "findings": [],
+        "truth_rank": 1
+      },
+      "strategies": {
+        "evidence": {
+          "findings": [],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 1
+        },
+        "path": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": false,
+          "truth_matches": false,
+          "truth_rank": 3
+        },
+        "tagged": {
+          "findings": [],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 1
+        }
+      }
+    },
+    {
+      "case": "tainted_or_unknown",
+      "existence": "True",
+      "input": {
+        "display_tainted": false,
+        "lhs": {
+          "kind": "tainted"
+        },
+        "op": "or",
+        "plain": {
+          "lhs": null,
+          "rhs": null
+        },
+        "predicate": "not_true",
+        "rhs": {
+          "kind": "unknown"
+        }
+      },
+      "native": {
+        "findings": [
+          "conditional"
+        ],
+        "truth_rank": 2
+      },
+      "strategies": {
+        "evidence": {
+          "findings": [],
+          "findings_match": false,
+          "truth_matches": false,
+          "truth_rank": 1
+        },
+        "path": {
+          "findings": [
+            "definite"
+          ],
+          "findings_match": false,
+          "truth_matches": false,
+          "truth_rank": 3
+        },
+        "tagged": {
+          "findings": [
+            "conditional"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 2
+        }
+      }
+    },
+    {
+      "case": "existence_false",
+      "existence": "False",
+      "input": {
+        "display_tainted": false,
+        "lhs": {
+          "kind": "known",
+          "value": false
+        },
+        "op": "single",
+        "plain": {
+          "lhs": false,
+          "rhs": true
+        },
+        "predicate": "not_true",
+        "rhs": {
+          "kind": "known",
+          "value": true
+        }
+      },
+      "native": {
+        "findings": [],
+        "truth_rank": 3
+      },
+      "strategies": {
+        "evidence": {
+          "findings": [],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        },
+        "path": {
+          "findings": [],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        },
+        "tagged": {
+          "findings": [],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        }
+      }
+    },
+    {
+      "case": "existence_unknown",
+      "existence": "Unknown",
+      "input": {
+        "display_tainted": false,
+        "lhs": {
+          "kind": "known",
+          "value": false
+        },
+        "op": "single",
+        "plain": {
+          "lhs": false,
+          "rhs": true
+        },
+        "predicate": "not_true",
+        "rhs": {
+          "kind": "known",
+          "value": true
+        }
+      },
+      "native": {
+        "findings": [],
+        "truth_rank": 3
+      },
+      "strategies": {
+        "evidence": {
+          "findings": [],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        },
+        "path": {
+          "findings": [],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        },
+        "tagged": {
+          "findings": [],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        }
+      }
+    },
+    {
+      "case": "existence_tainted",
+      "existence": "Tainted",
+      "input": {
+        "display_tainted": false,
+        "lhs": {
+          "kind": "known",
+          "value": false
+        },
+        "op": "single",
+        "plain": {
+          "lhs": false,
+          "rhs": true
+        },
+        "predicate": "not_true",
+        "rhs": {
+          "kind": "known",
+          "value": true
+        }
+      },
+      "native": {
+        "findings": [
+          "conditional"
+        ],
+        "truth_rank": 3
+      },
+      "strategies": {
+        "evidence": {
+          "findings": [
+            "conditional"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        },
+        "path": {
+          "findings": [
+            "conditional"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        },
+        "tagged": {
+          "findings": [
+            "conditional"
+          ],
+          "findings_match": true,
+          "truth_matches": true,
+          "truth_rank": 3
+        }
+      }
+    }
+  ],
+  "evidence_probes": [
+    {
+      "attribute": "block_public_policy",
+      "case": "cross_resource_taint",
+      "configured": true,
+      "configured_value": {
+        "kind": "tainted"
+      },
+      "effective_evidence_value": {
+        "kind": "tainted"
+      },
+      "evidence_owner": "aws_s3_bucket_public_access_block.data",
+      "forged_handle_rejected": true,
+      "native_finding_matches": true,
+      "provenance_kinds": [
+        "variable",
+        "attribute"
+      ],
+      "severity": "conditional",
+      "target": "aws_s3_bucket.data"
+    },
+    {
+      "attribute": "ingress",
+      "case": "tfvars_chain",
+      "configured": true,
+      "configured_value": {
+        "kind": "known",
+        "value": [
+          {
+            "cidr_blocks": [
+              "0.0.0.0/0"
+            ],
+            "from_port": 22,
+            "protocol": "tcp",
+            "to_port": 22
+          }
+        ]
+      },
+      "effective_evidence_value": {
+        "kind": "known",
+        "value": "0.0.0.0/0"
+      },
+      "evidence_owner": "aws_security_group.admin",
+      "forged_handle_rejected": true,
+      "native_finding_matches": true,
+      "provenance_kinds": [
+        "tfvars",
+        "variable",
+        "local",
+        "attribute"
+      ],
+      "severity": "definite",
+      "target": "aws_security_group.admin"
+    },
+    {
+      "attribute": "storage_encrypted",
+      "case": "absent_default",
+      "configured": false,
+      "configured_value": {
+        "kind": "missing"
+      },
+      "effective_evidence_value": {
+        "kind": "known",
+        "value": false
+      },
+      "evidence_owner": "aws_db_instance.db",
+      "forged_handle_rejected": true,
+      "native_finding_matches": true,
+      "provenance_kinds": [
+        "default"
+      ],
+      "severity": "definite",
+      "target": "aws_db_instance.db"
+    },
+    {
+      "attribute": "storage_encrypted",
+      "case": "explicit_null_default",
+      "configured": true,
+      "configured_value": {
+        "kind": "known",
+        "value": null
+      },
+      "effective_evidence_value": {
+        "kind": "known",
+        "value": false
+      },
+      "evidence_owner": "aws_db_instance.db",
+      "forged_handle_rejected": true,
+      "native_finding_matches": true,
+      "provenance_kinds": [
+        "default"
+      ],
+      "severity": "definite",
+      "target": "aws_db_instance.db"
+    }
+  ],
+  "features": [
+    "std",
+    "arc"
+  ],
+  "regorus": "0.12.0",
+  "two_pass_probe": {
+    "assignments": [
+      {
+        "a": false,
+        "b": false,
+        "finding": false
+      },
+      {
+        "a": false,
+        "b": true,
+        "finding": true
+      },
+      {
+        "a": true,
+        "b": false,
+        "finding": true
+      },
+      {
+        "a": true,
+        "b": true,
+        "finding": false
+      }
+    ],
+    "exhaustive_boolean_findings": 2,
+    "native": "conditional",
+    "uniform_false_and_true_findings": 0
+  },
+  "version": 1
+}

@@ -1,0 +1,15 @@
+[package]
+name = "oxtf-uncertainty-experiment"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# An isolated experiment: no Rego dependency or interface added to the scanner.
+[workspace]
+
+[dependencies]
+regorus = { version = "=0.12.0", default-features = false, features = ["std", "arc"] }
+serde_json = "1"
+tf_eval = { path = "../../crates/tf_eval" }
+tf_linter = { path = "../../crates/tf_linter" }
+tf_semantic = { path = "../../crates/tf_semantic" }

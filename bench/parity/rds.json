@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "checkov_version": "3.2.328",
+  "native_rule": "aws-rds-unencrypted",
+  "checkov_rule": "CKV_AWS_16",
+  "cases": [
+    {"root": "fixtures/rules/aws-rds-unencrypted/fail_explicit_false", "resources": ["aws_db_instance.db"]},
+    {"root": "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default", "resources": ["aws_db_instance.db"]},
+    {"root": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false", "resources": ["aws_db_instance.db"]},
+    {"root": "fixtures/rules/aws-rds-unencrypted/pass_encrypted", "resources": ["aws_db_instance.a", "aws_db_instance.b"]},
+    {"root": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable", "resources": ["aws_db_instance.db"]},
+    {"root": "fixtures/parity/rds-replica", "resources": ["aws_db_instance.replica"]},
+    {"root": "fixtures/parity/rds-skip", "resources": ["aws_db_instance.db"]}
+  ]
+}
