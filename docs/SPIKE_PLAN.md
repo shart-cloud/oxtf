@@ -48,7 +48,7 @@ Model the AST on oxc: `bumpalo` arena, `Box<'a, T>` / `Vec<'a, T>` / `Atom<'a>`,
 
 ### W2. Provider schema codegen
 
-- [ ] Pin AWS 6.x, AzureRM 5.x and Google 7.x in a `required_providers` file; run `terraform providers schema -json`; commit the JSON snapshots.
+- [ ] Pin AWS 6.x, AzureRM 5.x and Google 8.x in a `required_providers` file; run `terraform providers schema -json`; commit the JSON snapshots.
 - [ ] Generator emits a compact schema IR (postcard or rkyv blob, `phf` index) covering every resource and data source: type, required/optional/computed, sensitive, deprecated, nesting mode, min/max items.
 - [ ] Generator emits zero-cost typed views (`AwsSecurityGroup<'a>` over a resource node) only for resources listed in an allowlist.
 - [ ] A hand-written defaults overlay (`defaults/aws.toml` etc.). The schema protocol does not carry default values, so absent-attribute checks depend on this file.
@@ -154,7 +154,7 @@ The spike succeeds if it produces a clear go/no-go backed by measurements, even 
 Work in the order below, commit small, and keep `SPIKE_REPORT.md` current as you go rather than writing it at the end.
 
 1. **Check the environment first.** You need stable Rust, Python 3.10+, maturin, and network access to crates.io, PyPI, GitHub, and the Terraform registry (to download Terraform and the three providers for the schema dump). If the registry is unreachable, stop W2 and say so in the report; the owner will supply the schema JSON files. Do not work around a blocked network.
-2. **Verify versions before pinning.** Look up the current latest release of each provider major (AWS 6.x, AzureRM 5.x, Google 7.x) and of PyO3, and record the exact versions used.
+2. **Verify versions before pinning.** Look up the current latest release of each provider major (AWS 6.x, AzureRM 5.x, Google 8.x) and of PyO3, and record the exact versions used.
 3. **Start W1 and W2 in parallel.** Use subagents if available. Neither depends on the other.
 4. **Then W3, W4, W6, in that order.** Only start W5 if everything else meets its exit criteria with time left.
 5. **Cut scope, not quality.** If a workstream runs long, drop items from its checklist and log each cut with the reason. A smaller prototype with honest numbers beats a broader one with guesses.
