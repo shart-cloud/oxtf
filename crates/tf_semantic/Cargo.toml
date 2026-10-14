@@ -14,3 +14,9 @@ tf_parser.workspace = true
 tf_schema.workspace = true
 tf_eval.workspace = true
 
+
+[[example]]
+name = "q6_eval_depth"
+
+[[example]]
+name = "dump"

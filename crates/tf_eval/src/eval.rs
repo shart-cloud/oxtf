@@ -114,6 +114,38 @@ impl<'r, 'a> Evaluator<'r, 'a> {
         Evaluator { resolver, file }
     }
 
+    /// Evaluate an expression that has no references (type-constraint
+    /// defaults); works for any AST lifetime.
+    pub fn eval_static(&self, e: &Expression<'_>) -> Value {
+        match e.without_parens() {
+            Expression::Null(_) => Value::null(),
+            Expression::Bool(b) => Value::bool(b.value),
+            Expression::Number(n) => Value::number(n.value),
+            Expression::String(s) => Value::string(s.value.as_str()),
+            Expression::Tuple(t) => {
+                Value::list(t.elements.iter().map(|x| self.eval_static(x)).collect())
+            }
+            Expression::Object(o) => Value::object(
+                o.items
+                    .iter()
+                    .filter_map(|i| {
+                        Some((
+                            Arc::from(i.key.as_static_str()?),
+                            self.eval_static(&i.value),
+                        ))
+                    })
+                    .collect(),
+            ),
+            Expression::Unary(u) if u.operator == UnaryOperator::Negate => {
+                match self.eval_static(&u.operand).as_number() {
+                    Some(n) => Value::number(-n),
+                    None => Value::other("non-literal default"),
+                }
+            }
+            _ => Value::other("non-literal default"),
+        }
+    }
+
     pub fn eval(&self, e: &'a Expression<'a>, sc: Scope<'_>) -> Value {
         match e {
             Expression::Null(_) => Value::null(),

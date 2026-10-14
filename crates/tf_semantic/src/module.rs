@@ -28,6 +28,8 @@ pub struct VarDecl<'a> {
     pub file: FileId,
     pub default: Option<&'a Attribute<'a>>,
     pub ty: Option<&'a Expression<'a>>,
+    /// `nullable = false`: a null argument means "use the default".
+    pub non_nullable: bool,
 }
 
 pub struct LocalDecl<'a> {
@@ -250,6 +252,10 @@ fn index_block<'a>(def: &mut ModuleDef<'a>, file: FileId, b: &'a Block<'a>) {
                     file,
                     default: b.body.find_attribute("default"),
                     ty: b.body.find_attribute("type").map(|a| &a.value),
+                    non_nullable: b
+                        .body
+                        .find_attribute("nullable")
+                        .is_some_and(|a| matches!(&a.value, Expression::Bool(x) if !x.value)),
                 });
             }
         }

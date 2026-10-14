@@ -27,6 +27,9 @@ pub const SUPPORTED: &[&str] = &[
     "abs",
     "alltrue",
     "anytrue",
+    "base64decode",
+    "base64encode",
+    "basename",
     "can",
     "ceil",
     "chomp",
@@ -40,6 +43,7 @@ pub const SUPPORTED: &[&str] = &[
     "compact",
     "concat",
     "contains",
+    "dirname",
     "distinct",
     "element",
     "endswith",
@@ -47,6 +51,7 @@ pub const SUPPORTED: &[&str] = &[
     "floor",
     "format",
     "formatlist",
+    "indent",
     "index",
     "join",
     "jsondecode",
@@ -56,6 +61,7 @@ pub const SUPPORTED: &[&str] = &[
     "log",
     "lookup",
     "lower",
+    "matchkeys",
     "max",
     "merge",
     "min",
@@ -68,6 +74,7 @@ pub const SUPPORTED: &[&str] = &[
     "reverse",
     "sensitive",
     "setintersection",
+    "setproduct",
     "setsubtract",
     "setunion",
     "signum",
@@ -75,6 +82,7 @@ pub const SUPPORTED: &[&str] = &[
     "sort",
     "split",
     "startswith",
+    "strcontains",
     "strrev",
     "substr",
     "sum",
@@ -92,6 +100,7 @@ pub const SUPPORTED: &[&str] = &[
     "trimsuffix",
     "try",
     "upper",
+    "urlencode",
     "values",
     "zipmap",
 ];
@@ -469,6 +478,47 @@ fn dispatch(name: &str, a: &[Value]) -> R {
             }
             Ok(Value::list(out))
         }
+        "setproduct" => {
+            let mut rows: Vec<Vec<Value>> = vec![vec![]];
+            for x in a {
+                let l = list(x)?;
+                let mut next = Vec::new();
+                for r in &rows {
+                    for e in l {
+                        let mut r2 = r.clone();
+                        r2.push(e.child_of(x));
+                        next.push(r2);
+                    }
+                }
+                if next.len() > 4096 {
+                    return Err(Value::other("setproduct: too large"));
+                }
+                rows = next;
+            }
+            if a.is_empty() {
+                return Err(Value::error("setproduct: no arguments"));
+            }
+            Ok(Value::list(rows.into_iter().map(Value::list).collect()))
+        }
+        "matchkeys" => {
+            arity(a, 3)?;
+            let (vals, keys, search) = (list(&a[0])?, list(&a[1])?, list(&a[2])?);
+            let mut out = Vec::new();
+            for (v, k) in vals.iter().zip(keys.iter()) {
+                let mut hit = false;
+                for s in search {
+                    match k.known_eq(s) {
+                        Some(true) => hit = true,
+                        Some(false) => {}
+                        None => return Err(non_known_or(k, "matchkeys: unknown key")),
+                    }
+                }
+                if hit {
+                    out.push(v.child_of(&a[0]));
+                }
+            }
+            Ok(Value::list(out))
+        }
         "transpose" => {
             arity(a, 1)?;
             let mut m: BTreeMap<Arc<str>, Vec<Value>> = BTreeMap::new();
@@ -564,6 +614,52 @@ fn dispatch(name: &str, a: &[Value]) -> R {
                     out.push(c);
                 }
                 start = !c.is_alphanumeric();
+            }
+            Ok(Value::string(out))
+        }
+        "basename" => {
+            let p = string(one_arg(a)?)?;
+            Ok(Value::string(
+                p.trim_end_matches('/').rsplit('/').next().unwrap_or(""),
+            ))
+        }
+        "dirname" => {
+            let p = string(one_arg(a)?)?;
+            let t = p.trim_end_matches('/');
+            Ok(Value::string(match t.rfind('/') {
+                Some(0) => "/",
+                Some(i) => &t[..i],
+                None => ".",
+            }))
+        }
+        "strcontains" => {
+            arity(a, 2)?;
+            Ok(Value::bool(string(&a[0])?.contains(&*string(&a[1])?)))
+        }
+        "indent" => {
+            arity(a, 2)?;
+            let n = number(&a[0])? as usize;
+            let s = string(&a[1])?;
+            let pad = " ".repeat(n);
+            Ok(Value::string(s.replace('\n', &format!("\n{pad}"))))
+        }
+        "base64encode" => Ok(Value::string(b64encode(string(one_arg(a)?)?.as_bytes()))),
+        "base64decode" => {
+            let s = string(one_arg(a)?)?;
+            b64decode(&s)
+                .and_then(|b| String::from_utf8(b).ok())
+                .map(Value::string)
+                .ok_or_else(|| Value::error("base64decode: invalid input"))
+        }
+        "urlencode" => {
+            let s = string(one_arg(a)?)?;
+            let mut out = String::new();
+            for b in s.bytes() {
+                if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) {
+                    out.push(b as char);
+                } else {
+                    out.push_str(&format!("%{b:02X}"));
+                }
             }
             Ok(Value::string(out))
         }
@@ -917,6 +1013,41 @@ fn format(f: &str, args: &[Value]) -> Result<String, Value> {
     Ok(out)
 }
 
+const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+fn b64encode(data: &[u8]) -> String {
+    let mut out = String::new();
+    for c in data.chunks(3) {
+        let n = (c[0] as u32) << 16
+            | (*c.get(1).unwrap_or(&0) as u32) << 8
+            | *c.get(2).unwrap_or(&0) as u32;
+        for i in 0..4 {
+            if i <= c.len() {
+                out.push(B64[(n >> (18 - 6 * i) & 63) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+fn b64decode(s: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::new();
+    let mut buf = 0u32;
+    let mut bits = 0;
+    for ch in s.bytes().filter(|b| !b.is_ascii_whitespace() && *b != b'=') {
+        let v = B64.iter().position(|&x| x == ch)? as u32;
+        buf = buf << 6 | v;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buf >> bits & 0xff) as u8);
+        }
+    }
+    Some(out)
+}
+
 // ---- CIDR math -------------------------------------------------------------
 
 fn parse_cidr(p: &str) -> Result<(u128, u32, bool), String> {
@@ -1044,6 +1175,12 @@ mod tests {
                 "10.1.48.0/20"
             ]
         );
+    }
+
+    #[test]
+    fn b64() {
+        assert_eq!(b64encode(b"Hello World"), "SGVsbG8gV29ybGQ=");
+        assert_eq!(b64decode("SGVsbG8gV29ybGQ=").unwrap(), b"Hello World");
     }
 
     #[test]

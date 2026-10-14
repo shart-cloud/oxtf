@@ -53,6 +53,8 @@ pub struct ObservedAttr<'x, 'e> {
     /// Dotted path from the resource body, e.g. `ingress.cidr_blocks`.
     pub path: &'x str,
     pub name: &'x str,
+    /// File of `expr` (its span is `expr.span()`).
+    pub file: FileId,
     pub expr: &'x Expression<'e>,
     pub value: &'x Value,
 }
@@ -439,6 +441,11 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                         }
                     }
                 };
+                let v = if decl.non_nullable && v.is_null() {
+                    from_default().unwrap_or(v)
+                } else {
+                    v
+                };
                 convert_to_type(v, decl.ty)
             },
         )
@@ -807,6 +814,19 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                     };
                     let v = Scope::EMPTY
                         .with_all(&binds, |sc| self.eval(inst_id, decl.file, &a.value, sc));
+                    // A null in configuration leaves a computed attribute to
+                    // the provider.
+                    let is_computed = decl
+                        .schema
+                        .and_then(|s| s.attribute(attr))
+                        .is_some_and(|at| at.is_computed());
+                    if v.is_null() && is_computed {
+                        return Value::unknown(Origin::Computed {
+                            resource: base.into(),
+                            key: key.clone(),
+                            attr: attr.into(),
+                        });
+                    }
                     return v.push(
                         Step::new(
                             StepKind::Attribute,
@@ -1239,6 +1259,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                 resource_type: ctx.ty,
                 path: &full,
                 name,
+                file: ctx.file,
                 expr,
                 value: v,
             });
@@ -1327,25 +1348,99 @@ fn collection_items(v: &Value) -> Option<Vec<(Value, Value)>> {
 }
 
 /// Apply a variable's primitive `type` constraint (bool / number / string).
+/// Apply a variable's `type` constraint: primitive conversions
+/// (string <-> bool / number), recursively through `list` / `set` / `map` /
+/// `tuple` / `object`, and `optional(T, default)` object attributes (absent or
+/// null optional attributes become the default, or null).
 fn convert_to_type(v: Value, ty: Option<&Expression<'_>>) -> Value {
-    let Some(Expression::Variable(t)) = ty else {
-        return v;
-    };
+    match ty {
+        Some(t) => apply_type(v, t),
+        None => v,
+    }
+}
+
+fn apply_type(v: Value, ty: &Expression<'_>) -> Value {
     let prov = v.prov.clone();
-    let out = match (&*t.name, &v.kind) {
-        ("bool", Kind::Known(Known::String(s))) if &**s == "true" || &**s == "false" => {
-            Value::bool(&**s == "true")
+    match ty.without_parens() {
+        Expression::Variable(t) => {
+            let out = match (&*t.name, &v.kind) {
+                ("bool", Kind::Known(Known::String(s))) if &**s == "true" || &**s == "false" => {
+                    Value::bool(&**s == "true")
+                }
+                ("number", Kind::Known(Known::String(s))) => match s.trim().parse::<f64>() {
+                    Ok(n) => Value::number(n),
+                    Err(_) => return v,
+                },
+                ("string", Kind::Known(Known::Number(_) | Known::Bool(_))) => {
+                    Value::string(v.to_str().unwrap())
+                }
+                _ => return v,
+            };
+            out.with_prov(prov)
         }
-        ("number", Kind::Known(Known::String(s))) => match s.trim().parse::<f64>() {
-            Ok(n) => Value::number(n),
-            Err(_) => return v,
-        },
-        ("string", Kind::Known(Known::Number(_) | Known::Bool(_))) => {
-            Value::string(v.to_str().unwrap())
+        Expression::FunctionCall(f) => {
+            let name = f.name.name.as_str();
+            let arg = f.arguments.first();
+            match (name, &v.kind, arg) {
+                ("list" | "set", Kind::Known(Known::List(l)), Some(et)) => {
+                    Value::list(l.iter().map(|e| apply_type(e.clone(), et)).collect())
+                        .with_prov(prov)
+                }
+                ("map", Kind::Known(Known::Object(m)), Some(et)) => Value::object(
+                    m.iter()
+                        .map(|(k, e)| (k.clone(), apply_type(e.clone(), et)))
+                        .collect(),
+                )
+                .with_prov(prov),
+                ("tuple", Kind::Known(Known::List(l)), Some(Expression::Tuple(ts))) => Value::list(
+                    l.iter()
+                        .enumerate()
+                        .map(|(i, e)| match ts.elements.get(i) {
+                            Some(t) => apply_type(e.clone(), t),
+                            None => e.clone(),
+                        })
+                        .collect(),
+                )
+                .with_prov(prov),
+                ("object", Kind::Known(Known::Object(m)), Some(Expression::Object(o))) => {
+                    let mut out = (**m).clone();
+                    for item in o.items.iter() {
+                        let Some(k) = item.key.as_static_str() else {
+                            continue;
+                        };
+                        let (inner, default, optional) = match item.value.without_parens() {
+                            Expression::FunctionCall(c) if c.name.name.as_str() == "optional" => {
+                                (c.arguments.first(), c.arguments.get(1), true)
+                            }
+                            other => (Some(other), None, false),
+                        };
+                        let cur = out.get(k).cloned();
+                        let val = match cur {
+                            Some(x) if !(optional && x.is_null()) => match inner {
+                                Some(t) => apply_type(x, t),
+                                None => x,
+                            },
+                            _ if optional => match default {
+                                Some(d) => {
+                                    let dv = Evaluator::new(&NoResolver, FileId(0)).eval_static(d);
+                                    match inner {
+                                        Some(t) => apply_type(dv, t),
+                                        None => dv,
+                                    }
+                                }
+                                None => Value::null(),
+                            },
+                            _ => continue,
+                        };
+                        out.insert(Arc::from(k), val);
+                    }
+                    Value::object(out).with_prov(prov)
+                }
+                _ => v,
+            }
         }
-        _ => return v,
-    };
-    out.with_prov(prov)
+        _ => v,
+    }
 }
 
 struct InstResolver<'x, 'a, 'o> {
