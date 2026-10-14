@@ -61,22 +61,60 @@ pub mod sym {
 }
 
 /// Which provider a schema belongs to.
+///
+/// This enum is the single list of supported providers: the generator loads
+/// `schemas/providers/<name>.json` for every entry of [`Provider::ALL`],
+/// checks that the file's registry address matches [`Provider::source`], and
+/// reads `defaults/<name>.toml` if it exists. Adding a provider means adding
+/// a variant here (append-only), its `name`/`source` arms, and the JSON
+/// snapshot; everything else is derived.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Provider {
     Aws,
     Azurerm,
     Google,
+    Cloudflare,
+    Kubernetes,
+    Github,
 }
 
 impl Provider {
-    pub const ALL: [Provider; 3] = [Provider::Aws, Provider::Azurerm, Provider::Google];
+    pub const ALL: [Provider; 6] = [
+        Provider::Aws,
+        Provider::Azurerm,
+        Provider::Google,
+        Provider::Cloudflare,
+        Provider::Kubernetes,
+        Provider::Github,
+    ];
 
+    /// Local name (the resource type prefix and the snapshot file stem).
     pub fn name(self) -> &'static str {
         match self {
             Provider::Aws => "aws",
             Provider::Azurerm => "azurerm",
             Provider::Google => "google",
+            Provider::Cloudflare => "cloudflare",
+            Provider::Kubernetes => "kubernetes",
+            Provider::Github => "github",
         }
+    }
+
+    /// Registry source address (`namespace/type`) the snapshot was taken from.
+    pub fn source(self) -> &'static str {
+        match self {
+            Provider::Aws => "hashicorp/aws",
+            Provider::Azurerm => "hashicorp/azurerm",
+            Provider::Google => "hashicorp/google",
+            Provider::Cloudflare => "cloudflare/cloudflare",
+            Provider::Kubernetes => "hashicorp/kubernetes",
+            Provider::Github => "integrations/github",
+        }
+    }
+
+    /// Inverse of [`Provider::name`].
+    pub fn from_name(name: &str) -> Option<Provider> {
+        Provider::ALL.into_iter().find(|p| p.name() == name)
     }
 }
 
@@ -102,8 +140,15 @@ pub enum CtyType<'a> {
     #[serde(borrow)]
     Object(Vec<ObjectAttr<'a>>),
     Tuple(Vec<CtyType<'a>>),
-    /// Protocol-6 `nested_type` attribute (framework providers). None of the
-    /// three pinned providers uses it today, but the IR keeps it lossless.
+    /// Protocol-6 `nested_type` attribute (terraform-plugin-framework
+    /// "nested attributes"; heavily used by cloudflare 5.x). The [`Block`]
+    /// holds the child attributes (each with its own required / optional /
+    /// computed / sensitive flags) and never has `block_types`. The mode is
+    /// `Single` (one object), `List`, `Set` or `Map` (of objects).
+    ///
+    /// Unlike a nested *block*, a nested attribute is written with attribute
+    /// syntax (`rules = [{ ... }]`, `metadata = { ... }`), never as
+    /// `rules { ... }`. See [`Attribute::nested`].
     Nested(NestingMode, Box<Block<'a>>),
 }
 
@@ -145,6 +190,13 @@ impl<'a> CtyType<'a> {
     pub fn object_attrs(&self) -> Option<&[ObjectAttr<'a>]> {
         match self {
             CtyType::Object(a) => Some(a),
+            _ => None,
+        }
+    }
+    /// For a nested attribute type: its nesting mode and child attributes.
+    pub fn nested(&self) -> Option<(NestingMode, &Block<'a>)> {
+        match self {
+            CtyType::Nested(mode, b) => Some((*mode, b)),
             _ => None,
         }
     }
@@ -250,6 +302,22 @@ impl<'a> Attribute<'a> {
     pub fn is_bool(&self) -> bool {
         self.ty.is_bool()
     }
+    /// True for a protocol-6 nested attribute (`nested_type`). It is still an
+    /// attribute: configuration writes it with `=` (`rules = [{ ... }]`),
+    /// never block syntax, and [`Attribute::accepts_block_syntax`] is false.
+    pub fn is_nested(&self) -> bool {
+        matches!(self.ty, CtyType::Nested(..))
+    }
+    /// Nesting mode and child attributes of a nested attribute
+    /// (`None` for ordinary attributes, including `object(...)`-typed ones).
+    pub fn nested(&self) -> Option<(NestingMode, &Block<'a>)> {
+        self.ty.nested()
+    }
+    /// The child attributes of a nested attribute, as a [`Block`] (with no
+    /// `block_types`). Same as `self.nested().map(|n| n.1)`.
+    pub fn nested_block(&self) -> Option<&Block<'a>> {
+        self.ty.nested().map(|(_, b)| b)
+    }
     /// True when Terraform also accepts *block* syntax for this attribute
     /// (`ingress { ... }` on `aws_security_group`). Terraform core's
     /// `blocktoattr` fixup allows this for any attribute whose type is a list
@@ -325,6 +393,35 @@ pub enum Member<'s, 'a> {
     Block(&'s NestedBlock<'a>),
 }
 
+impl<'s, 'a> Member<'s, 'a> {
+    /// The member's name.
+    pub fn name(&self) -> &'a str {
+        match self {
+            Member::Attribute(a) => a.name,
+            Member::Block(b) => b.name,
+        }
+    }
+    /// True for attributes, including nested attributes (written with `=`).
+    pub fn is_attribute(&self) -> bool {
+        matches!(self, Member::Attribute(_))
+    }
+    /// The schema one level down: a nested block's body, or a nested
+    /// attribute's child attributes. `None` for ordinary attributes.
+    pub fn inner(&self) -> Option<&'s Block<'a>> {
+        match *self {
+            Member::Attribute(a) => a.nested_block(),
+            Member::Block(b) => Some(&b.block),
+        }
+    }
+    /// Nesting mode of a nested block or nested attribute.
+    pub fn nesting(&self) -> Option<NestingMode> {
+        match *self {
+            Member::Attribute(a) => a.nested().map(|n| n.0),
+            Member::Block(b) => Some(b.nesting),
+        }
+    }
+}
+
 impl<'a> Block<'a> {
     pub fn attributes(&self) -> &[Attribute<'a>] {
         &self.attributes
@@ -357,13 +454,34 @@ impl<'a> Block<'a> {
     pub fn is_attribute(&self, name: &str) -> bool {
         self.attribute(name).is_some()
     }
-    /// Follows a path of nested block names, e.g. `["lifecycle_rule", "action"]`.
+    /// Follows a path of nested block names and/or nested attribute names,
+    /// e.g. `["lifecycle_rule", "action"]` or (cloudflare) `["rules",
+    /// "action_parameters"]`. Use [`Block::member_at`] to learn whether each
+    /// step was a block or an attribute, or [`Block::descend_blocks`] to
+    /// follow nested blocks only.
     pub fn descend(&self, path: &[&str]) -> Option<&Block<'a>> {
+        let mut b = self;
+        for p in path {
+            b = b.member(p)?.inner()?;
+        }
+        Some(b)
+    }
+    /// Like [`Block::descend`] but only through nested blocks (block syntax).
+    pub fn descend_blocks(&self, path: &[&str]) -> Option<&Block<'a>> {
         let mut b = self;
         for p in path {
             b = &b.block_type(p)?.block;
         }
         Some(b)
+    }
+    /// The member at `path`, descending through nested blocks and nested
+    /// attributes: `member_at(&["rules", "action"])` on `cloudflare_ruleset`
+    /// is the `action` attribute inside the `rules` nested attribute.
+    /// Does not descend into `object(...)`-typed attributes (use
+    /// [`CtyType::object_attr`] for those).
+    pub fn member_at(&self, path: &[&str]) -> Option<Member<'_, 'a>> {
+        let (last, init) = path.split_last()?;
+        self.descend(init)?.member(last)
     }
 }
 

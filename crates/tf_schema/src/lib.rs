@@ -1,4 +1,6 @@
-//! Provider schema IR for hashicorp/aws, hashicorp/azurerm and hashicorp/google.
+//! Provider schema IR for hashicorp/aws, hashicorp/azurerm, hashicorp/google,
+//! cloudflare/cloudflare, hashicorp/kubernetes and integrations/github (the
+//! list is [`Provider::ALL`]).
 //!
 //! * [`lookup_resource`] / [`lookup_data_source`] → `&'static ResourceSchema`.
 //!   Each schema is deserialized lazily from an embedded postcard blob on first
@@ -6,6 +8,11 @@
 //! * [`ResourceSchema`] derefs to [`Block`]: [`Block::attribute`],
 //!   [`Block::block_type`], [`Block::member`], [`Attribute::is_computed`],
 //!   [`Attribute::is_bool`], ...
+//! * Nested attributes (protocol-6 `nested_type`, used by framework providers
+//!   such as cloudflare 5.x) are [`Member::Attribute`]s whose type is
+//!   [`CtyType::Nested`]: [`Attribute::nested`] gives the nesting mode and the
+//!   child attributes; [`Block::descend`] and [`Block::member_at`] walk
+//!   through them as well as through nested blocks.
 //! * [`default_for`] answers "what does the provider use when this attribute
 //!   is absent?" from the hand-written overlay in `defaults/*.toml`.
 //! * [`views`] holds typed views for the allowlisted resources, generic over

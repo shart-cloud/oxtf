@@ -15,6 +15,12 @@ fn counts_match_snapshots() {
     assert_eq!(count(Provider::Azurerm, SchemaKind::DataSource), 396);
     assert_eq!(count(Provider::Google, SchemaKind::Resource), 1375);
     assert_eq!(count(Provider::Google, SchemaKind::DataSource), 471);
+    assert_eq!(count(Provider::Cloudflare, SchemaKind::Resource), 272);
+    assert_eq!(count(Provider::Cloudflare, SchemaKind::DataSource), 468);
+    assert_eq!(count(Provider::Kubernetes, SchemaKind::Resource), 81);
+    assert_eq!(count(Provider::Kubernetes, SchemaKind::DataSource), 27);
+    assert_eq!(count(Provider::Github, SchemaKind::Resource), 88);
+    assert_eq!(count(Provider::Github, SchemaKind::DataSource), 75);
 }
 
 #[test]
@@ -227,5 +233,5 @@ fn typed_views() {
 
     // zero-cost: same size as the wrapped node
     assert_eq!(size_of::<AwsSecurityGroup<&Body>>(), size_of::<&Body>());
-    assert_eq!(views::ALLOWLIST.len(), 11);
+    assert_eq!(views::ALLOWLIST.len(), 16);
 }

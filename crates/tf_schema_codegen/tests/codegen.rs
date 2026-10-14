@@ -211,3 +211,136 @@ fn committed_overlays_and_rule_targets_resolve() {
     assert_eq!(unc.len(), entries.len() - 11);
     assert!(unc.iter().any(|e| e.provider == Provider::Azurerm));
 }
+
+/// A small cloudflare schema JSON holding only `cloudflare_ruleset`,
+/// optionally edited by `f`.
+fn mini_cloudflare_ruleset(f: impl FnOnce(&mut serde_json::Value)) -> serde_json::Value {
+    let full: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(root().join("schemas/providers/cloudflare.json")).unwrap(),
+    )
+    .unwrap();
+    let addr = "registry.terraform.io/cloudflare/cloudflare";
+    let mut r = full["provider_schemas"][addr]["resource_schemas"]["cloudflare_ruleset"].clone();
+    f(&mut r);
+    serde_json::json!({
+        "format_version": "1.0",
+        "provider_schemas": { addr: {
+            "resource_schemas": { "cloudflare_ruleset": r }, "data_source_schemas": {} } }
+    })
+}
+
+#[test]
+fn providers_resolve_by_registry_address() {
+    assert_eq!(
+        provider_from_address("registry.terraform.io/integrations/github"),
+        Some(Provider::Github)
+    );
+    assert_eq!(
+        provider_from_address("registry.terraform.io/cloudflare/cloudflare"),
+        Some(Provider::Cloudflare)
+    );
+    // Same type name, wrong namespace: not ours.
+    assert_eq!(
+        provider_from_address("registry.terraform.io/hashicorp/github"),
+        None
+    );
+    let loaded = load_all(&root().join("schemas/providers")).unwrap();
+    let got: Vec<Provider> = loaded.iter().map(|l| l.provider).collect();
+    assert_eq!(got, Provider::ALL);
+
+    // A snapshot with no Provider variant is an error, not silently skipped.
+    let dir = scratch("unknown_provider");
+    for p in Provider::ALL {
+        std::fs::copy(
+            root().join(format!("schemas/providers/{}.json", p.name())),
+            dir.join(format!("{}.json", p.name())),
+        )
+        .unwrap();
+    }
+    std::fs::write(dir.join("datadog.json"), "{}").unwrap();
+    let err = load_all(&dir).err().unwrap();
+    assert!(err.contains("[\"datadog\"]"), "{err}");
+}
+
+#[test]
+fn nested_attributes_in_uses_defaults_and_diff() {
+    let dir = scratch("nested");
+    let old = dir.join("old.json");
+    write_json(&old, &mini_cloudflare_ruleset(|_| {}));
+    let loaded = [load_schema_file(&old).unwrap()];
+    assert_eq!(loaded[0].provider, Provider::Cloudflare);
+
+    // `uses` paths and defaults resolve through nested attributes.
+    let allow = parse_allowlist(
+        "[[view]]\ntype = \"cloudflare_ruleset\"\nuses = [\"rules.action_parameters.headers\", \"rules.enabled\"]",
+    )
+    .unwrap();
+    let defs = parse_defaults(
+        "[cloudflare_ruleset]\n\"rules.enabled\" = true\nrules = []\n",
+        "test",
+    )
+    .unwrap();
+    let g = generate(&loaded, &allow, &defs).unwrap();
+    let views = String::from_utf8(
+        g.files
+            .iter()
+            .find(|f| f.0 == "views.rs")
+            .unwrap()
+            .1
+            .clone(),
+    )
+    .unwrap();
+    assert!(views.contains("pub fn rules(&self) -> Option<N::Value>"));
+    assert!(views.contains("`rules`: nested attribute, list of objects (optional, computed)"));
+    // No block-syntax accessor for nested attributes.
+    assert!(!views.contains("fn rules_blocks("));
+    let bad = parse_defaults("[cloudflare_ruleset]\n\"rules.enabled\" = \"yes\"\n", "t").unwrap();
+    let err = generate(&loaded, &allow, &bad).err().unwrap();
+    assert!(
+        err.contains("rules.enabled = String(\"yes\") does not match schema type bool"),
+        "{err}"
+    );
+
+    // Diff sees changes inside nested attributes, and a removed nested child
+    // used by a view is breaking.
+    let new = dir.join("new.json");
+    write_json(
+        &new,
+        &mini_cloudflare_ruleset(|r| {
+            let kids = r["block"]["attributes"]["rules"]["nested_type"]["attributes"]
+                .as_object_mut()
+                .unwrap();
+            kids.remove("enabled").unwrap();
+            kids["expression"]["optional"] = true.into();
+            kids["expression"]
+                .as_object_mut()
+                .unwrap()
+                .remove("required");
+        }),
+    );
+    let new_l = [load_schema_file(&new).unwrap()];
+    let r = diff_entries(
+        &build_entries(&loaded).unwrap(),
+        &build_entries(&new_l).unwrap(),
+    );
+    let paths: Vec<_> = r
+        .changed
+        .iter()
+        .map(|c| (c.2.as_str(), c.3.as_str(), c.4.as_str()))
+        .collect();
+    assert!(
+        paths.contains(&("rules.enabled", "bool [optional, computed]", "")),
+        "{paths:?}"
+    );
+    assert!(
+        paths.contains(&("rules.expression", "string [required]", "string [optional]")),
+        "{paths:?}"
+    );
+    let errs = check_allowlist(&build_entries(&new_l).unwrap(), &allow);
+    assert_eq!(
+        errs,
+        [
+            "allowlist: view cloudflare_ruleset uses `rules.enabled`, which does not exist in the schema"
+        ]
+    );
+}
