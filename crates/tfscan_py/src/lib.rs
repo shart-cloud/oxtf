@@ -842,30 +842,16 @@ fn category_of(s: &str) -> PyResult<Category> {
 // scan
 // ---------------------------------------------------------------------------
 
-/// Scan module directories. `builtin`: `None` = all built-in rules, a list
-/// = only those ids. `ir_rules`: rule IR JSON documents. `callbacks`:
-/// `tfscan.CallbackRule` objects (attributes `name`, `resource_types`,
-/// `level`, `category`, `description`, `func`).
-#[pyfunction]
-#[pyo3(signature = (paths, recursive=false, var_files=vec![], builtin=None, ir_rules=vec![], callbacks=vec![], threads=None, _release_gil=true))]
-#[allow(clippy::too_many_arguments)]
-fn scan(
-    py: Python<'_>,
-    paths: Vec<PathBuf>,
-    recursive: bool,
-    var_files: Vec<PathBuf>,
+type CallbackError = Arc<Mutex<Option<PyErr>>>;
+type CallCount = Arc<std::sync::atomic::AtomicU64>;
+type Rules = Vec<Box<dyn DynRule>>;
+
+/// Built-in (all, or the listed ids), IR and callback rules.
+fn build_rules(
     builtin: Option<Vec<String>>,
     ir_rules: Vec<String>,
     callbacks: Vec<Bound<'_, PyAny>>,
-    threads: Option<usize>,
-    _release_gil: bool,
-) -> PyResult<(ScanResult, u64)> {
-    if !_release_gil && !callbacks.is_empty() {
-        // Workers would block on the GIL held by this thread.
-        return Err(PyValueError::new_err(
-            "_release_gil=False (test control) cannot run callback rules",
-        ));
-    }
+) -> PyResult<(Rules, CallbackError, CallCount)> {
     let mut rules: Vec<Box<dyn DynRule>> = match &builtin {
         None => tf_linter::rules::all(),
         Some(ids) => tf_linter::rules::all()
@@ -896,6 +882,34 @@ fn scan(
             calls: calls.clone(),
         }));
     }
+    Ok((rules, error, calls))
+}
+
+/// Scan module directories. `builtin`: `None` = all built-in rules, a list
+/// = only those ids. `ir_rules`: rule IR JSON documents. `callbacks`:
+/// `tfscan.CallbackRule` objects (attributes `name`, `resource_types`,
+/// `level`, `category`, `description`, `func`).
+#[pyfunction]
+#[pyo3(signature = (paths, recursive=false, var_files=vec![], builtin=None, ir_rules=vec![], callbacks=vec![], threads=None, _release_gil=true))]
+#[allow(clippy::too_many_arguments)]
+fn scan(
+    py: Python<'_>,
+    paths: Vec<PathBuf>,
+    recursive: bool,
+    var_files: Vec<PathBuf>,
+    builtin: Option<Vec<String>>,
+    ir_rules: Vec<String>,
+    callbacks: Vec<Bound<'_, PyAny>>,
+    threads: Option<usize>,
+    _release_gil: bool,
+) -> PyResult<(ScanResult, u64)> {
+    if !_release_gil && !callbacks.is_empty() {
+        // Workers would block on the GIL held by this thread.
+        return Err(PyValueError::new_err(
+            "_release_gil=False (test control) cannot run callback rules",
+        ));
+    }
+    let (rules, error, calls) = build_rules(builtin, ir_rules, callbacks)?;
     for p in &paths {
         if !p.is_dir() {
             return Err(PyValueError::new_err(format!(
@@ -919,7 +933,11 @@ fn scan(
         let (r, analyses) = tf_linter::scan_with(&linter, &roots, &opts);
         ScanData::new(r, analyses)
     };
-    let data = if _release_gil { py.detach(work) } else { work() };
+    let data = if _release_gil {
+        py.detach(work)
+    } else {
+        work()
+    };
     if let Some(e) = error.lock().unwrap().take() {
         return Err(e);
     }
@@ -929,6 +947,48 @@ fn scan(
         },
         calls.load(std::sync::atomic::Ordering::Relaxed),
     ))
+}
+
+/// Benchmark helper: analyse once (no rules), then time `repeat` runs of
+/// the given rules over every analysis, sequentially on one thread, with
+/// the GIL released (callbacks re-acquire it). Returns
+/// (seconds per run, findings per run, callback calls in total).
+#[pyfunction]
+#[pyo3(signature = (paths, recursive=false, builtin=None, ir_rules=vec![], callbacks=vec![], repeat=3))]
+fn _rule_time(
+    py: Python<'_>,
+    paths: Vec<PathBuf>,
+    recursive: bool,
+    builtin: Option<Vec<String>>,
+    ir_rules: Vec<String>,
+    callbacks: Vec<Bound<'_, PyAny>>,
+    repeat: usize,
+) -> PyResult<(Vec<f64>, usize, u64)> {
+    let (rules, error, calls) = build_rules(builtin, ir_rules, callbacks)?;
+    let (times, n) = py.detach(move || {
+        let roots: Vec<PathBuf> = paths
+            .iter()
+            .flat_map(|p| tf_linter::discover_roots(p, recursive))
+            .collect();
+        let opts = ScanOptions {
+            recursive,
+            ..ScanOptions::default()
+        };
+        let (_, analyses) = tf_linter::scan_with(&Linter::new(vec![]), &roots, &opts);
+        let linter = Linter::new(rules);
+        let mut times = Vec::new();
+        let mut n = 0;
+        for _ in 0..repeat {
+            let t = std::time::Instant::now();
+            n = analyses.iter().map(|a| linter.run(a).len()).sum::<usize>();
+            times.push(t.elapsed().as_secs_f64());
+        }
+        (times, n)
+    });
+    if let Some(e) = error.lock().unwrap().take() {
+        return Err(e);
+    }
+    Ok((times, n, calls.load(std::sync::atomic::Ordering::Relaxed)))
 }
 
 /// Names and metadata of the built-in rules.
@@ -965,6 +1025,7 @@ fn _tfscan(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(scan, m)?)?;
     m.add_function(wrap_pyfunction!(compile_rules, m)?)?;
     m.add_function(wrap_pyfunction!(builtin_rules, m)?)?;
+    m.add_function(wrap_pyfunction!(_rule_time, m)?)?;
     m.add("IR_VERSION", tf_rule_ir::IR_VERSION)?;
     m.add("PYO3_VERSION", "0.29.3")?;
     ast::register(m)?;
