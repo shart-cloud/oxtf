@@ -176,6 +176,8 @@ So a shim is feasible for the declarative majority, would be slow and leaky (Che
 
 ### What a real build needs next
 
+The follow-up plan for rule coverage (Checkov's rule engine and Rego via regorus) is [`docs/plans/RULE_ENGINES_PLAN.md`](docs/plans/RULE_ENGINES_PLAN.md).
+
 1. A Checkov-parity harness (see risk 1) and ~20 ported checks, chosen from the corpus's most frequent Checkov failures.
 2. Built-in function differential tests against `terraform console`; `regex`/`regexall`, `templatefile` and per-instance `count` expansion.
 3. Local module-cache resolution for registry and git sources.
