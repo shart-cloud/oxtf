@@ -1,0 +1,138 @@
+{
+ "applyable": true,
+ "complete": true,
+ "configuration": {
+  "provider_config": {
+   "aws": {
+    "expressions": {
+     "access_key": {
+      "constant_value": "x"
+     },
+     "region": {
+      "constant_value": "us-east-1"
+     },
+     "secret_key": {
+      "constant_value": "x"
+     },
+     "skip_credentials_validation": {
+      "constant_value": true
+     },
+     "skip_metadata_api_check": {
+      "constant_value": true
+     },
+     "skip_region_validation": {
+      "constant_value": true
+     },
+     "skip_requesting_account_id": {
+      "constant_value": true
+     }
+    },
+    "full_name": "registry.terraform.io/hashicorp/aws",
+    "name": "aws",
+    "version_constraint": "6.68.0"
+   },
+   "google": {
+    "expressions": {
+     "credentials": {
+      "references": [
+       "path.module"
+      ]
+     },
+     "project": {
+      "constant_value": "x"
+     },
+     "region": {
+      "constant_value": "us-central1"
+     }
+    },
+    "full_name": "registry.terraform.io/hashicorp/google",
+    "name": "google",
+    "version_constraint": "8.7.0"
+   }
+  },
+  "root_module": {
+   "resources": [
+    {
+     "address": "aws_iam_user_policy.admin",
+     "expressions": {
+      "name": {
+       "constant_value": "admin"
+      },
+      "policy": {
+       "constant_value": "{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    { \"Effect\": \"Allow\", \"Action\": \"*\", \"Resource\": \"*\" }\n  ]\n}\n"
+      },
+      "user": {
+       "constant_value": "bob"
+      }
+     },
+     "mode": "managed",
+     "name": "admin",
+     "provider_config_key": "aws",
+     "schema_version": 0,
+     "type": "aws_iam_user_policy"
+    }
+   ]
+  }
+ },
+ "errored": false,
+ "format_version": "1.2",
+ "planned_values": {
+  "root_module": {
+   "resources": [
+    {
+     "address": "aws_iam_user_policy.admin",
+     "identity": {
+      "account_id": null,
+      "name": null,
+      "user": null
+     },
+     "identity_schema_version": 0,
+     "mode": "managed",
+     "name": "admin",
+     "provider_name": "registry.terraform.io/hashicorp/aws",
+     "schema_version": 0,
+     "sensitive_values": {},
+     "type": "aws_iam_user_policy",
+     "values": {
+      "name": "admin",
+      "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Action\":\"*\",\"Effect\":\"Allow\",\"Resource\":\"*\"}]}",
+      "user": "bob"
+     }
+    }
+   ]
+  }
+ },
+ "resource_changes": [
+  {
+   "address": "aws_iam_user_policy.admin",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "name": "admin",
+     "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Action\":\"*\",\"Effect\":\"Allow\",\"Resource\":\"*\"}]}",
+     "user": "bob"
+    },
+    "after_identity": {
+     "account_id": null,
+     "name": null,
+     "user": null
+    },
+    "after_sensitive": {},
+    "after_unknown": {
+     "id": true,
+     "name_prefix": true
+    },
+    "before": null,
+    "before_sensitive": false
+   },
+   "mode": "managed",
+   "name": "admin",
+   "provider_name": "registry.terraform.io/hashicorp/aws",
+   "type": "aws_iam_user_policy"
+  }
+ ],
+ "terraform_version": "1.16.6",
+ "timestamp": "2026-10-14T21:29:38Z"
+}

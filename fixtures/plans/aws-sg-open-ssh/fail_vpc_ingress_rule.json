@@ -1,0 +1,249 @@
+{
+ "applyable": true,
+ "complete": true,
+ "configuration": {
+  "provider_config": {
+   "aws": {
+    "expressions": {
+     "access_key": {
+      "constant_value": "x"
+     },
+     "region": {
+      "constant_value": "us-east-1"
+     },
+     "secret_key": {
+      "constant_value": "x"
+     },
+     "skip_credentials_validation": {
+      "constant_value": true
+     },
+     "skip_metadata_api_check": {
+      "constant_value": true
+     },
+     "skip_region_validation": {
+      "constant_value": true
+     },
+     "skip_requesting_account_id": {
+      "constant_value": true
+     }
+    },
+    "full_name": "registry.terraform.io/hashicorp/aws",
+    "name": "aws",
+    "version_constraint": "6.68.0"
+   },
+   "google": {
+    "expressions": {
+     "credentials": {
+      "references": [
+       "path.module"
+      ]
+     },
+     "project": {
+      "constant_value": "x"
+     },
+     "region": {
+      "constant_value": "us-central1"
+     }
+    },
+    "full_name": "registry.terraform.io/hashicorp/google",
+    "name": "google",
+    "version_constraint": "8.7.0"
+   }
+  },
+  "root_module": {
+   "resources": [
+    {
+     "address": "aws_security_group.bastion",
+     "expressions": {
+      "name": {
+       "constant_value": "bastion"
+      }
+     },
+     "mode": "managed",
+     "name": "bastion",
+     "provider_config_key": "aws",
+     "schema_version": 1,
+     "type": "aws_security_group"
+    },
+    {
+     "address": "aws_vpc_security_group_ingress_rule.ssh",
+     "expressions": {
+      "cidr_ipv4": {
+       "constant_value": "0.0.0.0/0"
+      },
+      "from_port": {
+       "constant_value": 22
+      },
+      "ip_protocol": {
+       "constant_value": "tcp"
+      },
+      "security_group_id": {
+       "references": [
+        "aws_security_group.bastion.id",
+        "aws_security_group.bastion"
+       ]
+      },
+      "to_port": {
+       "constant_value": 22
+      }
+     },
+     "mode": "managed",
+     "name": "ssh",
+     "provider_config_key": "aws",
+     "schema_version": 0,
+     "type": "aws_vpc_security_group_ingress_rule"
+    }
+   ]
+  }
+ },
+ "errored": false,
+ "format_version": "1.2",
+ "planned_values": {
+  "root_module": {
+   "resources": [
+    {
+     "address": "aws_security_group.bastion",
+     "identity": {
+      "account_id": null,
+      "id": null,
+      "region": null
+     },
+     "identity_schema_version": 0,
+     "mode": "managed",
+     "name": "bastion",
+     "provider_name": "registry.terraform.io/hashicorp/aws",
+     "schema_version": 1,
+     "sensitive_values": {
+      "egress": [],
+      "ingress": [],
+      "tags_all": {}
+     },
+     "type": "aws_security_group",
+     "values": {
+      "description": "Managed by Terraform",
+      "name": "bastion",
+      "region": "us-east-1",
+      "revoke_rules_on_delete": false,
+      "tags": null,
+      "timeouts": null
+     }
+    },
+    {
+     "address": "aws_vpc_security_group_ingress_rule.ssh",
+     "mode": "managed",
+     "name": "ssh",
+     "provider_name": "registry.terraform.io/hashicorp/aws",
+     "schema_version": 0,
+     "sensitive_values": {
+      "tags_all": {}
+     },
+     "type": "aws_vpc_security_group_ingress_rule",
+     "values": {
+      "cidr_ipv4": "0.0.0.0/0",
+      "cidr_ipv6": null,
+      "description": null,
+      "from_port": 22,
+      "ip_protocol": "tcp",
+      "prefix_list_id": null,
+      "referenced_security_group_id": null,
+      "region": "us-east-1",
+      "tags": null,
+      "tags_all": {},
+      "to_port": 22
+     }
+    }
+   ]
+  }
+ },
+ "relevant_attributes": [
+  {
+   "attribute": [
+    "id"
+   ],
+   "resource": "aws_security_group.bastion"
+  }
+ ],
+ "resource_changes": [
+  {
+   "address": "aws_security_group.bastion",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "description": "Managed by Terraform",
+     "name": "bastion",
+     "region": "us-east-1",
+     "revoke_rules_on_delete": false,
+     "tags": null,
+     "timeouts": null
+    },
+    "after_identity": {
+     "account_id": null,
+     "id": null,
+     "region": null
+    },
+    "after_sensitive": {
+     "egress": [],
+     "ingress": [],
+     "tags_all": {}
+    },
+    "after_unknown": {
+     "arn": true,
+     "egress": true,
+     "id": true,
+     "ingress": true,
+     "name_prefix": true,
+     "owner_id": true,
+     "tags_all": true,
+     "vpc_id": true
+    },
+    "before": null,
+    "before_sensitive": false
+   },
+   "mode": "managed",
+   "name": "bastion",
+   "provider_name": "registry.terraform.io/hashicorp/aws",
+   "type": "aws_security_group"
+  },
+  {
+   "address": "aws_vpc_security_group_ingress_rule.ssh",
+   "change": {
+    "actions": [
+     "create"
+    ],
+    "after": {
+     "cidr_ipv4": "0.0.0.0/0",
+     "cidr_ipv6": null,
+     "description": null,
+     "from_port": 22,
+     "ip_protocol": "tcp",
+     "prefix_list_id": null,
+     "referenced_security_group_id": null,
+     "region": "us-east-1",
+     "tags": null,
+     "tags_all": {},
+     "to_port": 22
+    },
+    "after_sensitive": {
+     "tags_all": {}
+    },
+    "after_unknown": {
+     "arn": true,
+     "id": true,
+     "security_group_id": true,
+     "security_group_rule_id": true,
+     "tags_all": {}
+    },
+    "before": null,
+    "before_sensitive": false
+   },
+   "mode": "managed",
+   "name": "ssh",
+   "provider_name": "registry.terraform.io/hashicorp/aws",
+   "type": "aws_vpc_security_group_ingress_rule"
+  }
+ ],
+ "terraform_version": "1.16.6",
+ "timestamp": "2026-10-14T21:36:46Z"
+}
