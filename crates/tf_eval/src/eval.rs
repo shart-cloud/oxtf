@@ -672,6 +672,9 @@ fn concat_parts(parts: &[Part]) -> Value {
 /// otherwise an error with `msg`.
 pub fn non_known_or(v: &Value, msg: &str) -> Value {
     match &v.kind {
+        Kind::Known(Known::Json(j)) if !j.is_wholly_known() => {
+            Value::other("jsonencode of a partially unknown value").with_prov(v.prov.clone())
+        }
         Kind::Known(_) => Value::error(msg.to_string()),
         Kind::OneOf(o) if o.tainted || o.alternatives.iter().any(|a| a.is_tainted()) => {
             Value::tainted("(conditional)").with_prov(v.prov.clone())

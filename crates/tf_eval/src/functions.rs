@@ -896,9 +896,10 @@ fn known(v: &Value) -> Result<&Known, Value> {
 fn string(v: &Value) -> Result<Arc<str>, Value> {
     match &v.kind {
         Kind::Known(Known::Null) => Err(Value::error("expected string, got null")),
-        Kind::Known(_) => v
-            .to_str()
-            .ok_or_else(|| Value::error(format!("expected string, got {}", v.type_name()))),
+        Kind::Known(_) => v.to_str().ok_or_else(|| match v.as_known() {
+            Some(Known::Json(_)) => non_known_or(v, ""),
+            _ => Value::error(format!("expected string, got {}", v.type_name())),
+        }),
         _ => Err(non_known_or(v, "")),
     }
 }

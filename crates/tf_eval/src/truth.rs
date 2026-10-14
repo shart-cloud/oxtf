@@ -116,7 +116,11 @@ pub fn map(v: &Value, f: &dyn Fn(&Value) -> Verdict) -> Verdict {
         Kind::Tainted(_) => Verdict::new(Truth::Tainted, Some(v.clone())),
         Kind::Unknown(_) => Verdict::new(Truth::Unknown, Some(v.clone())),
         Kind::OneOf(o) => {
-            let vs: Vec<Verdict> = o.alternatives.iter().map(|a| map(&a.child_of(v), f)).collect();
+            let vs: Vec<Verdict> = o
+                .alternatives
+                .iter()
+                .map(|a| map(&a.child_of(v), f))
+                .collect();
             combine_one_of(vs, o.tainted)
         }
     }
