@@ -14,6 +14,9 @@ tf_allocator = { path = "crates/tf_allocator" }
 tf_ast = { path = "crates/tf_ast" }
 tf_parser = { path = "crates/tf_parser" }
 tf_schema = { path = "crates/tf_schema" }
+tf_eval = { path = "crates/tf_eval" }
+tf_semantic = { path = "crates/tf_semantic" }
+tf_linter = { path = "crates/tf_linter" }
 bumpalo = { version = "3.20.3", features = ["collections", "boxed"] }
 insta = "1.49.0"
 miette = "7.6.0"

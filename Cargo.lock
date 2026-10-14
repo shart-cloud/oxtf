@@ -505,6 +505,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tf_eval"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "tf_allocator",
+ "tf_ast",
+ "tf_parser",
+ "tf_span",
+]
+
+[[package]]
 name = "tf_parser"
 version = "0.0.0"
 dependencies = [
@@ -534,6 +545,18 @@ dependencies = [
  "serde_json",
  "tf_schema",
  "toml",
+]
+
+[[package]]
+name = "tf_semantic"
+version = "0.0.0"
+dependencies = [
+ "tf_allocator",
+ "tf_ast",
+ "tf_eval",
+ "tf_parser",
+ "tf_schema",
+ "tf_span",
 ]
 
 [[package]]
