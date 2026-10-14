@@ -77,28 +77,31 @@ impl Rule for AwsS3PublicAccessBlock {
             }
             match best {
                 None if maybe => {}
-                None => ctx.report(b, &Verdict::new(Truth::True, None), |_| {
-                    "no aws_s3_bucket_public_access_block in this module refers to this bucket"
-                        .to_string()
-                }),
-                Some(v) => {
-                    let flag = v
-                        .witness
-                        .as_ref()
-                        .and_then(|w| w.prov.last())
-                        .map(|s| s.label.to_string())
-                        .unwrap_or_default();
-                    ctx.report(b, &v, |_| {
-                        if flag.is_empty() {
-                            "public access block for this bucket may not exist".to_string()
-                        } else {
-                            format!(
-                                "public access block for this bucket is not fully enabled ({flag})"
-                            )
-                        }
-                    })
-                }
+                None => Self::report(b, ctx, &Verdict::new(Truth::True, None)),
+                Some(v) => Self::report(b, ctx, &v),
             }
         }
+    }
+}
+
+impl AwsS3PublicAccessBlock {
+    /// Shared presentation; TRUE without a witness means no matching PAB.
+    pub fn report(b: &Resource, ctx: &mut RuleContext<'_>, v: &Verdict) {
+        let flag = v
+            .witness
+            .as_ref()
+            .and_then(|w| w.prov.last())
+            .map(|s| s.label.to_string())
+            .unwrap_or_default();
+        ctx.report(b, v, |_| {
+            if v.truth == Truth::True && v.witness.is_none() {
+                "no aws_s3_bucket_public_access_block in this module refers to this bucket"
+                    .to_string()
+            } else if flag.is_empty() {
+                "public access block for this bucket may not exist".to_string()
+            } else {
+                format!("public access block for this bucket is not fully enabled ({flag})")
+            }
+        });
     }
 }

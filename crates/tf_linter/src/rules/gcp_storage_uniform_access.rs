@@ -23,7 +23,14 @@ impl Rule for GcpStorageUniformAccess {
             return;
         };
         let verdict = not_true(&v);
-        ctx.report(r, &verdict, |w| {
+        Self::report(r, ctx, &verdict);
+    }
+}
+
+impl GcpStorageUniformAccess {
+    /// Shared finding presentation for native and Rego verdicts.
+    pub fn report(r: &Resource, ctx: &mut RuleContext<'_>, verdict: &tf_eval::Verdict) {
+        ctx.report(r, verdict, |w| {
             if w.is_some_and(|w| !w.is_known()) {
                 "uniform_bucket_level_access may be false".to_string()
             } else if r

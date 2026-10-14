@@ -29,6 +29,8 @@ scan options:
       --rule ID           only run this rule (repeatable)
       --rule-file FILE    also run rules from a JSON rule-IR file (repeatable; e.g. written
                           by the tfscan Python expression API)
+      --rego-native       use bundled Rego for all five seed rules
+      --rego-rds          evaluate the RDS encryption rule using bundled native Rego
       --threads N         worker threads (default: all CPUs)
       --color             force colored output
       --no-diagnostics    do not print parse / strict-bool / module diagnostics
@@ -39,6 +41,8 @@ struct Args {
     plan: Option<PathBuf>,
     source: Option<PathBuf>,
     rule_files: Vec<PathBuf>,
+    rego_rds: bool,
+    rego_native: bool,
     opts: ScanOptions,
     json: bool,
     color: bool,
@@ -52,6 +56,8 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
         plan: None,
         source: None,
         rule_files: Vec::new(),
+        rego_rds: false,
+        rego_native: false,
         opts: ScanOptions::default(),
         json: false,
         color: std::io::stdout().is_terminal(),
@@ -78,6 +84,8 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
             "--rule-file" => a
                 .rule_files
                 .push(it.next().ok_or("--rule-file needs a value")?.into()),
+            "--rego-native" => a.rego_native = true,
+            "--rego-rds" => a.rego_rds = true,
             "--plan" => a.plan = Some(it.next().ok_or("--plan needs a value")?.into()),
             "--source" => a.source = Some(it.next().ok_or("--source needs a value")?.into()),
             "--threads" => {
@@ -160,7 +168,13 @@ fn scan(a: Args) -> ExitCode {
         }
     }
     let run = |rules| scan_rules(&a, rules);
-    let result = run(rules);
+    let result = if a.rego_native {
+        tf_rego::with_native_policies(rules, run)
+    } else if a.rego_rds {
+        tf_rego::with_rds_policy(rules, run)
+    } else {
+        run(rules)
+    };
     match result {
         Ok(r) => print_result(&r, &a),
         Err(e) => {

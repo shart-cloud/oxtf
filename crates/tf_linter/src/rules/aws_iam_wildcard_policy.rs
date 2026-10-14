@@ -64,7 +64,14 @@ impl Rule for AwsIamWildcardPolicy {
     fn run_on_resource(&self, r: &Resource, ctx: &mut RuleContext<'_>) {
         let Some(p) = r.value("policy") else { return };
         let v = policy(&p);
-        ctx.report(r, &v, |_| {
+        Self::report(r, ctx, &v);
+    }
+}
+
+impl AwsIamWildcardPolicy {
+    /// Shared native/Rego finding presentation.
+    pub fn report(r: &Resource, ctx: &mut RuleContext<'_>, v: &Verdict) {
+        ctx.report(r, v, |_| {
             "policy statement allows Action \"*\" on Resource \"*\"".to_string()
         });
     }

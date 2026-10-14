@@ -69,6 +69,13 @@ fn message(w: Option<&Value>) -> String {
     format!("ingress allows SSH (port 22) from {src}")
 }
 
+impl AwsSgOpenSsh {
+    /// Shared native/Rego presentation of the deciding witness.
+    pub fn report(r: &Resource, ctx: &mut RuleContext<'_>, verdict: &Verdict) {
+        ctx.report(r, verdict, message);
+    }
+}
+
 impl Rule for AwsSgOpenSsh {
     fn run_on_resource(&self, r: &Resource, ctx: &mut RuleContext<'_>) {
         let v = match &*r.ty {
@@ -98,6 +105,6 @@ impl Rule for AwsSgOpenSsh {
             }
             _ => return,
         };
-        ctx.report(r, &v, message);
+        Self::report(r, ctx, &v);
     }
 }

@@ -28,7 +28,14 @@ impl Rule for AwsRdsUnencrypted {
             return;
         };
         let verdict: Verdict = not_true(&v);
-        ctx.report(r, &verdict, |w| match w.and_then(|w| w.as_bool()) {
+        Self::report(r, ctx, &verdict);
+    }
+}
+
+impl AwsRdsUnencrypted {
+    /// Shared finding presentation for native and Rego verdicts.
+    pub fn report(r: &Resource, ctx: &mut RuleContext<'_>, verdict: &Verdict) {
+        ctx.report(r, verdict, |w| match w.and_then(|w| w.as_bool()) {
             Some(false) if r.value("storage_encrypted").is_none_or(|x| x.is_null()) => {
                 "storage_encrypted is not set (provider default: false)".to_string()
             }
