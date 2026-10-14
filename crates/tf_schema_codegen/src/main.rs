@@ -210,6 +210,7 @@ fn cmd_views_all(paths: &Paths, provider: &str, out: &str, exclude: &str) -> Res
             ty: e.name.to_string(),
             kind: "resource".into(),
             uses: vec![],
+            prune: false,
         })
         .collect();
     let src = views_source(&entries, &allow)?;

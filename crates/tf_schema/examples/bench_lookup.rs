@@ -20,6 +20,18 @@ fn main() {
     let largest = tw.elapsed();
     assert!(!waf.block_types().is_empty());
 
+    // Largest records of the framework/k8s providers (absent in a 3-provider build).
+    let mut extra = Vec::new();
+    for n in [
+        "kubernetes_stateful_set_v1",
+        "cloudflare_zero_trust_access_application",
+    ] {
+        let t = Instant::now();
+        if let Some(s) = tf_schema::lookup_resource(n) {
+            extra.push((n, t.elapsed(), s.attributes().len()));
+        }
+    }
+
     let t2 = Instant::now();
     let names: Vec<_> = tf_schema::entries().collect();
     let mut attrs = 0usize;
@@ -44,6 +56,9 @@ fn main() {
     println!("first lookup (symbol table + 1 schema): {first:?}");
     println!("second lookup (1 schema): {second:?}");
     println!("largest schema (aws_wafv2_web_acl_rule) first lookup: {largest:?}");
+    for (n, d, a) in &extra {
+        println!("{n} first lookup: {d:?} ({a} top-level attributes)");
+    }
     println!(
         "lookup+decode all {} schemas (cold): {all_cold:?} ({attrs} top-level attributes)",
         names.len()

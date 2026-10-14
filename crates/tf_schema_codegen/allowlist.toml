@@ -4,6 +4,7 @@
 # attributes-as-blocks) that rules rely on. The generator refuses to run if
 # any of them is missing from the current schema snapshot, and
 # `tf_schema_codegen diff OLD NEW` exits non-zero when NEW would break one.
+# `prune = true` generates child view structs only for blocks on a `uses` path.
 
 [[view]]
 type = "aws_security_group"
@@ -62,8 +63,11 @@ uses = ["zone_id", "setting_id", "value"]
 
 # --- kubernetes 3.x (SDKv2: nested blocks)
 
+# `prune`: child view structs only along `uses` paths. Unpruned, this one view
+# was 8,737 generated lines (one struct per nested-block path of the pod spec).
 [[view]]
 type = "kubernetes_pod_v1"
+prune = true
 uses = ["spec.host_network", "spec.host_pid", "spec.host_ipc", "spec.container.security_context.privileged", "spec.container.security_context.allow_privilege_escalation", "spec.container.security_context.run_as_non_root"]
 
 # --- github 6.x

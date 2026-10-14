@@ -344,3 +344,30 @@ fn nested_attributes_in_uses_defaults_and_diff() {
         ]
     );
 }
+
+#[test]
+fn prune_limits_child_views_to_uses_paths() {
+    let paths = Paths { root: root() };
+    let loaded = load_all(&paths.schemas_dir()).unwrap();
+    let entries = build_entries(&loaded).unwrap();
+    let mk = |prune: bool| AllowEntry {
+        ty: "kubernetes_pod_v1".into(),
+        kind: "resource".into(),
+        uses: vec!["spec.container.security_context.privileged".into()],
+        prune,
+    };
+    let full = views_source(&entries, &[mk(false)]).unwrap();
+    let pruned = views_source(&entries, &[mk(true)]).unwrap();
+    assert!(pruned.lines().count() * 10 < full.lines().count());
+    for s in [&full, &pruned] {
+        assert!(s.contains("pub struct KubernetesPodV1SpecContainerSecurityContext<N>"));
+        assert!(s.contains("pub fn privileged(&self)"));
+        assert!(
+            s.contains("pub fn host_network(&self)"),
+            "attributes are kept"
+        );
+    }
+    assert!(full.contains("pub struct KubernetesPodV1SpecVolume<N>"));
+    assert!(!pruned.contains("pub struct KubernetesPodV1SpecVolume<N>"));
+    assert!(pruned.contains("// pruned block \"volume\" (allowlist `prune`)"));
+}

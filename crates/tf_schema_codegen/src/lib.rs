@@ -693,6 +693,13 @@ pub struct AllowEntry {
     /// Attribute paths rules depend on. Generation fails if one disappears.
     #[serde(default)]
     pub uses: Vec<String>,
+    /// Only generate child view structs for nested blocks (and
+    /// attributes-as-blocks) on a `uses` path. Attribute accessors of the
+    /// structs that are generated are unaffected. For deeply nested schemas
+    /// such as `kubernetes_pod_v1`, where one struct per nesting path would
+    /// otherwise cost thousands of lines.
+    #[serde(default)]
+    pub prune: bool,
 }
 
 fn default_kind() -> String {
@@ -874,9 +881,16 @@ struct ViewGen<'o> {
     out: &'o mut String,
     used_structs: BTreeSet<String>,
     type_name: String,
+    /// With `prune`: every prefix of every `uses` path; child structs are
+    /// generated only for these paths.
+    keep: Option<BTreeSet<Vec<String>>>,
 }
 
 impl ViewGen<'_> {
+    fn kept(&self, path: &[String]) -> bool {
+        self.keep.as_ref().is_none_or(|k| k.contains(path))
+    }
+
     fn unique_struct(&mut self, base: String) -> String {
         let mut name = base.clone();
         let mut n = 2;
@@ -945,7 +959,14 @@ impl ViewGen<'_> {
                 },
                 _ => None,
             };
-            if let Some(obj) = elem {
+            let mut p = path.to_vec();
+            p.push(name.to_string());
+            if elem.is_some() && !self.kept(&p) {
+                let _ = writeln!(
+                    methods,
+                    "    // pruned block-syntax view of {name:?} (allowlist `prune`)"
+                );
+            } else if let Some(obj) = elem {
                 let child = self.unique_struct(format!("{struct_name}{}", camel(name)));
                 let m = uniq(
                     format!("{}_blocks", ident.trim_start_matches("r#")),
@@ -959,8 +980,6 @@ impl ViewGen<'_> {
                         type_doc(ty)
                     )
                 );
-                let mut p = path.to_vec();
-                p.push(name.to_string());
                 children.push((child, p, Shape::Object(obj)));
             }
         }
@@ -974,6 +993,16 @@ impl ViewGen<'_> {
                     );
                     continue;
                 };
+                let mut p = path.to_vec();
+                p.push(nb.name.to_string());
+                if !self.kept(&p) {
+                    let _ = writeln!(
+                        methods,
+                        "    // pruned block {:?} (allowlist `prune`)",
+                        nb.name
+                    );
+                    continue;
+                }
                 let ident = uniq(ident, &mut used_methods);
                 let jb = j
                     .and_then(|j| j.block_types.get(nb.name))
@@ -1004,8 +1033,6 @@ impl ViewGen<'_> {
                         nb.name
                     );
                 }
-                let mut p = path.to_vec();
-                p.push(nb.name.to_string());
                 children.push((child, p, Shape::Block(&nb.block, jb)));
             }
         }
@@ -1050,6 +1077,16 @@ pub fn views_source(entries: &[Entry<'_>], allow: &[AllowEntry]) -> Result<Strin
             out: &mut body,
             used_structs: BTreeSet::new(),
             type_name: a.ty.clone(),
+            keep: a.prune.then(|| {
+                let mut k = BTreeSet::new();
+                for u in &a.uses {
+                    let segs: Vec<String> = u.split('.').map(str::to_string).collect();
+                    for i in 1..=segs.len() {
+                        k.insert(segs[..i].to_vec());
+                    }
+                }
+                k
+            }),
         };
         g.used_structs.insert(root.clone());
         let what = match kind {
