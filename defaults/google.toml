@@ -1,0 +1,9 @@
+# Defaults overlay for hashicorp/google 7.46.1. See defaults/aws.toml for format.
+# Sources: website/docs/r/*.html.markdown and google/services/** at tag v7.46.1.
+
+[google_storage_bucket]
+uniform_bucket_level_access = { value = false, note = "docs '(Optional, Default: false)'; attribute is optional+computed (org policy may force true)" }
+public_access_prevention = { value = "inherited", note = "docs 'Defaults to \"inherited\".'" }
+force_destroy = { value = false, note = "source Default: false" }
+requester_pays = { value = false, note = "API default" }
+"versioning.enabled" = { value = false, note = "versioning block absent: versioning off (API default)" }

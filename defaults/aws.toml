@@ -1,0 +1,34 @@
+# Defaults overlay for hashicorp/aws 6.68.0.
+#
+# The provider schema protocol does not carry default values, so absent-
+# attribute checks need this file. Each entry is validated against
+# schemas/providers/aws.json by tf_schema_codegen (attribute must exist and the
+# value must match its type); `[]` means "absent = no elements".
+# Keys: attribute name, or "block.attr" for nested blocks.
+# Sources: website/docs/r/*.html.markdown (docs) and internal/service/**
+# (source) at tag v6.68.0.
+
+[aws_db_instance]
+storage_encrypted = { value = false, note = "docs: 'The default is `false` if not specified.' (no Default: in source; AWS API default)" }
+publicly_accessible = { value = false, note = "docs + source rds/instance.go Default: false" }
+deletion_protection = { value = false, note = "docs; no Default: in source (API default)" }
+iam_database_authentication_enabled = { value = false, note = "docs; API default" }
+auto_minor_version_upgrade = { value = true, note = "docs + source Default: true" }
+copy_tags_to_snapshot = { value = false, note = "source Default: false" }
+performance_insights_enabled = { value = false, note = "source Default: false" }
+skip_final_snapshot = { value = false, note = "source Default: false" }
+monitoring_interval = { value = 0, note = "source Default: 0" }
+
+[aws_s3_bucket_public_access_block]
+block_public_acls = { value = false, note = "docs 'Defaults to `false`' + source Default: false" }
+block_public_policy = { value = false, note = "docs + source Default: false" }
+ignore_public_acls = { value = false, note = "docs + source Default: false" }
+restrict_public_buckets = { value = false, note = "docs + source Default: false" }
+
+[aws_security_group]
+ingress = { value = [], note = "absent: no inline ingress rules (attributes-as-blocks, optional+computed)" }
+egress = { value = [], note = "absent: Terraform removes AWS's default allow-all egress rule on create (docs)" }
+revoke_rules_on_delete = { value = false, note = "docs 'Default `false`' + source" }
+
+[aws_s3_bucket]
+force_destroy = { value = false, note = "docs + source Default: false" }

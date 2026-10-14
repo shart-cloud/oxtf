@@ -1,0 +1,51 @@
+# Resources that get generated typed views in tf_schema::views.
+#
+# `uses` lists the attribute paths (dotted through nested blocks and
+# attributes-as-blocks) that rules rely on. The generator refuses to run if
+# any of them is missing from the current schema snapshot, and
+# `tf_schema_codegen diff OLD NEW` exits non-zero when NEW would break one.
+
+[[view]]
+type = "aws_security_group"
+uses = ["ingress", "ingress.cidr_blocks", "ingress.ipv6_cidr_blocks", "ingress.from_port", "ingress.to_port", "ingress.protocol", "egress"]
+
+[[view]]
+type = "aws_vpc_security_group_ingress_rule"
+uses = ["cidr_ipv4", "cidr_ipv6", "from_port", "to_port", "ip_protocol", "security_group_id"]
+
+[[view]]
+type = "aws_s3_bucket"
+uses = ["bucket", "id"]
+
+[[view]]
+type = "aws_s3_bucket_public_access_block"
+uses = ["bucket", "block_public_acls", "block_public_policy", "ignore_public_acls", "restrict_public_buckets"]
+
+[[view]]
+type = "aws_iam_policy"
+uses = ["policy"]
+
+[[view]]
+type = "aws_iam_role_policy"
+uses = ["policy"]
+
+[[view]]
+type = "aws_iam_user_policy"
+uses = ["policy"]
+
+[[view]]
+type = "aws_iam_group_policy"
+uses = ["policy"]
+
+[[view]]
+type = "aws_iam_policy_document"
+kind = "data"
+uses = ["json", "statement", "statement.effect", "statement.actions", "statement.resources", "statement.not_actions"]
+
+[[view]]
+type = "aws_db_instance"
+uses = ["storage_encrypted", "publicly_accessible", "kms_key_id"]
+
+[[view]]
+type = "google_storage_bucket"
+uses = ["uniform_bucket_level_access", "public_access_prevention"]
