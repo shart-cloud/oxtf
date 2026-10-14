@@ -1,0 +1,12 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "resource \"a\" \"b\" {\n  x = 1\n\nresource \"c\" \"d\" {\n  y = 2\n}\n"
+---
+(body
+  (block resource "a" "b" (body
+    (attr x 1)
+    (block resource "c" "d" (body
+      (attr y 2))))))
+--- comments
+--- errors
+1:18 unclosed block: expected `}` before end of file

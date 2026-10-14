@@ -1,0 +1,36 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2024"
+version = "0.0.0"
+license = "MIT"
+publish = false
+
+[workspace.dependencies]
+tf_span = { path = "crates/tf_span" }
+tf_allocator = { path = "crates/tf_allocator" }
+tf_ast = { path = "crates/tf_ast" }
+tf_parser = { path = "crates/tf_parser" }
+tf_schema = { path = "crates/tf_schema" }
+tf_eval = { path = "crates/tf_eval" }
+tf_semantic = { path = "crates/tf_semantic" }
+tf_linter = { path = "crates/tf_linter" }
+tf_rule_ir = { path = "crates/tf_rule_ir" }
+bumpalo = { version = "3.20.3", features = ["collections", "boxed"] }
+insta = "1.49.0"
+miette = "7.6.0"
+rayon = "1.12.0"
+self_cell = "1.3.0"
+phf = "0.14.0"
+postcard = "1.1.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hcl-edit = "0.9.7"
+phf_codegen = "0.14.0"
+toml = "1.1.8"
+tf_schema_codegen = { path = "crates/tf_schema_codegen" }
+
+[profile.release]
+debug = 1

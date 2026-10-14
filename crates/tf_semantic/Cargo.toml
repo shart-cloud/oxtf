@@ -1,0 +1,22 @@
+[package]
+name = "tf_semantic"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Terraform module assembly, symbol table, reference graph and schema-aware evaluation into an owned resource model"
+
+[dependencies]
+tf_span.workspace = true
+tf_allocator.workspace = true
+tf_ast.workspace = true
+tf_parser.workspace = true
+tf_schema.workspace = true
+tf_eval.workspace = true
+
+
+[[example]]
+name = "q6_eval_depth"
+
+[[example]]
+name = "dump"

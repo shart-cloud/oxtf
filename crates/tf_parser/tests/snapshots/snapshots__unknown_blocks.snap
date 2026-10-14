@@ -1,0 +1,29 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "moved {\n  from = aws_instance.a\n  to   = aws_instance.b\n}\nimport {\n  to = aws_s3_bucket.b\n  id = \"bucket\"\n}\nremoved {\n  from = aws_instance.c\n  lifecycle { destroy = false }\n}\ncheck \"health\" {\n  data \"http\" \"h\" { url = \"https://example.com\" }\n  assert {\n    condition     = data.http.h.status_code == 200\n    error_message = \"down\"\n  }\n}\nanything ident_label \"string_label\" {}\nterraform {\n  required_providers {\n    aws = { source = \"hashicorp/aws\", version = \"~> 6.0\" }\n  }\n}\n"
+---
+(body
+  (block moved (body
+    (attr from (trav aws_instance .a))
+    (attr to (trav aws_instance .b))))
+  (block import (body
+    (attr to (trav aws_s3_bucket .b))
+    (attr id "bucket")))
+  (block removed (body
+    (attr from (trav aws_instance .c))
+    (block lifecycle (body
+      (attr destroy false)))))
+  (block check "health" (body
+    (block data "http" "h" (body
+      (attr url "https://example.com")))
+    (block assert (body
+      (attr condition (== (trav data .http .h .status_code) 200))
+      (attr error_message "down")))))
+  (block anything ident_label "string_label" (body))
+  (block terraform (body
+    (block required_providers (body
+      (attr aws (object
+        (source "hashicorp/aws")
+        (version "~> 6.0"))))))))
+--- comments
+--- errors

@@ -1,0 +1,15 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "a = 1 + 2 * 3 - 4 / 5 % 6\nb = !var.x && var.y || var.z == 1 && var.w != 2\nc = var.a < 1 || var.b >= 2 && var.c <= 3 || var.d > 4\nd = var.x ? var.y ? 1 : 2 : var.z ? 3 : 4\ne = -var.n + -1\nf = !!true\ng = (1 + 2) * 3\nh = var.a == null ? \"default\" : var.a\n"
+---
+(body
+  (attr a (- (+ 1 (* 2 3)) (% (/ 4 5) 6)))
+  (attr b (|| (&& (! (trav var .x)) (trav var .y)) (&& (== (trav var .z) 1) (!= (trav var .w) 2))))
+  (attr c (|| (|| (< (trav var .a) 1) (&& (>= (trav var .b) 2) (<= (trav var .c) 3))) (> (trav var .d) 4)))
+  (attr d (? (trav var .x) (? (trav var .y) 1 2) (? (trav var .z) 3 4)))
+  (attr e (+ (neg (trav var .n)) (neg 1)))
+  (attr f (! (! true)))
+  (attr g (* (paren (+ 1 2)) 3))
+  (attr h (? (== (trav var .a) null) "default" (trav var .a))))
+--- comments
+--- errors

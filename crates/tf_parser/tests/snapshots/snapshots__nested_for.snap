@@ -1,0 +1,11 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "a = [for outer in var.x : [for inner in outer : inner.id if inner != null]]\nb = {for k, v in var.m : k => [for i in v : i * 2]...}\nc = {\n  for k, v in var.m :\n  k => v\n  if v != \"\"\n}\nd = [for i, s in var.l : \"${i}-${s}\"]\n"
+---
+(body
+  (attr a (for outer in (trav var .x) : (for inner in outer : (trav inner .id) if (!= inner null))))
+  (attr b (for k v in (trav var .m) : k => (for i in v : (* i 2)) ...))
+  (attr c (for k v in (trav var .m) : k => v if (!= v "")))
+  (attr d (for i s in (trav var .l) : (tpl ${i} "-" ${s}))))
+--- comments
+--- errors

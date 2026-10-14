@@ -1,0 +1,12 @@
+# Defaults overlay for hashicorp/kubernetes 3.3.0. See defaults/aws.toml for format.
+# Sources: kubernetes/*.go at tag v3.3.0 (commit a612b9cfce0fd1321cf2d25084b07b8fccd79737).
+# Paths inside nested blocks are defaults *within a present block*: with no
+# `security_context` block the provider sends no security context at all.
+
+[kubernetes_pod_v1]
+"spec.container.security_context.privileged" = { value = false, note = "source schema_container.go:797-802 Default: false" }
+"spec.container.security_context.allow_privilege_escalation" = { value = true, note = "source schema_container.go:766-771 Default: true (provider sends true when the block is present and the attribute is absent)" }
+"spec.host_network" = { value = false, note = "source schema_pod_spec.go:181-187 conditionalDefault(!isComputed, false); pod_v1 uses podSpecFields(false, false)" }
+"spec.host_pid" = { value = false, note = "source schema_pod_spec.go:190-196 conditionalDefault(!isComputed, false)" }
+"spec.host_ipc" = { value = false, note = "source schema_pod_spec.go:173-179 conditionalDefault(!isComputed, false)" }
+"spec.automount_service_account_token" = { value = true, note = "source schema_pod_spec.go:35-40 Default: true" }

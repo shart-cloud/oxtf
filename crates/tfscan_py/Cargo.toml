@@ -1,0 +1,35 @@
+[package]
+name = "tfscan_py"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Python bindings (PyO3) for oxtf: the `tfscan` package"
+
+[lib]
+name = "_tfscan"
+crate-type = ["cdylib"]
+# The extension module is tested from Python (pytest); there are no Rust
+# unit tests here, and a test harness would have to link libpython.
+test = false
+doctest = false
+
+[features]
+# Enabled by maturin (pyproject.toml); off for `cargo build/test --workspace`
+# so the workspace never needs the extension-module link mode.
+extension-module = ["pyo3/extension-module"]
+
+[dependencies]
+pyo3 = { version = "0.29.3", features = ["abi3-py310"] }
+self_cell.workspace = true
+serde_json.workspace = true
+tf_span.workspace = true
+tf_allocator.workspace = true
+tf_ast.workspace = true
+tf_parser.workspace = true
+tf_eval.workspace = true
+tf_semantic.workspace = true
+tf_linter.workspace = true
+tf_rule_ir.workspace = true
+arrow-array = { version = "60.0.0", default-features = false, features = ["ffi"] }
+arrow-schema = { version = "60.0.0", default-features = false, features = ["ffi"] }

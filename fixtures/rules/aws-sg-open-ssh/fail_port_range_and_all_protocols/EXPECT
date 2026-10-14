@@ -1,0 +1,2 @@
+aws-sg-open-ssh aws_security_group.wide definite
+aws-sg-open-ssh aws_security_group.all definite

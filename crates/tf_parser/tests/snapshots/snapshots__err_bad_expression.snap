@@ -1,0 +1,12 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "a = 1 +\nb = * 2\nc = 3\n"
+---
+(body
+  (attr a (+ 1 (error)))
+  (attr b (* (error) 2))
+  (attr c 3))
+--- comments
+--- errors
+1:8 expected an expression, found newline
+2:5 expected an expression, found `*`

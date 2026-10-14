@@ -1,0 +1,24 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "tags = {\n  Name = \"x\"\n  \"quoted\" = 1\n  colon: 2\n  (var.k) = 3\n  a = 1, b = 2\n  nested = { x = { y = true } }\n  multi = (\n    1 +\n    2\n  )\n}\nproviders = {\n  aws.east = aws.east\n}\nempty = {}\noneline = { a = 1, b = 2 }\n"
+---
+(body
+  (attr tags (object
+    (Name "x")
+    ((key "quoted") 1)
+    (colon 2)
+    ((key (paren (trav var .k))) 3)
+    (a 1)
+    (b 2)
+    (nested (object
+      (x (object
+        (y true)))))
+    (multi (paren (+ 1 2)))))
+  (attr providers (object
+    ((key (trav aws .east)) (trav aws .east))))
+  (attr empty (object))
+  (attr oneline (object
+    (a 1)
+    (b 2))))
+--- comments
+--- errors

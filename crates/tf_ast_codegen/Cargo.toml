@@ -1,0 +1,27 @@
+[package]
+name = "tf_ast_codegen"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Generates Visit / VisitMut / AstKind / GetSpan for tf_ast from crates/tf_ast/src/ast.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "tf_ast_codegen"
+path = "src/main.rs"
+required-features = ["files"]
+
+[features]
+default = ["files"]
+# Writing formatted files needs prettyplease; the proc-macro prototype only
+# needs token streams.
+files = ["dep:prettyplease"]
+
+[dependencies]
+syn = { version = "2", features = ["full"] }
+quote = "1"
+proc-macro2 = "1"
+prettyplease = { version = "0.2", optional = true }

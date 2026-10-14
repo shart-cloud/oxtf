@@ -1,0 +1,10 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "a = f(1, 2\nb = 3\n"
+---
+(body
+  (attr a (call f 1 2))
+  (attr b 3))
+--- comments
+--- errors
+2:1 expected `,` or `)` in function call, found `b`

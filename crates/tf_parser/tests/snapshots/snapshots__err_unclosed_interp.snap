@@ -1,0 +1,10 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "a = \"x ${var.y\"\nb = 2\n"
+---
+(body
+  (attr a (tpl "x " ${(trav var .y)}))
+  (attr b 2))
+--- comments
+--- errors
+1:15 expected `}` to close the template sequence, found `"`

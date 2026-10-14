@@ -1,0 +1,10 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "a = 1\n) ] ;\nb = 2\n"
+---
+(body
+  (attr a 1)
+  (attr b 2))
+--- comments
+--- errors
+2:1 expected an attribute or block, found `)`

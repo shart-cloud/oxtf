@@ -1,0 +1,17 @@
+terraform-aws-modules/terraform-aws-vpc b3abd6df2ecf052451a361ed55b8f06f8742a795
+terraform-aws-modules/terraform-aws-security-group b3c1b2e8beff9671960f874f5569d77c803b0127
+terraform-aws-modules/terraform-aws-s3-bucket 9afa4fc8c8f1e0b3fd913474c1bef8d0c454b235
+terraform-aws-modules/terraform-aws-iam da8e6a8673933ee651f0f0fe611d5ac6b9f9bcb9
+terraform-aws-modules/terraform-aws-rds 175da043429cbbe41c512f976105719f6d0e538c
+terraform-aws-modules/terraform-aws-eks 91b8a8d944e3cf169483108acd12d5b1e47856f7
+terraform-aws-modules/terraform-aws-ec2-instance 4dfedcdd1f26006009c52439bbadba40a76ddb79
+terraform-aws-modules/terraform-aws-lambda 851d20939b25ee7ebadba96a3eab31ff6450134d
+terraform-aws-modules/terraform-aws-alb 6c6e48c10d450d01cf6715346e926df0b858efc2
+terraform-aws-modules/terraform-aws-rds-aurora d72cba285514b5e2e83bea7dd1272c1c206a4f64
+terraform-aws-modules/terraform-aws-autoscaling 2a249e91c798fdf85ab60c3b1592cc5e11805cc4
+terraform-aws-modules/terraform-aws-cloudfront 5b9a0a480220b84f29f02d84ff71dd5340953f68
+terraform-google-modules/terraform-google-network 91352bed3014ddbfb323d979b6413a90e7253acf
+terraform-google-modules/terraform-google-kubernetes-engine 068af04e164ab3d0061d70b809ff603027e944b8
+terraform-google-modules/terraform-google-cloud-storage c7effc0be0f4de78ae45d8d9d426f8478cc397ca
+Azure/terraform-azurerm-avm-res-storage-storageaccount 8802a28c03522184edf2b5028cb06330f5caf98f
+Azure/terraform-azurerm-aks 58ffc7c71a36871dc955ded13816fd29ac798791

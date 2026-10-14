@@ -1,0 +1,1 @@
+aws-s3-public-access-block aws_s3_bucket.logs definite

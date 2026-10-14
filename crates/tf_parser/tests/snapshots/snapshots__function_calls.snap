@@ -1,0 +1,14 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "a = merge(var.a, var.b, {})\nb = concat(var.lists...)\nc = provider::aws::arn_parse(var.arn).account_id\nd = format(\n  \"%s-%s\",\n  var.a,\n  var.b,\n)\ne = lookup(var.m, \"k\", null)\nf = cidrsubnet(var.cidr, 8, count.index)\ng = timestamp()\n"
+---
+(body
+  (attr a (call merge (trav var .a) (trav var .b) (object)))
+  (attr b (call concat (trav var .lists) ...))
+  (attr c (trav (call provider::aws::arn_parse (trav var .arn)) .account_id))
+  (attr d (call format "%s-%s" (trav var .a) (trav var .b)))
+  (attr e (call lookup (trav var .m) "k" null))
+  (attr f (call cidrsubnet (trav var .cidr) 8 (trav count .index)))
+  (attr g (call timestamp)))
+--- comments
+--- errors

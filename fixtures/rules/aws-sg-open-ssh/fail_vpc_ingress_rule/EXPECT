@@ -1,0 +1,1 @@
+aws-sg-open-ssh aws_vpc_security_group_ingress_rule.ssh definite

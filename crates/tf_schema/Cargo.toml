@@ -1,0 +1,23 @@
+[package]
+name = "tf_schema"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Compact provider schema IR (aws/azurerm/google/cloudflare/kubernetes/github) with a phf index and allowlisted typed views"
+
+[features]
+default = ["embedded"]
+# Embed the generated schema blob, index, views and defaults. The generator
+# (tf_schema_codegen) depends on tf_schema with this feature off so it can
+# always build, even when the generated files are stale or missing.
+embedded = ["dep:phf"]
+
+[dependencies]
+serde.workspace = true
+postcard.workspace = true
+phf = { workspace = true, optional = true }
+
+[[example]]
+name = "bench_lookup"
+required-features = ["embedded"]

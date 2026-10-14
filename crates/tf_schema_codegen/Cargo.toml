@@ -1,0 +1,15 @@
+[package]
+name = "tf_schema_codegen"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Generates tf_schema's blob, phf index, typed views and defaults from provider schema JSON"
+
+[dependencies]
+tf_schema = { path = "../tf_schema", default-features = false }
+serde.workspace = true
+serde_json.workspace = true
+postcard = { workspace = true, features = ["alloc"] }
+phf_codegen.workspace = true
+toml.workspace = true

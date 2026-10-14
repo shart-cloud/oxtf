@@ -1,0 +1,15 @@
+# Resource types targeted by at least one rule (W4 seed rules).
+# One per line; data sources as `data.<type>`. Used by
+# `tf_schema_codegen coverage` and `tf_schema_codegen diff` to report
+# resources with no rule.
+aws_security_group            # rule 1
+aws_vpc_security_group_ingress_rule  # rule 1
+aws_s3_bucket                 # rule 2
+aws_s3_bucket_public_access_block    # rule 2
+aws_iam_policy                # rule 3
+aws_iam_role_policy           # rule 3
+aws_iam_user_policy           # rule 3
+aws_iam_group_policy          # rule 3
+data.aws_iam_policy_document  # rule 3
+aws_db_instance               # rule 4
+google_storage_bucket         # rule 5

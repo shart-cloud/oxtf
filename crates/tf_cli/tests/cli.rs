@@ -1,0 +1,130 @@
+//! `oxtf scan` end-to-end: the W4 exit output (finding + full provenance
+//! chain) and the JSON format.
+
+use std::process::Command;
+
+fn fixture(p: &str) -> String {
+    format!("{}/../../fixtures/rules/{p}", env!("CARGO_MANIFEST_DIR"))
+}
+
+#[test]
+fn scan_prints_provenance_chain() {
+    let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .args([
+            "scan",
+            &fixture("aws-sg-open-ssh/fail_tfvars_through_local"),
+        ])
+        .output()
+        .unwrap();
+    let s = String::from_utf8(out.stdout).unwrap();
+    assert!(out.status.success());
+    assert!(s.contains("aws-sg-open-ssh [definite]"), "{s}");
+    assert!(
+        s.contains("aws_security_group.admin: ingress allows SSH (port 22) from 0.0.0.0/0"),
+        "{s}"
+    );
+    for step in [
+        "[1/4] terraform.tfvars: admin_cidr = \"0.0.0.0/0\"",
+        "[2/4] variable admin_cidr",
+        "[3/4] local.ssh_sources",
+        "[4/4] aws_security_group.admin ingress.cidr_blocks",
+    ] {
+        assert!(s.contains(step), "missing {step:?} in\n{s}");
+    }
+}
+
+#[test]
+fn scan_json_and_recursive() {
+    let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .args([
+            "scan",
+            "--recursive",
+            "--format",
+            "json",
+            &fixture("aws-rds-unencrypted"),
+        ])
+        .output()
+        .unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["stats"]["roots"], 5);
+    let sev: Vec<&str> = v["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["severity"].as_str().unwrap())
+        .collect();
+    assert_eq!(sev.iter().filter(|s| **s == "definite").count(), 3);
+    assert_eq!(sev.iter().filter(|s| **s == "conditional").count(), 1);
+}
+
+#[test]
+fn var_file_wins_over_terraform_tfvars() {
+    let dir = std::env::temp_dir().join(format!("oxtf-cli-varfile-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let vf = dir.join("open.tfvars");
+    std::fs::write(&vf, "admin_cidr = \"0.0.0.0/0\"\n").unwrap();
+    let case = fixture("aws-sg-open-ssh/pass_tfvars_overrides_open_default");
+    let run = |extra: &[&str]| {
+        let mut args = vec!["scan", "--format", "json", case.as_str()];
+        args.extend_from_slice(extra);
+        let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+            .args(&args)
+            .output()
+            .unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        v["findings"].as_array().unwrap().len()
+    };
+    assert_eq!(run(&[]), 0);
+    assert_eq!(run(&["--var-file", vf.to_str().unwrap()]), 1);
+}
+
+/// `--rule-file`: a rule written with the Python expression API (rule IR
+/// JSON) runs with no Python runtime and matches the built-in rule.
+#[test]
+fn scan_rule_file() {
+    let rules = format!(
+        "{}/../tfscan_py/rules/sg_open_ssh.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let run = |rule: &str| {
+        let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+            .args([
+                "scan",
+                &fixture("aws-sg-open-ssh/conditional_unconstrained_variable"),
+                "--rule-file",
+                &rules,
+                "--rule",
+                rule,
+                "--format",
+                "json",
+            ])
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        v["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| {
+                (
+                    f["address"].clone(),
+                    f["severity"].clone(),
+                    f["message"].clone(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let ir = run("py-sg-open-ssh");
+    assert_eq!(ir.len(), 1);
+    assert_eq!(ir, run("aws-sg-open-ssh"));
+    let bad = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .args(["scan", ".", "--rule-file", "/nonexistent.json"])
+        .output()
+        .unwrap();
+    assert_eq!(bad.status.code(), Some(2));
+}

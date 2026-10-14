@@ -1,0 +1,11 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "a = \"quote \\\" backslash \\\\ newline \\n tab \\t unicode é \\U0001F600\"\nb = \"literal $${not_interp} and %%{not_directive}\"\nc = \"\"\nd = \"$ and % alone, ${\"nested ${\"deep\"}\"}\"\n"
+---
+(body
+  (attr a "quote \" backslash \\ newline \n tab \t unicode é 😀")
+  (attr b "literal ${not_interp} and %{not_directive}")
+  (attr c "")
+  (attr d (tpl "$ and % alone, " ${(tpl "nested " ${"deep"})})))
+--- comments
+--- errors

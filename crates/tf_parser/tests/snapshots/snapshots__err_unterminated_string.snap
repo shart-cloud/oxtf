@@ -1,0 +1,11 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "a = \"abc\nb = 2\nc = 3\n"
+---
+(body
+  (attr a "abc")
+  (attr b 2)
+  (attr c 3))
+--- comments
+--- errors
+1:5 unterminated string

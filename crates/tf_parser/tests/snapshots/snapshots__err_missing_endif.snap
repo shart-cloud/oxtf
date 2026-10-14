@@ -1,0 +1,10 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "a = \"%{ if x }yes\"\nb = 2\n"
+---
+(body
+  (attr a (tpl %{if x strip=00 then["yes"] endif-strip=00}))
+  (attr b 2))
+--- comments
+--- errors
+1:6 `%{ if }` without a matching `%{ endif }`

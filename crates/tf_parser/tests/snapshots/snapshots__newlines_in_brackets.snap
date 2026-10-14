@@ -1,0 +1,14 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "a = [\n  1,\n  2,\n]\nb = (\n  1 +\n  2\n)\nc = f(\n)\nd = [\n]\ne = var.x ? [\n  1\n] : []\nf = {\n\n  a = 1\n\n}\n"
+---
+(body
+  (attr a (tuple 1 2))
+  (attr b (paren (+ 1 2)))
+  (attr c (call f))
+  (attr d (tuple))
+  (attr e (? (trav var .x) (tuple 1) (tuple)))
+  (attr f (object
+    (a 1))))
+--- comments
+--- errors

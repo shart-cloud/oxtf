@@ -1,0 +1,18 @@
+[package]
+name = "tf_linter"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Rule engine, seed security rules and scan entry points for oxtf"
+
+[dependencies]
+tf_span.workspace = true
+tf_schema.workspace = true
+tf_eval.workspace = true
+tf_semantic.workspace = true
+rayon.workspace = true
+miette = { workspace = true, features = ["fancy-no-backtrace"] }
+serde_json.workspace = true
+
+[dev-dependencies]

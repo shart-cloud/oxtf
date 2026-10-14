@@ -1,0 +1,11 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "plain = <<EOT\nline one\n  ${var.x}\nEOT\nindented = <<-EOT\n    first\n      second ${var.y}\n\n    third\n    EOT\njson = jsonencode(<<EOF\n{\"a\": 1}\nEOF\n)\nempty = <<EOT\nEOT\n"
+---
+(body
+  (attr plain (heredoc EOT "line one\n  " ${(trav var .x)} "\n"))
+  (attr indented (heredoc -EOT "first\n  second " ${(trav var .y)} "\n\nthird\n"))
+  (attr json (call jsonencode (heredoc EOF "{\"a\": 1}\n")))
+  (attr empty (heredoc EOT)))
+--- comments
+--- errors

@@ -1,0 +1,17 @@
+---
+source: crates/tf_parser/tests/snapshots.rs
+description: "a = aws_instance.web.*.id\nb = aws_instance.web[*].private_ip\nc = module.vpc.private_subnets[0]\nd = var.list.0.name\ne = aws_instance.x[*].tags[\"Name\"]\nf = data.aws_iam_policy_document.p.json\ng = local.m[var.k].attr[*]\nh = foo().bar[0]\ni = [1, 2][0]\nj = var.a.0.1\n"
+---
+(body
+  (attr a (trav aws_instance .web .* .id))
+  (attr b (trav aws_instance .web [*] .private_ip))
+  (attr c (trav module .vpc .private_subnets [0]))
+  (attr d (trav var .list .0 .name))
+  (attr e (trav aws_instance .x [*] .tags ["Name"]))
+  (attr f (trav data .aws_iam_policy_document .p .json))
+  (attr g (trav local .m [(trav var .k)] .attr [*]))
+  (attr h (trav (call foo) .bar [0]))
+  (attr i (trav (tuple 1 2) [0]))
+  (attr j (trav var .a .0 .1)))
+--- comments
+--- errors
