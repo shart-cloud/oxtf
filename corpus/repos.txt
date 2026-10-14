@@ -1,0 +1,19 @@
+# Test corpus: popular open-source Terraform module repos, shallow-cloned by fetch.sh.
+# Commits are recorded in repos.lock after fetching.
+terraform-aws-modules/terraform-aws-vpc
+terraform-aws-modules/terraform-aws-security-group
+terraform-aws-modules/terraform-aws-s3-bucket
+terraform-aws-modules/terraform-aws-iam
+terraform-aws-modules/terraform-aws-rds
+terraform-aws-modules/terraform-aws-eks
+terraform-aws-modules/terraform-aws-ec2-instance
+terraform-aws-modules/terraform-aws-lambda
+terraform-aws-modules/terraform-aws-alb
+terraform-aws-modules/terraform-aws-rds-aurora
+terraform-aws-modules/terraform-aws-autoscaling
+terraform-aws-modules/terraform-aws-cloudfront
+terraform-google-modules/terraform-google-network
+terraform-google-modules/terraform-google-kubernetes-engine
+terraform-google-modules/terraform-google-cloud-storage
+Azure/terraform-azurerm-avm-res-storage-storageaccount
+Azure/terraform-azurerm-aks

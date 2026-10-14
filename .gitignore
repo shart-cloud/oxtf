@@ -1,0 +1,7 @@
+/target
+**/__pycache__
+*.so
+*.pyc
+.venv/
+/corpus/repos/
+schemas/providers/.terraform/
