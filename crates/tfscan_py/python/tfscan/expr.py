@@ -292,7 +292,13 @@ rule = Rule
 
 
 def save_rules(path: str, rules: Sequence[Rule]) -> None:
-    """Write rules as an IR document runnable by ``oxtf scan --rule-file``."""
+    """Write rules as an IR document runnable by ``oxtf scan --rule-file``.
+    Callback rules are Python functions and cannot be serialized."""
+    for r in rules:
+        if not isinstance(r, Rule):
+            raise TypeError(
+                f"{r!r} is not an expression rule; only tfscan.rule(...) rules serialize to the rule IR"
+            )
     with open(path, "w") as f:
         json.dump({"rules": [r.to_ir() for r in rules]}, f, indent=2)
         f.write("\n")

@@ -847,7 +847,7 @@ fn category_of(s: &str) -> PyResult<Category> {
 /// `tfscan.CallbackRule` objects (attributes `name`, `resource_types`,
 /// `level`, `category`, `description`, `func`).
 #[pyfunction]
-#[pyo3(signature = (paths, recursive=false, var_files=vec![], builtin=None, ir_rules=vec![], callbacks=vec![], threads=None))]
+#[pyo3(signature = (paths, recursive=false, var_files=vec![], builtin=None, ir_rules=vec![], callbacks=vec![], threads=None, _release_gil=true))]
 #[allow(clippy::too_many_arguments)]
 fn scan(
     py: Python<'_>,
@@ -858,7 +858,14 @@ fn scan(
     ir_rules: Vec<String>,
     callbacks: Vec<Bound<'_, PyAny>>,
     threads: Option<usize>,
+    _release_gil: bool,
 ) -> PyResult<(ScanResult, u64)> {
+    if !_release_gil && !callbacks.is_empty() {
+        // Workers would block on the GIL held by this thread.
+        return Err(PyValueError::new_err(
+            "_release_gil=False (test control) cannot run callback rules",
+        ));
+    }
     let mut rules: Vec<Box<dyn DynRule>> = match &builtin {
         None => tf_linter::rules::all(),
         Some(ids) => tf_linter::rules::all()
@@ -903,7 +910,7 @@ fn scan(
         rules: None,
         threads,
     };
-    let data = py.detach(move || {
+    let work = move || {
         let linter = Linter::new(rules);
         let roots: Vec<PathBuf> = paths
             .iter()
@@ -911,7 +918,8 @@ fn scan(
             .collect();
         let (r, analyses) = tf_linter::scan_with(&linter, &roots, &opts);
         ScanData::new(r, analyses)
-    });
+    };
+    let data = if _release_gil { py.detach(work) } else { work() };
     if let Some(e) = error.lock().unwrap().take() {
         return Err(e);
     }

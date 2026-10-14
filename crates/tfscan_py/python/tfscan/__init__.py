@@ -123,7 +123,7 @@ def callback_rule(
 
 
 def _arrow_table(stream: Any) -> Any:
-    import pyarrow as pa
+    import pyarrow as pa  # type: ignore[import-untyped]
 
     return pa.RecordBatchReader.from_stream(stream).read_all()
 

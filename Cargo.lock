@@ -1283,6 +1283,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tfscan_stubgen"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "tf_schema",
+ "toml",
+]
+
+[[package]]
 name = "thiserror"
 version = "2.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
