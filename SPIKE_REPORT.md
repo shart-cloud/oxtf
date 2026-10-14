@@ -15,7 +15,7 @@ Machine: cloud container, 4 vCPU, 15 GiB RAM, Linux 6.18 x86_64. Exact `lscpu` o
 | Terraform CLI | 1.16.6 | `checkpoint-api.hashicorp.com` current version, SHA256-verified |
 | hashicorp/aws | 6.68.0 | Latest 6.x on registry.terraform.io |
 | hashicorp/azurerm | 5.9.0 | Latest 5.x |
-| hashicorp/google | 7.46.1 | Latest 7.x. **Note:** 8.7.0 is out; the plan says 7.x, so 7.x was kept |
+| hashicorp/google | 8.7.0 | Latest overall. **Deviation from plan:** the plan says 7.x; the owner asked on 2026-10-14 to target the latest major instead (7.46.1 was used briefly first) |
 
 Network check (step 1): crates.io, PyPI, the Terraform registry and releases.hashicorp.com were all reachable; GitHub is reachable over git (`codeload` tarballs return 403, so the corpus is fetched with `git clone`).
 
@@ -27,7 +27,9 @@ Network check (step 1): crates.io, PyPI, the Terraform registry and releases.has
 | --- | ---: | ---: | ---: |
 | aws 6.68.0 | 1730 | 685 | 19.7 MB |
 | azurerm 5.9.0 | 1106 | 396 | 3.2 MB |
-| google 7.46.1 | 1346 | 465 | 9.5 MB |
+| google 8.7.0 | 1375 | 471 | 9.7 MB |
+
+Google 7.46.1 → 8.7.0 removed 16 resource types (e.g. `google_notebooks_*`, `google_iap_brand`, `google_beyondcorp_app_*`) and added 45. `google_storage_bucket.uniform_bucket_level_access` is `optional + computed` in 8.7.0, so an absent value is not provably `false` from the schema alone (relevant to the defaults overlay and seed rule 5).
 
 `terraform init` took 30.3 s and the schema dump took 11.8 s (wall time, cached provider downloads not used).
 

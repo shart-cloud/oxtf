@@ -15,7 +15,7 @@ Suggested timebox: about five agent-days, split across the workstreams below. Cu
 **Goals**
 
 - An arena-allocated HCL AST and an error-recovering parser that handles real-world Terraform.
-- Code generation from `terraform providers schema -json` for the latest major of each target provider: AWS 6.x, AzureRM 5.x, Google 7.x.
+- Code generation from `terraform providers schema -json` for the latest major of each target provider: AWS 6.x, AzureRM 5.x, Google 8.x (changed from 7.x on 2026-10-14 to track the latest major).
 - A Terraform semantic layer (module tree, symbols, reference graph) and a partial evaluator that tracks where each value came from.
 - Five seed rules that exercise the hard cases: variable indirection, `dynamic` blocks, `jsonencode` policies, and cross-resource joins.
 - A Python package (PyO3 + maturin) with a polars-style rule expression API, a callback escape hatch, and Arrow export.

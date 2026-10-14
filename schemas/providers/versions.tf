@@ -1,5 +1,5 @@
 # Pinned provider versions for schema snapshots (spike W2).
-# Latest release of each target major as of 2026-10-14.
+# Latest release of each target major as of 2026-10-14 (google: latest overall, 8.x).
 terraform {
   required_providers {
     aws = {
@@ -12,7 +12,7 @@ terraform {
     }
     google = {
       source  = "hashicorp/google"
-      version = "= 7.46.1"
+      version = "= 8.7.0"
     }
   }
 }
