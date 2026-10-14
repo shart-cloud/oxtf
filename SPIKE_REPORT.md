@@ -129,7 +129,7 @@ Command: `bench/compare.sh` (commit `24560f0`; hardened afterwards in `63d976a` 
 
 CPU time (user + sys, summed over the same best runs): oxtf 1.13 s, Trivy 2,666.56 s, Checkov 880.51 s. Findings reported in run 1 (for scale, not quality): oxtf 2, Trivy 978 (16 of 17 repos; AVM failed), Checkov 1,671 failed checks.
 
-Trivy's two outliers are not network: a 60 s `--debug` run on GKE logged 79,008 evaluator "Starting iteration" lines and no downloads; its fixpoint evaluator re-iterates nested local modules (see `bench/NOTES.md`). On the Azure AVM storage repo Trivy ran 1,212 s and then exited 1 with no output.
+Trivy's two outliers are not network: a 60 s `--debug` run on GKE logged 79,008 evaluator "Starting iteration" lines and no downloads; its fixpoint evaluator re-iterates nested local modules (see `bench/NOTES.md`). On the Azure AVM storage repo Trivy ran 1,212 s and then exited 1 with no output. A re-run with stderr captured gave the cause: `FATAL ... terraform scan error: scan config error: context deadline exceeded`, i.e. Trivy's own scan timeout (`--timeout`, default 5m0s), which it only notices after ~20 minutes. With default settings Trivy cannot scan that repo at all on this machine.
 
 ## Go / no-go
 

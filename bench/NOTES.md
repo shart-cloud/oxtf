@@ -55,3 +55,16 @@ trivy; it needed SIGKILL.
 
 Implication for the final benchmark: report Trivy's total both with and without
 these two repos, so one pathological case doesn't decide the comparison.
+
+## Trivy failure on the Azure AVM storage repo
+
+In the final benchmark Trivy ran 1,212 s on `Azure__terraform-azurerm-avm-res-storage-storageaccount`
+and exited 1 with empty output. Re-run with stderr kept:
+
+```
+trivy config --quiet --skip-check-update --misconfig-scanners terraform --format json corpus/repos/Azure__terraform-azurerm-avm-res-storage-storageaccount/
+rc=1
+FATAL	Fatal error	run error: fs scan error: scan error: scan failed: failed analysis: post analysis error: post analysis error: terraform scan error: scan config error: context deadline exceeded
+```
+
+That is Trivy's own `--timeout` (default 5m0s), checked only after ~20 minutes of evaluation.
