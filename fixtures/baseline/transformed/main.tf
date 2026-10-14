@@ -1,0 +1,12 @@
+resource "aws_s3_bucket" "b" {
+  for_each = toset(["a", "b"])
+  bucket = "example-${each.key}"
+}
+locals { selected = aws_s3_bucket.b["a"].bucket }
+resource "aws_s3_bucket_public_access_block" "p" {
+  bucket = "${aws_s3_bucket.b["a"].bucket}-other"
+  block_public_acls = true
+  block_public_policy = true
+  ignore_public_acls = true
+  restrict_public_buckets = true
+}

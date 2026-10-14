@@ -1,0 +1,2947 @@
+{
+  "backend": "native",
+  "cases": {
+    "plan:fixtures/baseline/sibling/plan.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_s3_bucket.b[\"b\"]",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 28,
+            "file": "fixtures/baseline/sibling/main.tf",
+            "line": 1,
+            "start": 0
+          },
+          "message": "no aws_s3_bucket_public_access_block in this module refers to this bucket",
+          "module": "",
+          "provenance": [],
+          "resource_type": "aws_s3_bucket",
+          "root": "fixtures/baseline/sibling",
+          "rule": "aws-s3-public-access-block",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-s3-public-access-block": 1
+        },
+        "module_instances": 1,
+        "resources": 3,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/baseline/transformed/plan.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_s3_bucket.b[\"a\"]",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 28,
+            "file": "fixtures/baseline/transformed/main.tf",
+            "line": 1,
+            "start": 0
+          },
+          "message": "no aws_s3_bucket_public_access_block in this module refers to this bucket",
+          "module": "",
+          "provenance": [],
+          "resource_type": "aws_s3_bucket",
+          "root": "fixtures/baseline/transformed",
+          "rule": "aws-s3-public-access-block",
+          "severity": "definite"
+        },
+        {
+          "address": "aws_s3_bucket.b[\"b\"]",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 28,
+            "file": "fixtures/baseline/transformed/main.tf",
+            "line": 1,
+            "start": 0
+          },
+          "message": "no aws_s3_bucket_public_access_block in this module refers to this bucket",
+          "module": "",
+          "provenance": [],
+          "resource_type": "aws_s3_bucket",
+          "root": "fixtures/baseline/transformed",
+          "rule": "aws-s3-public-access-block",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 2,
+        "files": 2,
+        "findings": 2,
+        "findings_by_rule": {
+          "aws-s3-public-access-block": 2
+        },
+        "module_instances": 1,
+        "resources": 3,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-iam-wildcard-policy/fail_dynamic_statements.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_iam_policy.dyn",
+          "level": "critical",
+          "location": {
+            "column": 3,
+            "end": 396,
+            "file": "fixtures/rules/aws-iam-wildcard-policy/fail_dynamic_statements/main.tf",
+            "line": 10,
+            "start": 210
+          },
+          "message": "policy statement allows Action \"*\" on Resource \"*\"",
+          "module": "",
+          "provenance": [
+            {
+              "column": 1,
+              "end": 21,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_dynamic_statements/main.tf",
+              "kind": "variable",
+              "label": "variable statements = [{\"actions\":[\"s3:GetObject\"],\"resources\":[\"arn:aws:s3:::b/*\"... (plan input)",
+              "line": 1,
+              "start": 0
+            },
+            {
+              "column": 3,
+              "end": 396,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_dynamic_statements/main.tf",
+              "kind": "attribute",
+              "label": "aws_iam_policy.dyn policy",
+              "line": 10,
+              "start": 210
+            }
+          ],
+          "resource_type": "aws_iam_policy",
+          "root": "fixtures/rules/aws-iam-wildcard-policy/fail_dynamic_statements",
+          "rule": "aws-iam-wildcard-policy",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-iam-wildcard-policy": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-iam-wildcard-policy/fail_heredoc_json.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_iam_user_policy.admin",
+          "level": "critical",
+          "location": {
+            "column": 3,
+            "end": 230,
+            "file": "fixtures/rules/aws-iam-wildcard-policy/fail_heredoc_json/main.tf",
+            "line": 4,
+            "start": 75
+          },
+          "message": "policy statement allows Action \"*\" on Resource \"*\"",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 230,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_heredoc_json/main.tf",
+              "kind": "attribute",
+              "label": "aws_iam_user_policy.admin policy",
+              "line": 4,
+              "start": 75
+            }
+          ],
+          "resource_type": "aws_iam_user_policy",
+          "root": "fixtures/rules/aws-iam-wildcard-policy/fail_heredoc_json",
+          "rule": "aws-iam-wildcard-policy",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-iam-wildcard-policy": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-iam-wildcard-policy/fail_jsonencode_inline.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_iam_policy.admin",
+          "level": "critical",
+          "location": {
+            "column": 3,
+            "end": 222,
+            "file": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_inline/main.tf",
+            "line": 3,
+            "start": 55
+          },
+          "message": "policy statement allows Action \"*\" on Resource \"*\"",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 222,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_inline/main.tf",
+              "kind": "attribute",
+              "label": "aws_iam_policy.admin policy",
+              "line": 3,
+              "start": 55
+            }
+          ],
+          "resource_type": "aws_iam_policy",
+          "root": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_inline",
+          "rule": "aws-iam-wildcard-policy",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-iam-wildcard-policy": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-iam-wildcard-policy/fail_jsonencode_via_local_and_list.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_iam_role_policy.admin",
+          "level": "critical",
+          "location": {
+            "column": 3,
+            "end": 295,
+            "file": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_via_local_and_list/main.tf",
+            "line": 12,
+            "start": 200
+          },
+          "message": "policy statement allows Action \"*\" on Resource \"*\"",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 115,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_via_local_and_list/main.tf",
+              "kind": "local",
+              "label": "local.admin_statement",
+              "line": 2,
+              "start": 11
+            },
+            {
+              "column": 3,
+              "end": 295,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_via_local_and_list/main.tf",
+              "kind": "attribute",
+              "label": "aws_iam_role_policy.admin policy",
+              "line": 12,
+              "start": 200
+            }
+          ],
+          "resource_type": "aws_iam_role_policy",
+          "root": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_via_local_and_list",
+          "rule": "aws-iam-wildcard-policy",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-iam-wildcard-policy": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-iam-wildcard-policy/fail_policy_document_data_source.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_iam_policy.admin",
+          "level": "critical",
+          "location": {
+            "column": 3,
+            "end": 335,
+            "file": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_data_source/main.tf",
+            "line": 16,
+            "start": 287
+          },
+          "message": "policy statement allows Action \"*\" on Resource \"*\"",
+          "module": "",
+          "provenance": [
+            {
+              "column": 1,
+              "end": 38,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_data_source/main.tf",
+              "kind": "attribute",
+              "label": "data.aws_iam_policy_document.admin.json (reference in plan configuration)",
+              "line": 1,
+              "start": 0
+            },
+            {
+              "column": 3,
+              "end": 335,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_data_source/main.tf",
+              "kind": "attribute",
+              "label": "aws_iam_policy.admin policy",
+              "line": 16,
+              "start": 287
+            }
+          ],
+          "resource_type": "aws_iam_policy",
+          "root": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_data_source",
+          "rule": "aws-iam-wildcard-policy",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-iam-wildcard-policy": 1
+        },
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-iam-wildcard-policy/pass_policy_document_deny.json": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 2,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-iam-wildcard-policy/pass_scoped.json": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 2,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-rds-unencrypted/conditional_unconstrained_variable__fail.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_db_instance.db",
+          "level": "high",
+          "location": {
+            "column": 3,
+            "end": 226,
+            "file": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable/main.tf",
+            "line": 10,
+            "start": 195
+          },
+          "message": "storage_encrypted is false",
+          "module": "",
+          "provenance": [
+            {
+              "column": 1,
+              "end": 18,
+              "file": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable/main.tf",
+              "kind": "variable",
+              "label": "variable encrypt = \"false\" (plan input)",
+              "line": 1,
+              "start": 0
+            },
+            {
+              "column": 3,
+              "end": 226,
+              "file": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable/main.tf",
+              "kind": "attribute",
+              "label": "aws_db_instance.db storage_encrypted",
+              "line": 10,
+              "start": 195
+            }
+          ],
+          "resource_type": "aws_db_instance",
+          "root": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable",
+          "rule": "aws-rds-unencrypted",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-rds-unencrypted": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-rds-unencrypted/conditional_unconstrained_variable__pass.json": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 2,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-rds-unencrypted/fail_absent_uses_default.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_db_instance.db",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 31,
+            "file": "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default/main.tf",
+            "line": 1,
+            "start": 0
+          },
+          "message": "storage_encrypted is not set (provider default: false)",
+          "module": "",
+          "provenance": [
+            {
+              "column": 1,
+              "end": 31,
+              "file": "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default/main.tf",
+              "kind": "default",
+              "label": "aws_db_instance.db storage_encrypted not set: provider default false (defaults overlay; docs: 'The default is `false` if not specified.' (no Default: in source; AWS API default))",
+              "line": 1,
+              "start": 0
+            }
+          ],
+          "resource_type": "aws_db_instance",
+          "root": "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default",
+          "rule": "aws-rds-unencrypted",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-rds-unencrypted": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-rds-unencrypted/fail_explicit_false.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_db_instance.db",
+          "level": "high",
+          "location": {
+            "column": 3,
+            "end": 182,
+            "file": "fixtures/rules/aws-rds-unencrypted/fail_explicit_false/main.tf",
+            "line": 6,
+            "start": 157
+          },
+          "message": "storage_encrypted is false",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 182,
+              "file": "fixtures/rules/aws-rds-unencrypted/fail_explicit_false/main.tf",
+              "kind": "attribute",
+              "label": "aws_db_instance.db storage_encrypted",
+              "line": 6,
+              "start": 157
+            }
+          ],
+          "resource_type": "aws_db_instance",
+          "root": "fixtures/rules/aws-rds-unencrypted/fail_explicit_false",
+          "rule": "aws-rds-unencrypted",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-rds-unencrypted": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-rds-unencrypted/fail_variable_default_false.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_db_instance.db",
+          "level": "high",
+          "location": {
+            "column": 3,
+            "end": 247,
+            "file": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false/main.tf",
+            "line": 11,
+            "start": 216
+          },
+          "message": "storage_encrypted is false",
+          "module": "",
+          "provenance": [
+            {
+              "column": 1,
+              "end": 18,
+              "file": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false/main.tf",
+              "kind": "variable",
+              "label": "variable encrypt = false (plan input)",
+              "line": 1,
+              "start": 0
+            },
+            {
+              "column": 3,
+              "end": 247,
+              "file": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false/main.tf",
+              "kind": "attribute",
+              "label": "aws_db_instance.db storage_encrypted",
+              "line": 11,
+              "start": 216
+            }
+          ],
+          "resource_type": "aws_db_instance",
+          "root": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false",
+          "rule": "aws-rds-unencrypted",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-rds-unencrypted": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-rds-unencrypted/pass_encrypted.json": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 3,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-s3-public-access-block/conditional_unconstrained_variable__fail.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_s3_bucket.data",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 74,
+            "file": "fixtures/rules/aws-s3-public-access-block/conditional_unconstrained_variable/main.tf",
+            "line": 5,
+            "start": 43
+          },
+          "message": "public access block for this bucket is not fully enabled (aws_s3_bucket_public_access_block.data block_public_policy)",
+          "module": "",
+          "provenance": [
+            {
+              "column": 1,
+              "end": 23,
+              "file": "fixtures/rules/aws-s3-public-access-block/conditional_unconstrained_variable/main.tf",
+              "kind": "variable",
+              "label": "variable block_public = \"false\" (plan input)",
+              "line": 1,
+              "start": 0
+            },
+            {
+              "column": 3,
+              "end": 282,
+              "file": "fixtures/rules/aws-s3-public-access-block/conditional_unconstrained_variable/main.tf",
+              "kind": "attribute",
+              "label": "aws_s3_bucket_public_access_block.data block_public_policy",
+              "line": 12,
+              "start": 240
+            }
+          ],
+          "resource_type": "aws_s3_bucket",
+          "root": "fixtures/rules/aws-s3-public-access-block/conditional_unconstrained_variable",
+          "rule": "aws-s3-public-access-block",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-s3-public-access-block": 1
+        },
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-s3-public-access-block/conditional_unconstrained_variable__pass.json": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 2,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-s3-public-access-block/fail_block_attrs_absent_default_false.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_s3_bucket.data",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 31,
+            "file": "fixtures/rules/aws-s3-public-access-block/fail_block_attrs_absent_default_false/main.tf",
+            "line": 1,
+            "start": 0
+          },
+          "message": "public access block for this bucket is not fully enabled (aws_s3_bucket_public_access_block.data block_public_policy not set in configuration: planned false)",
+          "module": "",
+          "provenance": [
+            {
+              "column": 1,
+              "end": 109,
+              "file": "fixtures/rules/aws-s3-public-access-block/fail_block_attrs_absent_default_false/main.tf",
+              "kind": "attribute",
+              "label": "aws_s3_bucket_public_access_block.data block_public_policy not set in configuration: planned false",
+              "line": 5,
+              "start": 58
+            }
+          ],
+          "resource_type": "aws_s3_bucket",
+          "root": "fixtures/rules/aws-s3-public-access-block/fail_block_attrs_absent_default_false",
+          "rule": "aws-s3-public-access-block",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-s3-public-access-block": 1
+        },
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-s3-public-access-block/fail_block_for_other_bucket.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_s3_bucket.b",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 84,
+            "file": "fixtures/rules/aws-s3-public-access-block/fail_block_for_other_bucket/main.tf",
+            "line": 5,
+            "start": 56
+          },
+          "message": "no aws_s3_bucket_public_access_block in this module refers to this bucket",
+          "module": "",
+          "provenance": [],
+          "resource_type": "aws_s3_bucket",
+          "root": "fixtures/rules/aws-s3-public-access-block/fail_block_for_other_bucket",
+          "rule": "aws-s3-public-access-block",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-s3-public-access-block": 1
+        },
+        "module_instances": 1,
+        "resources": 3,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-s3-public-access-block/fail_missing_block.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_s3_bucket.logs",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 31,
+            "file": "fixtures/rules/aws-s3-public-access-block/fail_missing_block/main.tf",
+            "line": 1,
+            "start": 0
+          },
+          "message": "no aws_s3_bucket_public_access_block in this module refers to this bucket",
+          "module": "",
+          "provenance": [],
+          "resource_type": "aws_s3_bucket",
+          "root": "fixtures/rules/aws-s3-public-access-block/fail_missing_block",
+          "rule": "aws-s3-public-access-block",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-s3-public-access-block": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-s3-public-access-block/fail_permissive_block.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_s3_bucket.data",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 31,
+            "file": "fixtures/rules/aws-s3-public-access-block/fail_permissive_block/main.tf",
+            "line": 1,
+            "start": 0
+          },
+          "message": "public access block for this bucket is not fully enabled (aws_s3_bucket_public_access_block.data block_public_policy)",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 228,
+              "file": "fixtures/rules/aws-s3-public-access-block/fail_permissive_block/main.tf",
+              "kind": "attribute",
+              "label": "aws_s3_bucket_public_access_block.data block_public_policy",
+              "line": 8,
+              "start": 197
+            }
+          ],
+          "resource_type": "aws_s3_bucket",
+          "root": "fixtures/rules/aws-s3-public-access-block/fail_permissive_block",
+          "rule": "aws-s3-public-access-block",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-s3-public-access-block": 1
+        },
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-s3-public-access-block/pass_block_via_variable.json": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 2,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-s3-public-access-block/pass_full_block.json": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 2,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-sg-open-ssh/conditional_unconstrained_variable__fail.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_security_group.maybe",
+          "level": "high",
+          "location": {
+            "column": 3,
+            "end": 195,
+            "file": "fixtures/rules/aws-sg-open-ssh/conditional_unconstrained_variable/main.tf",
+            "line": 6,
+            "start": 83
+          },
+          "message": "ingress allows SSH (port 22) from 0.0.0.0/0",
+          "module": "",
+          "provenance": [
+            {
+              "column": 1,
+              "end": 19,
+              "file": "fixtures/rules/aws-sg-open-ssh/conditional_unconstrained_variable/main.tf",
+              "kind": "variable",
+              "label": "variable ssh_cidr = \"0.0.0.0/0\" (plan input)",
+              "line": 1,
+              "start": 0
+            },
+            {
+              "column": 3,
+              "end": 195,
+              "file": "fixtures/rules/aws-sg-open-ssh/conditional_unconstrained_variable/main.tf",
+              "kind": "attribute",
+              "label": "aws_security_group.maybe ingress",
+              "line": 6,
+              "start": 83
+            }
+          ],
+          "resource_type": "aws_security_group",
+          "root": "fixtures/rules/aws-sg-open-ssh/conditional_unconstrained_variable",
+          "rule": "aws-sg-open-ssh",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-sg-open-ssh": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-sg-open-ssh/conditional_unconstrained_variable__pass.json": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 2,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-sg-open-ssh/fail_dynamic_block.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_security_group.dyn",
+          "level": "high",
+          "location": {
+            "column": 3,
+            "end": 444,
+            "file": "fixtures/rules/aws-sg-open-ssh/fail_dynamic_block/main.tf",
+            "line": 10,
+            "start": 223
+          },
+          "message": "ingress allows SSH (port 22) from 0.0.0.0/0",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 444,
+              "file": "fixtures/rules/aws-sg-open-ssh/fail_dynamic_block/main.tf",
+              "kind": "attribute",
+              "label": "aws_security_group.dyn ingress not set in configuration (planned value)",
+              "line": 10,
+              "start": 223
+            }
+          ],
+          "resource_type": "aws_security_group",
+          "root": "fixtures/rules/aws-sg-open-ssh/fail_dynamic_block",
+          "rule": "aws-sg-open-ssh",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-sg-open-ssh": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-sg-open-ssh/fail_inline_literal.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_security_group.web",
+          "level": "high",
+          "location": {
+            "column": 3,
+            "end": 181,
+            "file": "fixtures/rules/aws-sg-open-ssh/fail_inline_literal/main.tf",
+            "line": 4,
+            "start": 56
+          },
+          "message": "ingress allows SSH (port 22) from 0.0.0.0/0",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 181,
+              "file": "fixtures/rules/aws-sg-open-ssh/fail_inline_literal/main.tf",
+              "kind": "attribute",
+              "label": "aws_security_group.web ingress",
+              "line": 4,
+              "start": 56
+            }
+          ],
+          "resource_type": "aws_security_group",
+          "root": "fixtures/rules/aws-sg-open-ssh/fail_inline_literal",
+          "rule": "aws-sg-open-ssh",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-sg-open-ssh": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-sg-open-ssh/fail_port_range_and_all_protocols.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_security_group.all",
+          "level": "high",
+          "location": {
+            "column": 3,
+            "end": 321,
+            "file": "fixtures/rules/aws-sg-open-ssh/fail_port_range_and_all_protocols/main.tf",
+            "line": 11,
+            "start": 198
+          },
+          "message": "ingress allows SSH (port 22) from ::/0",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 321,
+              "file": "fixtures/rules/aws-sg-open-ssh/fail_port_range_and_all_protocols/main.tf",
+              "kind": "attribute",
+              "label": "aws_security_group.all ingress",
+              "line": 11,
+              "start": 198
+            }
+          ],
+          "resource_type": "aws_security_group",
+          "root": "fixtures/rules/aws-sg-open-ssh/fail_port_range_and_all_protocols",
+          "rule": "aws-sg-open-ssh",
+          "severity": "definite"
+        },
+        {
+          "address": "aws_security_group.wide",
+          "level": "high",
+          "location": {
+            "column": 3,
+            "end": 154,
+            "file": "fixtures/rules/aws-sg-open-ssh/fail_port_range_and_all_protocols/main.tf",
+            "line": 2,
+            "start": 41
+          },
+          "message": "ingress allows SSH (port 22) from 0.0.0.0/0",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 154,
+              "file": "fixtures/rules/aws-sg-open-ssh/fail_port_range_and_all_protocols/main.tf",
+              "kind": "attribute",
+              "label": "aws_security_group.wide ingress",
+              "line": 2,
+              "start": 41
+            }
+          ],
+          "resource_type": "aws_security_group",
+          "root": "fixtures/rules/aws-sg-open-ssh/fail_port_range_and_all_protocols",
+          "rule": "aws-sg-open-ssh",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 2,
+        "files": 2,
+        "findings": 2,
+        "findings_by_rule": {
+          "aws-sg-open-ssh": 2
+        },
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-sg-open-ssh/fail_tfvars_through_local.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_security_group.admin",
+          "level": "high",
+          "location": {
+            "column": 3,
+            "end": 157,
+            "file": "fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local/main.tf",
+            "line": 2,
+            "start": 42
+          },
+          "message": "ingress allows SSH (port 22) from 0.0.0.0/0",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 41,
+              "file": "fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local/locals.tf",
+              "kind": "local",
+              "label": "local.ssh_sources",
+              "line": 2,
+              "start": 11
+            },
+            {
+              "column": 3,
+              "end": 157,
+              "file": "fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local/main.tf",
+              "kind": "attribute",
+              "label": "aws_security_group.admin ingress",
+              "line": 2,
+              "start": 42
+            }
+          ],
+          "resource_type": "aws_security_group",
+          "root": "fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local",
+          "rule": "aws-sg-open-ssh",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 5,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-sg-open-ssh": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-sg-open-ssh/fail_vpc_ingress_rule.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_vpc_security_group_ingress_rule.ssh",
+          "level": "high",
+          "location": {
+            "column": 3,
+            "end": 204,
+            "file": "fixtures/rules/aws-sg-open-ssh/fail_vpc_ingress_rule/main.tf",
+            "line": 7,
+            "start": 173
+          },
+          "message": "ingress allows SSH (port 22) from 0.0.0.0/0",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 204,
+              "file": "fixtures/rules/aws-sg-open-ssh/fail_vpc_ingress_rule/main.tf",
+              "kind": "attribute",
+              "label": "aws_vpc_security_group_ingress_rule.ssh cidr_ipv4",
+              "line": 7,
+              "start": 173
+            }
+          ],
+          "resource_type": "aws_vpc_security_group_ingress_rule",
+          "root": "fixtures/rules/aws-sg-open-ssh/fail_vpc_ingress_rule",
+          "rule": "aws-sg-open-ssh",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-sg-open-ssh": 1
+        },
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-sg-open-ssh/pass_dynamic_restricted.json": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 2,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-sg-open-ssh/pass_restricted.json": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 2,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/aws-sg-open-ssh/pass_tfvars_overrides_open_default.json": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 3,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/gcp-storage-uniform-access/fail_absent.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "google_storage_bucket.b",
+          "level": "medium",
+          "location": {
+            "column": 1,
+            "end": 36,
+            "file": "fixtures/rules/gcp-storage-uniform-access/fail_absent/main.tf",
+            "line": 1,
+            "start": 0
+          },
+          "message": "uniform_bucket_level_access is not set (provider default: false)",
+          "module": "",
+          "provenance": [
+            {
+              "column": 1,
+              "end": 36,
+              "file": "fixtures/rules/gcp-storage-uniform-access/fail_absent/main.tf",
+              "kind": "default",
+              "label": "google_storage_bucket.b uniform_bucket_level_access not set: provider default false (defaults overlay; docs '(Optional, Default: false)'; attribute is optional+computed (org policy may force true))",
+              "line": 1,
+              "start": 0
+            }
+          ],
+          "resource_type": "google_storage_bucket",
+          "root": "fixtures/rules/gcp-storage-uniform-access/fail_absent",
+          "rule": "gcp-storage-uniform-access",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "gcp-storage-uniform-access": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/gcp-storage-uniform-access/fail_false_via_local.json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "google_storage_bucket.b",
+          "level": "medium",
+          "location": {
+            "column": 3,
+            "end": 195,
+            "file": "fixtures/rules/gcp-storage-uniform-access/fail_false_via_local/main.tf",
+            "line": 8,
+            "start": 152
+          },
+          "message": "uniform_bucket_level_access is false",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 26,
+              "file": "fixtures/rules/gcp-storage-uniform-access/fail_false_via_local/main.tf",
+              "kind": "local",
+              "label": "local.uniform",
+              "line": 2,
+              "start": 11
+            },
+            {
+              "column": 3,
+              "end": 195,
+              "file": "fixtures/rules/gcp-storage-uniform-access/fail_false_via_local/main.tf",
+              "kind": "attribute",
+              "label": "google_storage_bucket.b uniform_bucket_level_access",
+              "line": 8,
+              "start": 152
+            }
+          ],
+          "resource_type": "google_storage_bucket",
+          "root": "fixtures/rules/gcp-storage-uniform-access/fail_false_via_local",
+          "rule": "gcp-storage-uniform-access",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "gcp-storage-uniform-access": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "plan:fixtures/plans/gcp-storage-uniform-access/pass_enabled.json": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 2,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/baseline/computed": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_s3_bucket.b[\"b\"]",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 28,
+            "file": "fixtures/baseline/computed/main.tf",
+            "line": 1,
+            "start": 0
+          },
+          "message": "no aws_s3_bucket_public_access_block in this module refers to this bucket",
+          "module": "",
+          "provenance": [],
+          "resource_type": "aws_s3_bucket",
+          "root": "fixtures/baseline/computed",
+          "rule": "aws-s3-public-access-block",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-s3-public-access-block": 1
+        },
+        "module_instances": 1,
+        "resources": 3,
+        "roots": 1
+      }
+    },
+    "source:fixtures/baseline/local": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_s3_bucket.b[\"b\"]",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 28,
+            "file": "fixtures/baseline/local/main.tf",
+            "line": 1,
+            "start": 0
+          },
+          "message": "no aws_s3_bucket_public_access_block in this module refers to this bucket",
+          "module": "",
+          "provenance": [],
+          "resource_type": "aws_s3_bucket",
+          "root": "fixtures/baseline/local",
+          "rule": "aws-s3-public-access-block",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-s3-public-access-block": 1
+        },
+        "module_instances": 1,
+        "resources": 3,
+        "roots": 1
+      }
+    },
+    "source:fixtures/baseline/sibling": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_s3_bucket.b[\"b\"]",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 28,
+            "file": "fixtures/baseline/sibling/main.tf",
+            "line": 1,
+            "start": 0
+          },
+          "message": "no aws_s3_bucket_public_access_block in this module refers to this bucket",
+          "module": "",
+          "provenance": [],
+          "resource_type": "aws_s3_bucket",
+          "root": "fixtures/baseline/sibling",
+          "rule": "aws-s3-public-access-block",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-s3-public-access-block": 1
+        },
+        "module_instances": 1,
+        "resources": 3,
+        "roots": 1
+      }
+    },
+    "source:fixtures/baseline/transformed": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_s3_bucket.b[\"a\"]",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 28,
+            "file": "fixtures/baseline/transformed/main.tf",
+            "line": 1,
+            "start": 0
+          },
+          "message": "no aws_s3_bucket_public_access_block in this module refers to this bucket",
+          "module": "",
+          "provenance": [],
+          "resource_type": "aws_s3_bucket",
+          "root": "fixtures/baseline/transformed",
+          "rule": "aws-s3-public-access-block",
+          "severity": "definite"
+        },
+        {
+          "address": "aws_s3_bucket.b[\"b\"]",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 28,
+            "file": "fixtures/baseline/transformed/main.tf",
+            "line": 1,
+            "start": 0
+          },
+          "message": "no aws_s3_bucket_public_access_block in this module refers to this bucket",
+          "module": "",
+          "provenance": [],
+          "resource_type": "aws_s3_bucket",
+          "root": "fixtures/baseline/transformed",
+          "rule": "aws-s3-public-access-block",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 2,
+        "files": 1,
+        "findings": 2,
+        "findings_by_rule": {
+          "aws-s3-public-access-block": 2
+        },
+        "module_instances": 1,
+        "resources": 3,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-iam-wildcard-policy/fail_dynamic_statements": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_iam_policy.dyn",
+          "level": "critical",
+          "location": {
+            "column": 3,
+            "end": 396,
+            "file": "fixtures/rules/aws-iam-wildcard-policy/fail_dynamic_statements/main.tf",
+            "line": 10,
+            "start": 210
+          },
+          "message": "policy statement allows Action \"*\" on Resource \"*\"",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 155,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_dynamic_statements/main.tf",
+              "kind": "variable_default",
+              "label": "variable statements default",
+              "line": 2,
+              "start": 26
+            },
+            {
+              "column": 3,
+              "end": 396,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_dynamic_statements/main.tf",
+              "kind": "attribute",
+              "label": "aws_iam_policy.dyn policy",
+              "line": 10,
+              "start": 210
+            }
+          ],
+          "resource_type": "aws_iam_policy",
+          "root": "fixtures/rules/aws-iam-wildcard-policy/fail_dynamic_statements",
+          "rule": "aws-iam-wildcard-policy",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-iam-wildcard-policy": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-iam-wildcard-policy/fail_heredoc_json": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_iam_user_policy.admin",
+          "level": "critical",
+          "location": {
+            "column": 3,
+            "end": 230,
+            "file": "fixtures/rules/aws-iam-wildcard-policy/fail_heredoc_json/main.tf",
+            "line": 4,
+            "start": 75
+          },
+          "message": "policy statement allows Action \"*\" on Resource \"*\"",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 230,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_heredoc_json/main.tf",
+              "kind": "attribute",
+              "label": "aws_iam_user_policy.admin policy",
+              "line": 4,
+              "start": 75
+            }
+          ],
+          "resource_type": "aws_iam_user_policy",
+          "root": "fixtures/rules/aws-iam-wildcard-policy/fail_heredoc_json",
+          "rule": "aws-iam-wildcard-policy",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-iam-wildcard-policy": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_inline": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_iam_policy.admin",
+          "level": "critical",
+          "location": {
+            "column": 3,
+            "end": 222,
+            "file": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_inline/main.tf",
+            "line": 3,
+            "start": 55
+          },
+          "message": "policy statement allows Action \"*\" on Resource \"*\"",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 222,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_inline/main.tf",
+              "kind": "attribute",
+              "label": "aws_iam_policy.admin policy",
+              "line": 3,
+              "start": 55
+            }
+          ],
+          "resource_type": "aws_iam_policy",
+          "root": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_inline",
+          "rule": "aws-iam-wildcard-policy",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-iam-wildcard-policy": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_via_local_and_list": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_iam_role_policy.admin",
+          "level": "critical",
+          "location": {
+            "column": 3,
+            "end": 295,
+            "file": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_via_local_and_list/main.tf",
+            "line": 12,
+            "start": 200
+          },
+          "message": "policy statement allows Action \"*\" on Resource \"*\"",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 115,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_via_local_and_list/main.tf",
+              "kind": "local",
+              "label": "local.admin_statement",
+              "line": 2,
+              "start": 11
+            },
+            {
+              "column": 3,
+              "end": 295,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_via_local_and_list/main.tf",
+              "kind": "attribute",
+              "label": "aws_iam_role_policy.admin policy",
+              "line": 12,
+              "start": 200
+            }
+          ],
+          "resource_type": "aws_iam_role_policy",
+          "root": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_via_local_and_list",
+          "rule": "aws-iam-wildcard-policy",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-iam-wildcard-policy": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_data_source": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_iam_policy.admin",
+          "level": "critical",
+          "location": {
+            "column": 3,
+            "end": 335,
+            "file": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_data_source/main.tf",
+            "line": 16,
+            "start": 287
+          },
+          "message": "policy statement allows Action \"*\" on Resource \"*\"",
+          "module": "",
+          "provenance": [
+            {
+              "column": 5,
+              "end": 200,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_data_source/main.tf",
+              "kind": "attribute",
+              "label": "data.aws_iam_policy_document.admin statement.actions",
+              "line": 9,
+              "start": 183
+            },
+            {
+              "column": 1,
+              "end": 38,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_data_source/main.tf",
+              "kind": "attribute",
+              "label": "data.aws_iam_policy_document.admin.json (rendered from statement blocks)",
+              "line": 1,
+              "start": 0
+            },
+            {
+              "column": 3,
+              "end": 335,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_data_source/main.tf",
+              "kind": "attribute",
+              "label": "aws_iam_policy.admin policy",
+              "line": 16,
+              "start": 287
+            }
+          ],
+          "resource_type": "aws_iam_policy",
+          "root": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_data_source",
+          "rule": "aws-iam-wildcard-policy",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-iam-wildcard-policy": 1
+        },
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_dynamic_statement": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_iam_policy.dyn",
+          "level": "critical",
+          "location": {
+            "column": 3,
+            "end": 537,
+            "file": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_dynamic_statement/main.tf",
+            "line": 21,
+            "start": 491
+          },
+          "message": "policy statement allows Action \"*\" on Resource \"*\"",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 232,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_dynamic_statement/main.tf",
+              "kind": "variable_default",
+              "label": "variable grants default",
+              "line": 3,
+              "start": 98
+            },
+            {
+              "column": 5,
+              "end": 324,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_dynamic_statement/main.tf",
+              "kind": "iteration",
+              "label": "data.aws_iam_policy_document.dyn dynamic \"statement\" for_each",
+              "line": 11,
+              "start": 303
+            },
+            {
+              "column": 7,
+              "end": 380,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_dynamic_statement/main.tf",
+              "kind": "attribute",
+              "label": "data.aws_iam_policy_document.dyn statement.actions",
+              "line": 13,
+              "start": 345
+            },
+            {
+              "column": 1,
+              "end": 272,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_dynamic_statement/main.tf",
+              "kind": "attribute",
+              "label": "data.aws_iam_policy_document.dyn.json (rendered from statement blocks)",
+              "line": 9,
+              "start": 236
+            },
+            {
+              "column": 3,
+              "end": 537,
+              "file": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_dynamic_statement/main.tf",
+              "kind": "attribute",
+              "label": "aws_iam_policy.dyn policy",
+              "line": 21,
+              "start": 491
+            }
+          ],
+          "resource_type": "aws_iam_policy",
+          "root": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_dynamic_statement",
+          "rule": "aws-iam-wildcard-policy",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-iam-wildcard-policy": 1
+        },
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-iam-wildcard-policy/pass_policy_document_deny": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 1,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-iam-wildcard-policy/pass_scoped": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 1,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_db_instance.db",
+          "level": "high",
+          "location": {
+            "column": 3,
+            "end": 226,
+            "file": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable/main.tf",
+            "line": 10,
+            "start": 195
+          },
+          "message": "storage_encrypted may be false (depends on unconstrained variable var.encrypt)",
+          "module": "",
+          "provenance": [
+            {
+              "column": 1,
+              "end": 18,
+              "file": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable/main.tf",
+              "kind": "variable",
+              "label": "variable encrypt (no default, no tfvars value: unconstrained)",
+              "line": 1,
+              "start": 0
+            },
+            {
+              "column": 3,
+              "end": 226,
+              "file": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable/main.tf",
+              "kind": "attribute",
+              "label": "aws_db_instance.db storage_encrypted",
+              "line": 10,
+              "start": 195
+            }
+          ],
+          "resource_type": "aws_db_instance",
+          "root": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable",
+          "rule": "aws-rds-unencrypted",
+          "severity": "conditional"
+        }
+      ],
+      "stats": {
+        "conditional": 1,
+        "definite": 0,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-rds-unencrypted": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_db_instance.db",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 31,
+            "file": "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default/main.tf",
+            "line": 1,
+            "start": 0
+          },
+          "message": "storage_encrypted is not set (provider default: false)",
+          "module": "",
+          "provenance": [
+            {
+              "column": 1,
+              "end": 31,
+              "file": "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default/main.tf",
+              "kind": "default",
+              "label": "aws_db_instance.db storage_encrypted not set: provider default false (defaults overlay; docs: 'The default is `false` if not specified.' (no Default: in source; AWS API default))",
+              "line": 1,
+              "start": 0
+            }
+          ],
+          "resource_type": "aws_db_instance",
+          "root": "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default",
+          "rule": "aws-rds-unencrypted",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-rds-unencrypted": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-rds-unencrypted/fail_explicit_false": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_db_instance.db",
+          "level": "high",
+          "location": {
+            "column": 3,
+            "end": 182,
+            "file": "fixtures/rules/aws-rds-unencrypted/fail_explicit_false/main.tf",
+            "line": 6,
+            "start": 157
+          },
+          "message": "storage_encrypted is false",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 182,
+              "file": "fixtures/rules/aws-rds-unencrypted/fail_explicit_false/main.tf",
+              "kind": "attribute",
+              "label": "aws_db_instance.db storage_encrypted",
+              "line": 6,
+              "start": 157
+            }
+          ],
+          "resource_type": "aws_db_instance",
+          "root": "fixtures/rules/aws-rds-unencrypted/fail_explicit_false",
+          "rule": "aws-rds-unencrypted",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-rds-unencrypted": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-rds-unencrypted/fail_variable_default_false": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_db_instance.db",
+          "level": "high",
+          "location": {
+            "column": 3,
+            "end": 247,
+            "file": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false/main.tf",
+            "line": 11,
+            "start": 216
+          },
+          "message": "storage_encrypted is false",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 55,
+              "file": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false/main.tf",
+              "kind": "variable_default",
+              "label": "variable encrypt default",
+              "line": 3,
+              "start": 40
+            },
+            {
+              "column": 3,
+              "end": 247,
+              "file": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false/main.tf",
+              "kind": "attribute",
+              "label": "aws_db_instance.db storage_encrypted",
+              "line": 11,
+              "start": 216
+            }
+          ],
+          "resource_type": "aws_db_instance",
+          "root": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false",
+          "rule": "aws-rds-unencrypted",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-rds-unencrypted": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-rds-unencrypted/pass_encrypted": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 2,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-s3-public-access-block/conditional_unconstrained_variable": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_s3_bucket.data",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 74,
+            "file": "fixtures/rules/aws-s3-public-access-block/conditional_unconstrained_variable/main.tf",
+            "line": 5,
+            "start": 43
+          },
+          "message": "public access block for this bucket is not fully enabled (aws_s3_bucket_public_access_block.data block_public_policy) (depends on unconstrained variable var.block_public)",
+          "module": "",
+          "provenance": [
+            {
+              "column": 1,
+              "end": 23,
+              "file": "fixtures/rules/aws-s3-public-access-block/conditional_unconstrained_variable/main.tf",
+              "kind": "variable",
+              "label": "variable block_public (no default, no tfvars value: unconstrained)",
+              "line": 1,
+              "start": 0
+            },
+            {
+              "column": 3,
+              "end": 282,
+              "file": "fixtures/rules/aws-s3-public-access-block/conditional_unconstrained_variable/main.tf",
+              "kind": "attribute",
+              "label": "aws_s3_bucket_public_access_block.data block_public_policy",
+              "line": 12,
+              "start": 240
+            }
+          ],
+          "resource_type": "aws_s3_bucket",
+          "root": "fixtures/rules/aws-s3-public-access-block/conditional_unconstrained_variable",
+          "rule": "aws-s3-public-access-block",
+          "severity": "conditional"
+        }
+      ],
+      "stats": {
+        "conditional": 1,
+        "definite": 0,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-s3-public-access-block": 1
+        },
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-s3-public-access-block/fail_block_attrs_absent_default_false": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_s3_bucket.data",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 31,
+            "file": "fixtures/rules/aws-s3-public-access-block/fail_block_attrs_absent_default_false/main.tf",
+            "line": 1,
+            "start": 0
+          },
+          "message": "public access block for this bucket is not fully enabled (aws_s3_bucket_public_access_block.data block_public_policy not set: provider default false (defaults overlay; docs + source Default: false))",
+          "module": "",
+          "provenance": [
+            {
+              "column": 1,
+              "end": 109,
+              "file": "fixtures/rules/aws-s3-public-access-block/fail_block_attrs_absent_default_false/main.tf",
+              "kind": "default",
+              "label": "aws_s3_bucket_public_access_block.data block_public_policy not set: provider default false (defaults overlay; docs + source Default: false)",
+              "line": 5,
+              "start": 58
+            }
+          ],
+          "resource_type": "aws_s3_bucket",
+          "root": "fixtures/rules/aws-s3-public-access-block/fail_block_attrs_absent_default_false",
+          "rule": "aws-s3-public-access-block",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-s3-public-access-block": 1
+        },
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-s3-public-access-block/fail_block_for_other_bucket": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_s3_bucket.b",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 84,
+            "file": "fixtures/rules/aws-s3-public-access-block/fail_block_for_other_bucket/main.tf",
+            "line": 5,
+            "start": 56
+          },
+          "message": "no aws_s3_bucket_public_access_block in this module refers to this bucket",
+          "module": "",
+          "provenance": [],
+          "resource_type": "aws_s3_bucket",
+          "root": "fixtures/rules/aws-s3-public-access-block/fail_block_for_other_bucket",
+          "rule": "aws-s3-public-access-block",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-s3-public-access-block": 1
+        },
+        "module_instances": 1,
+        "resources": 3,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-s3-public-access-block/fail_missing_block": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_s3_bucket.logs",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 31,
+            "file": "fixtures/rules/aws-s3-public-access-block/fail_missing_block/main.tf",
+            "line": 1,
+            "start": 0
+          },
+          "message": "no aws_s3_bucket_public_access_block in this module refers to this bucket",
+          "module": "",
+          "provenance": [],
+          "resource_type": "aws_s3_bucket",
+          "root": "fixtures/rules/aws-s3-public-access-block/fail_missing_block",
+          "rule": "aws-s3-public-access-block",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-s3-public-access-block": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-s3-public-access-block/fail_permissive_block": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_s3_bucket.data",
+          "level": "high",
+          "location": {
+            "column": 1,
+            "end": 31,
+            "file": "fixtures/rules/aws-s3-public-access-block/fail_permissive_block/main.tf",
+            "line": 1,
+            "start": 0
+          },
+          "message": "public access block for this bucket is not fully enabled (aws_s3_bucket_public_access_block.data block_public_policy)",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 228,
+              "file": "fixtures/rules/aws-s3-public-access-block/fail_permissive_block/main.tf",
+              "kind": "attribute",
+              "label": "aws_s3_bucket_public_access_block.data block_public_policy",
+              "line": 8,
+              "start": 197
+            }
+          ],
+          "resource_type": "aws_s3_bucket",
+          "root": "fixtures/rules/aws-s3-public-access-block/fail_permissive_block",
+          "rule": "aws-s3-public-access-block",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-s3-public-access-block": 1
+        },
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-s3-public-access-block/pass_block_via_variable": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 1,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-s3-public-access-block/pass_full_block": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 1,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-sg-open-ssh/conditional_unconstrained_variable": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_security_group.maybe",
+          "level": "high",
+          "location": {
+            "column": 5,
+            "end": 191,
+            "file": "fixtures/rules/aws-sg-open-ssh/conditional_unconstrained_variable/main.tf",
+            "line": 10,
+            "start": 163
+          },
+          "message": "ingress allows SSH (port 22) from the internet (depends on unconstrained variable var.ssh_cidr)",
+          "module": "",
+          "provenance": [
+            {
+              "column": 1,
+              "end": 19,
+              "file": "fixtures/rules/aws-sg-open-ssh/conditional_unconstrained_variable/main.tf",
+              "kind": "variable",
+              "label": "variable ssh_cidr (no default, no tfvars value: unconstrained)",
+              "line": 1,
+              "start": 0
+            },
+            {
+              "column": 5,
+              "end": 191,
+              "file": "fixtures/rules/aws-sg-open-ssh/conditional_unconstrained_variable/main.tf",
+              "kind": "attribute",
+              "label": "aws_security_group.maybe ingress.cidr_blocks",
+              "line": 10,
+              "start": 163
+            }
+          ],
+          "resource_type": "aws_security_group",
+          "root": "fixtures/rules/aws-sg-open-ssh/conditional_unconstrained_variable",
+          "rule": "aws-sg-open-ssh",
+          "severity": "conditional"
+        }
+      ],
+      "stats": {
+        "conditional": 1,
+        "definite": 0,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-sg-open-ssh": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-sg-open-ssh/fail_dynamic_block": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_security_group.dyn",
+          "level": "high",
+          "location": {
+            "column": 7,
+            "end": 434,
+            "file": "fixtures/rules/aws-sg-open-ssh/fail_dynamic_block/main.tf",
+            "line": 16,
+            "start": 400
+          },
+          "message": "ingress allows SSH (port 22) from 0.0.0.0/0",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 179,
+              "file": "fixtures/rules/aws-sg-open-ssh/fail_dynamic_block/main.tf",
+              "kind": "variable_default",
+              "label": "variable ingress_rules default",
+              "line": 3,
+              "start": 85
+            },
+            {
+              "column": 5,
+              "end": 275,
+              "file": "fixtures/rules/aws-sg-open-ssh/fail_dynamic_block/main.tf",
+              "kind": "iteration",
+              "label": "aws_security_group.dyn dynamic \"ingress\" for_each",
+              "line": 11,
+              "start": 247
+            },
+            {
+              "column": 7,
+              "end": 434,
+              "file": "fixtures/rules/aws-sg-open-ssh/fail_dynamic_block/main.tf",
+              "kind": "attribute",
+              "label": "aws_security_group.dyn ingress.cidr_blocks",
+              "line": 16,
+              "start": 400
+            }
+          ],
+          "resource_type": "aws_security_group",
+          "root": "fixtures/rules/aws-sg-open-ssh/fail_dynamic_block",
+          "rule": "aws-sg-open-ssh",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-sg-open-ssh": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-sg-open-ssh/fail_inline_literal": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_security_group.web",
+          "level": "high",
+          "location": {
+            "column": 5,
+            "end": 177,
+            "file": "fixtures/rules/aws-sg-open-ssh/fail_inline_literal/main.tf",
+            "line": 8,
+            "start": 136
+          },
+          "message": "ingress allows SSH (port 22) from 0.0.0.0/0",
+          "module": "",
+          "provenance": [
+            {
+              "column": 5,
+              "end": 177,
+              "file": "fixtures/rules/aws-sg-open-ssh/fail_inline_literal/main.tf",
+              "kind": "attribute",
+              "label": "aws_security_group.web ingress.cidr_blocks",
+              "line": 8,
+              "start": 136
+            }
+          ],
+          "resource_type": "aws_security_group",
+          "root": "fixtures/rules/aws-sg-open-ssh/fail_inline_literal",
+          "rule": "aws-sg-open-ssh",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-sg-open-ssh": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-sg-open-ssh/fail_port_range_and_all_protocols": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_security_group.all",
+          "level": "high",
+          "location": {
+            "column": 5,
+            "end": 317,
+            "file": "fixtures/rules/aws-sg-open-ssh/fail_port_range_and_all_protocols/main.tf",
+            "line": 15,
+            "start": 290
+          },
+          "message": "ingress allows SSH (port 22) from ::/0",
+          "module": "",
+          "provenance": [
+            {
+              "column": 5,
+              "end": 317,
+              "file": "fixtures/rules/aws-sg-open-ssh/fail_port_range_and_all_protocols/main.tf",
+              "kind": "attribute",
+              "label": "aws_security_group.all ingress.ipv6_cidr_blocks",
+              "line": 15,
+              "start": 290
+            }
+          ],
+          "resource_type": "aws_security_group",
+          "root": "fixtures/rules/aws-sg-open-ssh/fail_port_range_and_all_protocols",
+          "rule": "aws-sg-open-ssh",
+          "severity": "definite"
+        },
+        {
+          "address": "aws_security_group.wide",
+          "level": "high",
+          "location": {
+            "column": 5,
+            "end": 150,
+            "file": "fixtures/rules/aws-sg-open-ssh/fail_port_range_and_all_protocols/main.tf",
+            "line": 6,
+            "start": 123
+          },
+          "message": "ingress allows SSH (port 22) from 0.0.0.0/0",
+          "module": "",
+          "provenance": [
+            {
+              "column": 5,
+              "end": 150,
+              "file": "fixtures/rules/aws-sg-open-ssh/fail_port_range_and_all_protocols/main.tf",
+              "kind": "attribute",
+              "label": "aws_security_group.wide ingress.cidr_blocks",
+              "line": 6,
+              "start": 123
+            }
+          ],
+          "resource_type": "aws_security_group",
+          "root": "fixtures/rules/aws-sg-open-ssh/fail_port_range_and_all_protocols",
+          "rule": "aws-sg-open-ssh",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 2,
+        "files": 1,
+        "findings": 2,
+        "findings_by_rule": {
+          "aws-sg-open-ssh": 2
+        },
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_security_group.admin",
+          "level": "high",
+          "location": {
+            "column": 5,
+            "end": 153,
+            "file": "fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local/main.tf",
+            "line": 6,
+            "start": 122
+          },
+          "message": "ingress allows SSH (port 22) from 0.0.0.0/0",
+          "module": "",
+          "provenance": [
+            {
+              "column": 1,
+              "end": 24,
+              "file": "fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local/terraform.tfvars",
+              "kind": "tfvars",
+              "label": "terraform.tfvars: admin_cidr = \"0.0.0.0/0\"",
+              "line": 1,
+              "start": 0
+            },
+            {
+              "column": 1,
+              "end": 21,
+              "file": "fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local/variables.tf",
+              "kind": "variable",
+              "label": "variable admin_cidr",
+              "line": 1,
+              "start": 0
+            },
+            {
+              "column": 3,
+              "end": 41,
+              "file": "fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local/locals.tf",
+              "kind": "local",
+              "label": "local.ssh_sources",
+              "line": 2,
+              "start": 11
+            },
+            {
+              "column": 5,
+              "end": 153,
+              "file": "fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local/main.tf",
+              "kind": "attribute",
+              "label": "aws_security_group.admin ingress.cidr_blocks",
+              "line": 6,
+              "start": 122
+            }
+          ],
+          "resource_type": "aws_security_group",
+          "root": "fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local",
+          "rule": "aws-sg-open-ssh",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 4,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-sg-open-ssh": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-sg-open-ssh/fail_vpc_ingress_rule": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "aws_vpc_security_group_ingress_rule.ssh",
+          "level": "high",
+          "location": {
+            "column": 3,
+            "end": 204,
+            "file": "fixtures/rules/aws-sg-open-ssh/fail_vpc_ingress_rule/main.tf",
+            "line": 7,
+            "start": 173
+          },
+          "message": "ingress allows SSH (port 22) from 0.0.0.0/0",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 204,
+              "file": "fixtures/rules/aws-sg-open-ssh/fail_vpc_ingress_rule/main.tf",
+              "kind": "attribute",
+              "label": "aws_vpc_security_group_ingress_rule.ssh cidr_ipv4",
+              "line": 7,
+              "start": 173
+            }
+          ],
+          "resource_type": "aws_vpc_security_group_ingress_rule",
+          "root": "fixtures/rules/aws-sg-open-ssh/fail_vpc_ingress_rule",
+          "rule": "aws-sg-open-ssh",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-sg-open-ssh": 1
+        },
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-sg-open-ssh/pass_dynamic_restricted": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 1,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-sg-open-ssh/pass_restricted": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 1,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/aws-sg-open-ssh/pass_tfvars_overrides_open_default": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 2,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/gcp-storage-uniform-access/conditional_unconstrained_variable": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "google_storage_bucket.b",
+          "level": "medium",
+          "location": {
+            "column": 3,
+            "end": 215,
+            "file": "fixtures/rules/gcp-storage-uniform-access/conditional_unconstrained_variable/main.tf",
+            "line": 8,
+            "start": 167
+          },
+          "message": "uniform_bucket_level_access may be false (depends on unconstrained variable var.uniform_access)",
+          "module": "",
+          "provenance": [
+            {
+              "column": 1,
+              "end": 25,
+              "file": "fixtures/rules/gcp-storage-uniform-access/conditional_unconstrained_variable/main.tf",
+              "kind": "variable",
+              "label": "variable uniform_access (no default, no tfvars value: unconstrained)",
+              "line": 1,
+              "start": 0
+            },
+            {
+              "column": 3,
+              "end": 215,
+              "file": "fixtures/rules/gcp-storage-uniform-access/conditional_unconstrained_variable/main.tf",
+              "kind": "attribute",
+              "label": "google_storage_bucket.b uniform_bucket_level_access",
+              "line": 8,
+              "start": 167
+            }
+          ],
+          "resource_type": "google_storage_bucket",
+          "root": "fixtures/rules/gcp-storage-uniform-access/conditional_unconstrained_variable",
+          "rule": "gcp-storage-uniform-access",
+          "severity": "conditional"
+        }
+      ],
+      "stats": {
+        "conditional": 1,
+        "definite": 0,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "gcp-storage-uniform-access": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/gcp-storage-uniform-access/fail_absent": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "google_storage_bucket.b",
+          "level": "medium",
+          "location": {
+            "column": 1,
+            "end": 36,
+            "file": "fixtures/rules/gcp-storage-uniform-access/fail_absent/main.tf",
+            "line": 1,
+            "start": 0
+          },
+          "message": "uniform_bucket_level_access is not set (provider default: false)",
+          "module": "",
+          "provenance": [
+            {
+              "column": 1,
+              "end": 36,
+              "file": "fixtures/rules/gcp-storage-uniform-access/fail_absent/main.tf",
+              "kind": "default",
+              "label": "google_storage_bucket.b uniform_bucket_level_access not set: provider default false (defaults overlay; docs '(Optional, Default: false)'; attribute is optional+computed (org policy may force true))",
+              "line": 1,
+              "start": 0
+            }
+          ],
+          "resource_type": "google_storage_bucket",
+          "root": "fixtures/rules/gcp-storage-uniform-access/fail_absent",
+          "rule": "gcp-storage-uniform-access",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "gcp-storage-uniform-access": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/gcp-storage-uniform-access/fail_false_via_local": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "google_storage_bucket.b",
+          "level": "medium",
+          "location": {
+            "column": 3,
+            "end": 195,
+            "file": "fixtures/rules/gcp-storage-uniform-access/fail_false_via_local/main.tf",
+            "line": 8,
+            "start": 152
+          },
+          "message": "uniform_bucket_level_access is false",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 26,
+              "file": "fixtures/rules/gcp-storage-uniform-access/fail_false_via_local/main.tf",
+              "kind": "local",
+              "label": "local.uniform",
+              "line": 2,
+              "start": 11
+            },
+            {
+              "column": 3,
+              "end": 195,
+              "file": "fixtures/rules/gcp-storage-uniform-access/fail_false_via_local/main.tf",
+              "kind": "attribute",
+              "label": "google_storage_bucket.b uniform_bucket_level_access",
+              "line": 8,
+              "start": 152
+            }
+          ],
+          "resource_type": "google_storage_bucket",
+          "root": "fixtures/rules/gcp-storage-uniform-access/fail_false_via_local",
+          "rule": "gcp-storage-uniform-access",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 1,
+        "findings": 1,
+        "findings_by_rule": {
+          "gcp-storage-uniform-access": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/gcp-storage-uniform-access/fail_tfvars_variable": {
+      "diagnostics": [],
+      "findings": [
+        {
+          "address": "google_storage_bucket.b",
+          "level": "medium",
+          "location": {
+            "column": 3,
+            "end": 235,
+            "file": "fixtures/rules/gcp-storage-uniform-access/fail_tfvars_variable/main.tf",
+            "line": 9,
+            "start": 187
+          },
+          "message": "uniform_bucket_level_access is false",
+          "module": "",
+          "provenance": [
+            {
+              "column": 1,
+              "end": 22,
+              "file": "fixtures/rules/gcp-storage-uniform-access/fail_tfvars_variable/terraform.tfvars",
+              "kind": "tfvars",
+              "label": "terraform.tfvars: uniform_access = false",
+              "line": 1,
+              "start": 0
+            },
+            {
+              "column": 1,
+              "end": 25,
+              "file": "fixtures/rules/gcp-storage-uniform-access/fail_tfvars_variable/main.tf",
+              "kind": "variable",
+              "label": "variable uniform_access",
+              "line": 1,
+              "start": 0
+            },
+            {
+              "column": 3,
+              "end": 235,
+              "file": "fixtures/rules/gcp-storage-uniform-access/fail_tfvars_variable/main.tf",
+              "kind": "attribute",
+              "label": "google_storage_bucket.b uniform_bucket_level_access",
+              "line": 9,
+              "start": 187
+            }
+          ],
+          "resource_type": "google_storage_bucket",
+          "root": "fixtures/rules/gcp-storage-uniform-access/fail_tfvars_variable",
+          "rule": "gcp-storage-uniform-access",
+          "severity": "definite"
+        }
+      ],
+      "stats": {
+        "conditional": 0,
+        "definite": 1,
+        "files": 2,
+        "findings": 1,
+        "findings_by_rule": {
+          "gcp-storage-uniform-access": 1
+        },
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    },
+    "source:fixtures/rules/gcp-storage-uniform-access/pass_enabled": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 1,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 1,
+        "roots": 1
+      }
+    }
+  },
+  "version": 1
+}
