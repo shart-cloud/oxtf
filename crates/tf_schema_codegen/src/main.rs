@@ -175,7 +175,7 @@ fn cmd_coverage(paths: &Paths, list: bool) -> Result<ExitCode> {
                 .filter(|e| e.provider == p && e.kind == k)
                 .count();
             println!(
-                "{:8} {:9} total {total:5}  with rules {:3}  without {u:5}",
+                "{:10} {:9} total {total:5}  with rules {:3}  without {u:5}",
                 p.name(),
                 kind_str(k),
                 total - u
