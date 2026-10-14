@@ -58,8 +58,11 @@ impl<'a, T> Box<'a, T> {
         Box(allocator.bump.alloc(value))
     }
 
+}
+
+impl<T: ?Sized> AsRef<T> for Box<'_, T> {
     #[inline]
-    pub fn as_ref(&self) -> &T {
+    fn as_ref(&self) -> &T {
         self.0
     }
 }

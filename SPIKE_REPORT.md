@@ -41,8 +41,12 @@ Google 7.46.1 → 8.7.0 removed 16 resource types (e.g. `google_notebooks_*`, `g
 
 _Answers are filled in as each workstream produces evidence._
 
-1. Hand-written parser or `hcl-edit`? — pending (W1)
-2. Visitor codegen: build-time crate or proc macros? — pending (W1)
+1. **Hand-written parser or `hcl-edit`? Own it.** Evidence ([W1 findings](docs/findings/W1.md)):
+   - *Throughput* on the corpus (single thread, `--release`, 3 runs × 10 passes): `tf_parser` median 207–231 MB/s vs `hcl-edit` 29–32 MB/s, **6.5–7.4× faster**. Memory: 4.22 arena bytes per source byte.
+   - *Error recovery* on 12 broken inputs: `tf_parser` returns a tree 12/12 and keeps 24/24 valid attributes; `hcl-edit` returns no tree 0/12 (it has no recovery). First error at the ideal position: 10/12 vs 6/12.
+   - *Effort:* lexer + parser are 1,826 LOC (written in one agent session). The `hcl-edit` → our-AST walker in the differential test is 279 LOC, so adopting `hcl-edit` would be cheaper up front but gives up recovery and ~7× throughput, and keeps an owned-tree dependency that can't use the arena.
+   - *Correctness:* 2,192/2,192 corpus files parse with 0 errors and are structurally identical to `hcl-edit` after normalisation. Known deviations (pinned by tests): duplicate object keys are kept (hcl-edit keeps one entry per key), `<<-` dedent inside `%{}` directives follows Go HCL, and a literal newline in a quoted string is an error as in Terraform.
+2. **Visitor codegen: build-time crate.** A proc-macro version was built and measured, then removed (commits `daba104`, `a8fc883`). Cold build of `tf_ast`: 1.2–1.7 s (codegen) vs 5.0–5.9 s (proc macro); with a 10× AST, 3.3–3.7 s vs 7.9–8.5 s. Incremental rebuild after adding a node type is the same either way (~0.4–0.7 s). Dependency count of `tf_ast`: 4 crates vs 10 (proc macro puts `syn` under every downstream crate). A freshness test (`crates/tf_ast_codegen/tests/fresh.rs`) fails when committed output is stale. Timings were noisy (W2 compiling concurrently); each is min/max of 3 runs.
 3. Schema IR cost — pending (W2)
 4. Typed views: all resources or allowlist? — pending (W2)
 5. How much of the defaults overlay can be derived? — pending (W2)
@@ -55,8 +59,8 @@ _Answers are filled in as each workstream produces evidence._
 
 | Criterion | Status |
 | --- | --- |
-| Parser handles 100% of corpus files; `hcl-edit` differential clean | pending |
-| `Expression` size test passes at 16 bytes | pending |
+| Parser handles 100% of corpus files; `hcl-edit` differential clean | **met**: 2,192/2,192 files, 0 errors, 0 divergences |
+| `Expression` size test passes at 16 bytes | **met**: `tf_ast` `size_tests::expression_is_16_bytes` |
 | All five seed rules pass fixtures incl. variable-indirection and `dynamic` | pending |
 | A finding shows a full provenance chain back to a `.tfvars` line | pending |
 | Python: pip install wheel, scan, expression rule, Arrow findings | pending |
@@ -64,7 +68,7 @@ _Answers are filled in as each workstream produces evidence._
 
 ## Scope cuts
 
-_None yet._
+- W1: diagnostics are plain structs (miette rendering moved to W4); no lossless/trivia tree (autofix and formatting are non-goals); the proc-macro visitor prototype was deleted after measuring.
 
 ## Go / no-go
 
