@@ -1,4 +1,5 @@
-use tf_eval::{Kind, Origin, Truth, Value, Verdict};
+use tf_eval::{Truth, Verdict};
+use tf_semantic::references::{ReferenceMatch as Match, match_resource_reference};
 use tf_semantic::{Module, Resource};
 
 use super::not_true;
@@ -11,8 +12,6 @@ use crate::rule::{Category, Level, Rule, RuleContext, RuleMeta};
 /// "Refers to it" (the join): the PAB's `bucket` value is
 /// - Unknown, computed by the provider, with origin `<bucket address>.id`
 ///   or `.bucket` (e.g. `bucket = aws_s3_bucket.data.id`); or
-/// - a value whose provenance passes through the bucket's own `bucket`
-///   attribute (e.g. `bucket = aws_s3_bucket.data.bucket`); or
 /// - a Known string equal to the bucket's Known `bucket` name.
 ///
 /// A PAB whose `bucket` cannot be resolved (remote module output, tainted,
@@ -35,84 +34,6 @@ const FLAGS: &[&str] = &[
     "ignore_public_acls",
     "restrict_public_buckets",
 ];
-
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
-enum Match {
-    Yes,
-    Maybe,
-    No,
-}
-
-fn key_compatible(a: Option<&str>, b: Option<&str>) -> bool {
-    match (a, b) {
-        (Some(x), Some(y)) => x == y,
-        _ => true,
-    }
-}
-
-fn matches(v: &Value, bucket: &Resource) -> Match {
-    let via_bucket_attr = v
-        .prov
-        .any(|s| s.resource.as_deref() == Some(&*bucket.base_address));
-    match &v.kind {
-        Kind::Unknown(o) => match &**o {
-            Origin::Computed {
-                resource,
-                key,
-                attr,
-            } => {
-                if **resource == *bucket.base_address
-                    && (&**attr == "id" || &**attr == "bucket")
-                    && key_compatible(key.as_deref(), bucket.key.as_deref())
-                {
-                    Match::Yes
-                } else {
-                    Match::No
-                }
-            }
-            Origin::Error(_) => Match::No,
-            _ => Match::Maybe,
-        },
-        Kind::Known(_) => {
-            if via_bucket_attr {
-                return Match::Yes;
-            }
-            match (
-                v.as_str(),
-                bucket
-                    .value("bucket")
-                    .as_ref()
-                    .map(|b| (b.as_str().map(str::to_string), b.is_known())),
-            ) {
-                (Some(s), Some((Some(name), _))) if s == name => Match::Yes,
-                (Some(_), Some((None, false))) => Match::Maybe,
-                (Some(_), None) => Match::Maybe, // bucket name chosen by the provider
-                _ => Match::No,
-            }
-        }
-        Kind::Tainted(_) => {
-            if via_bucket_attr {
-                Match::Yes
-            } else {
-                Match::Maybe
-            }
-        }
-        Kind::OneOf(o) => {
-            let ms: Vec<Match> = o
-                .alternatives
-                .iter()
-                .map(|a| matches(&a.child_of(v), bucket))
-                .collect();
-            if ms.iter().all(|m| *m == Match::Yes) {
-                Match::Yes
-            } else if ms.iter().all(|m| *m == Match::No) {
-                Match::No
-            } else {
-                Match::Maybe
-            }
-        }
-    }
-}
 
 /// "This PAB leaves the bucket unprotected" (some flag not true).
 fn permissive(pab: &Resource) -> Verdict {
@@ -142,7 +63,7 @@ impl Rule for AwsS3PublicAccessBlock {
                 let Some(bv) = p.value("bucket") else {
                     continue;
                 };
-                match matches(&bv, b) {
+                match match_resource_reference(&bv, b, "bucket", &["id", "bucket"]) {
                     Match::Yes => {
                         let v = permissive(p);
                         best = Some(match best {

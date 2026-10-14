@@ -15,6 +15,7 @@
 pub mod analyze;
 pub mod model;
 pub mod module;
+pub mod references;
 pub mod source;
 
 pub use analyze::{AnalyzeOptions, ObservedAttr, analyze_module, analyze_module_observed};

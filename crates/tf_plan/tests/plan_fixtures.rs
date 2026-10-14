@@ -323,3 +323,51 @@ fn plan_case_module_count_sensitive() {
     // the HCL model.
     assert!(db.value("arn").is_none());
 }
+
+/// Synthetic plan adapter coverage: dependencies listed in configuration are
+/// explanation metadata, not proof that the resulting value names a resource.
+#[test]
+fn known_plan_names_do_not_join_via_dependency_provenance() {
+    use serde_json::json;
+    let dir = std::env::temp_dir().join(format!("oxtf-plan-identity-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    for (name, expected) in [
+        ("example-a", vec!["aws_s3_bucket.b[\"b\"]"]),
+        (
+            "example-a-other",
+            vec!["aws_s3_bucket.b[\"a\"]", "aws_s3_bucket.b[\"b\"]"],
+        ),
+    ] {
+        let mut resources = Vec::new();
+        for key in ["a", "b"] {
+            resources.push(json!({"address": format!("aws_s3_bucket.b[\"{key}\"]"),
+                "mode":"managed", "type":"aws_s3_bucket", "name":"b", "index":key,
+                "values":{"bucket":format!("example-{key}")}}));
+        }
+        resources.push(json!({"address":"aws_s3_bucket_public_access_block.p",
+            "mode":"managed", "type":"aws_s3_bucket_public_access_block", "name":"p",
+            "values":{"bucket":name,"block_public_acls":true,"block_public_policy":true,
+                "ignore_public_acls":true,"restrict_public_buckets":true}}));
+        let changes: Vec<_> = resources
+            .iter()
+            .map(|r| {
+                let mut change = r.clone();
+                change["change"] = json!({"actions":["create"], "after":r["values"]});
+                change
+            })
+            .collect();
+        let plan = json!({"format_version":"1.2",
+        "resource_changes":changes,
+        "planned_values":{"root_module":{"resources":resources}},
+        "configuration":{"root_module":{"resources":[{
+            "address":"aws_s3_bucket_public_access_block.p",
+            "expressions":{"bucket":{"references":["aws_s3_bucket.b[\"a\"].bucket", "aws_s3_bucket.b"]}}
+        }]}}});
+        let path = dir.join("plan.json");
+        std::fs::write(&path, serde_json::to_vec(&plan).unwrap()).unwrap();
+        let result = scan_plan(&Linter::with_seed_rules(), &path, &PlanOptions::default()).unwrap();
+        let got: Vec<_> = result.findings.iter().map(|f| f.address.as_ref()).collect();
+        assert_eq!(got, expected, "{name}");
+    }
+    std::fs::remove_dir_all(dir).unwrap();
+}

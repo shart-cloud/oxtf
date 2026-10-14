@@ -54,3 +54,52 @@ fn recursive_discovery_skips_directory_symlinks() {
     assert_eq!(roots, [d.join("mod")]);
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+#[test]
+fn s3_join_uses_value_identity_not_dependency_provenance() {
+    for (case, reference, expected) in [
+        (
+            "sibling",
+            "aws_s3_bucket.b[\"a\"].bucket",
+            vec!["aws_s3_bucket.b[\"b\"]"],
+        ),
+        (
+            "computed",
+            "aws_s3_bucket.b[\"a\"].id",
+            vec!["aws_s3_bucket.b[\"b\"]"],
+        ),
+        (
+            "transformed",
+            "\"${aws_s3_bucket.b[\"a\"].bucket}-other\"",
+            vec!["aws_s3_bucket.b[\"a\"]", "aws_s3_bucket.b[\"b\"]"],
+        ),
+        ("local", "local.selected", vec!["aws_s3_bucket.b[\"b\"]"]),
+    ] {
+        let d = temp_dir(case);
+        std::fs::write(
+            d.join("main.tf"),
+            format!(
+                r#"
+resource "aws_s3_bucket" "b" {{
+  for_each = toset(["a", "b"])
+  bucket = "example-${{each.key}}"
+}}
+locals {{ selected = aws_s3_bucket.b["a"].bucket }}
+resource "aws_s3_bucket_public_access_block" "p" {{
+  bucket = {reference}
+  block_public_acls = true
+  block_public_policy = true
+  ignore_public_acls = true
+  restrict_public_buckets = true
+}}
+"#
+            ),
+        )
+        .unwrap();
+        let r = scan_dir(&d, &ScanOptions::default()).unwrap();
+        assert!(r.diagnostics.is_empty(), "{case}: {:?}", r.diagnostics);
+        let got: Vec<_> = r.findings.iter().map(|f| f.address.as_ref()).collect();
+        assert_eq!(got, expected, "{case}");
+        std::fs::remove_dir_all(d).unwrap();
+    }
+}

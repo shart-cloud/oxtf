@@ -76,7 +76,7 @@ pub struct Step {
     pub label: Arc<str>,
     /// For [`StepKind::Attribute`] steps on a resource or data source: the
     /// owning resource's address (module path included, instance key
-    /// excluded). Cross-resource joins match on this.
+    /// excluded). This is explanation metadata, not evidence of identity.
     pub resource: Option<Arc<str>>,
 }
 
