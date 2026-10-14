@@ -13,10 +13,10 @@ Commits on `claude/gifted-hypatia-v3im2o`:
 
 | Commit | Change |
 |---|---|
-| `d4b54dd` | providers + nested-attribute API + views + regenerated blob |
-| `e129980` | defaults overlay |
-| `660791b` | allowlist `prune`, applied to the pod view; bench additions |
-| `9d12b83` | coverage column width |
+| `c09382b` | providers + nested-attribute API + views + regenerated blob |
+| `467ec46` | defaults overlay |
+| `b0d47fe` | allowlist `prune`, applied to the pod view; bench additions |
+| `5878e3d` | coverage column width |
 
 Machine: 4 vCPU Intel Xeon @ 2.80GHz, 15 GiB RAM, rustc 1.97.0.
 
@@ -24,8 +24,8 @@ Machine: 4 vCPU Intel Xeon @ 2.80GHz, 15 GiB RAM, rustc 1.97.0.
 
 To reduce bias, every comparison was **re-measured now, interleaved**:
 
-- `base` is the 3-provider tree (`git archive 7cac595`, i.e. what W2.md measured).
-- `new` is the 6-provider tree (`git archive` of HEAD after `660791b`).
+- `base` is the 3-provider tree (`git archive 232a763`, i.e. what W2.md measured).
+- `new` is the 6-provider tree (`git archive` of HEAD after `b0d47fe`).
 - Each tree has its own `CARGO_TARGET_DIR`, and runs alternated base/new.
 
 Each figure is the minimum of ≥3 runs. W2.md's original numbers are shown alongside for reference.
@@ -334,7 +334,7 @@ View lines per module (new):
 ```
 
 ### B2. `tf_schema` build time (`/tmp/claude-0/w2p/time_build2.sh`)
-Setup: trees `base` = `git archive 7cac595`, `new` = `git archive 660791b` (+ bench example), `unpruned` = `new` before `prune` (`d4b54dd` + defaults + bench). Each tree has `CARGO_TARGET_DIR=/tmp/claude-0/w2p/target-<tree>` with deps prebuilt. clean = `cargo clean -p tf_schema; cargo build -p tf_schema`. incr = `touch crates/tf_schema/src/lib.rs; cargo build -p tf_schema`. Trees alternate within each round.
+Setup: trees `base` = `git archive 232a763`, `new` = `git archive b0d47fe` (+ bench example), `unpruned` = `new` before `prune` (`c09382b` + defaults + bench). Each tree has `CARGO_TARGET_DIR=/tmp/claude-0/w2p/target-<tree>` with deps prebuilt. clean = `cargo clean -p tf_schema; cargo build -p tf_schema`. incr = `touch crates/tf_schema/src/lib.rs; cargo build -p tf_schema`. Trees alternate within each round.
 ```
 concurrent rustc/cargo procs: 2
  18:45:08 up  1:30,  0 user,  load average: 1.57, 1.93, 1.93
@@ -592,7 +592,7 @@ $ cargo fmt -p tf_schema -p tf_schema_codegen --check
 $ cargo clippy -q -p tf_schema -p tf_schema_codegen --all-targets       # no output
 $ cargo test -q -p tf_schema -p tf_schema_codegen
 test result: ok. 6 passed (nested.rs) / 5 passed (schema.rs) / 9 passed (codegen.rs, incl. generated_files_are_fresh)
-$ cargo check -q --workspace --all-targets                                # no output (after d4b54dd)
-$ cargo test -q -p tf_semantic -p tf_linter                               # all ok (after e129980)
+$ cargo check -q --workspace --all-targets                                # no output (after c09382b)
+$ cargo test -q -p tf_semantic -p tf_linter                               # all ok (after 467ec46)
 $ cargo doc -p tf_schema --no-deps 2>&1 | grep -c '^warning'              # 0 (generated view modules allow rustdoc::bare_urls/invalid_html_tags)
 ```

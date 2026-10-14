@@ -85,3 +85,42 @@ fn functions() {
     assert_eq!(s("replace(lower(\"ABC\"), \"b\", \"x\")"), "\"axc\"");
     assert!(s("sha256(\"x\")").contains("unsupported function sha256"));
 }
+
+// Regressions from the final code review.
+
+#[test]
+fn attr_splat_carries_only_attribute_accesses() {
+    // `.*` applies only the following `.attr`s per element; `[0]` indexes the result.
+    assert_eq!(s("[{a = [1, 2]}, {a = [3, 4]}].*.a[0]"), "[1, 2]");
+    // `[*]` carries every following operator.
+    assert_eq!(s("[{a = [1, 2]}, {a = [3, 4]}][*].a[0]"), "[1, 3]");
+}
+
+#[test]
+fn parseint_rejects_bad_base_without_panicking() {
+    assert!(ev("parseint(\"10\", 1)").is_error());
+    assert!(ev("parseint(\"10\", 0)").is_error());
+    assert!(ev("parseint(\"10\", 37)").is_error());
+    assert_eq!(s("parseint(\"ff\", 16)"), "255");
+}
+
+#[test]
+fn split_empty_string_is_one_empty_element() {
+    assert_eq!(s("split(\",\", \"\")"), "[\"\"]");
+    assert_eq!(s("length(split(\",\", \"\"))"), "1");
+}
+
+#[test]
+fn cidr_functions_follow_terraform() {
+    // Allocation starts at the network address, not the host address.
+    assert_eq!(s("cidrsubnets(\"10.1.2.3/16\", 8)"), "[\"10.1.0.0/24\"]");
+    // Running out of space inside the prefix is an error, not a subnet outside it.
+    assert!(ev("cidrsubnets(\"10.0.0.0/24\", 1, 1, 1)").is_error());
+    assert_eq!(
+        s("cidrsubnets(\"10.0.0.0/24\", 1, 1)"),
+        "[\"10.0.0.0/25\", \"10.0.0.128/25\"]"
+    );
+    // A huge negative host number is out of range, not an overflow panic.
+    assert!(ev("cidrhost(\"10.0.0.0/8\", -1e40)").is_error());
+    assert_eq!(s("cidrhost(\"10.0.0.0/8\", -1)"), "\"10.255.255.255\"");
+}

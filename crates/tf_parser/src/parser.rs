@@ -420,10 +420,11 @@ impl<'a> Parser<'a> {
                                         span,
                                         "block labels cannot contain template sequences",
                                     );
-                                    Atom::from(
-                                        &self.src[span.start as usize + 1
-                                            ..span.end.saturating_sub(1) as usize],
-                                    )
+                                    // Strip the quotes without slicing inside a
+                                    // UTF-8 character (the label may be unterminated).
+                                    let text = span.source_text(self.src);
+                                    let text = text.strip_prefix('"').unwrap_or(text);
+                                    Atom::from(text.strip_suffix('"').unwrap_or(text))
                                 }
                             };
                             labels.push(BlockLabel {

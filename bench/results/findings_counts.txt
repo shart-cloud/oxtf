@@ -1,0 +1,6 @@
+oxtf: 2 findings; unreadable outputs: none
+trivy: 978 findings, 88 distinct check IDs; unreadable outputs: ['Azure__terraform-azurerm-avm-res-storage-storageaccount.trivy.1.json']
+checkov: 1671 findings; unreadable outputs: none
+
+$ checkov --list --framework terraform | grep -oE "CKV2?_[A-Z0-9]+_[0-9]+" | sort -u | wc -l
+1144

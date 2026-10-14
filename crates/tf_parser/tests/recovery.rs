@@ -220,3 +220,13 @@ fn recovery_quality_table() {
         "recovered {total_mine}/{total_valid}"
     );
 }
+
+/// Regression from the final code review: recovering from a templated,
+/// unterminated block label that ends in a multi-byte character must not
+/// slice inside the character.
+#[test]
+fn unterminated_template_label_with_multibyte_char_does_not_panic() {
+    let alloc = tf_allocator::Allocator::new();
+    let ret = tf_parser::parse(&alloc, "resource \"a${b}é\n");
+    assert!(!ret.errors.is_empty());
+}

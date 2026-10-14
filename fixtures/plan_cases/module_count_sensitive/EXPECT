@@ -1,0 +1,8 @@
+# Expected findings on the PLAN of this directory (all rules).
+# The source scan does not report aws_security_group.ssh[0]: count is not
+# expanded there, so count.index is Unknown; the plan has one instance per index.
+aws-sg-open-ssh aws_security_group.ssh[0] definite
+aws-rds-unencrypted aws_db_instance.db definite
+aws-s3-public-access-block module.store.aws_s3_bucket.b["a"] definite
+aws-s3-public-access-block module.store.aws_s3_bucket.b["b"] definite
+aws-s3-public-access-block module.store.aws_s3_bucket.logs definite
