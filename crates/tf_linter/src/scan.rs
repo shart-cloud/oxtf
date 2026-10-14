@@ -75,7 +75,12 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
         let hidden = p
             .file_name()
             .is_some_and(|n| n.to_string_lossy().starts_with('.'));
-        if p.is_dir() && !hidden {
+        // Don't follow directory symlinks: one pointing at an ancestor
+        // would recurse until the path length limit.
+        let is_link = p
+            .symlink_metadata()
+            .is_ok_and(|m| m.file_type().is_symlink());
+        if p.is_dir() && !hidden && !is_link {
             walk(&p, out);
         }
     }

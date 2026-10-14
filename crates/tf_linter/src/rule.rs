@@ -167,7 +167,9 @@ impl RuleContext<'_> {
     /// Report `verdict` for `resource`: `True` → definite, `Tainted` →
     /// conditional, anything else → nothing. A definite finding on a
     /// resource whose existence depends on an unconstrained variable
-    /// (`count = var.x ? 1 : 0`) is downgraded to conditional. `message`
+    /// (`count = var.x ? 1 : 0`) is downgraded to conditional; a resource
+    /// whose existence is Unknown (e.g. `count` from a data source) gets
+    /// no finding, as with any other Unknown input. `message`
     /// is given the witness value's rendering (if any).
     pub fn report(
         &mut self,
@@ -181,7 +183,7 @@ impl RuleContext<'_> {
             _ => return,
         };
         match resource.existence {
-            Truth::False => return,
+            Truth::False | Truth::Unknown => return,
             Truth::Tainted => severity = Severity::Conditional,
             _ => {}
         }

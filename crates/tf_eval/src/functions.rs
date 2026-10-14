@@ -595,8 +595,11 @@ fn dispatch(name: &str, a: &[Value]) -> R {
         "parseint" => {
             arity(a, 2)?;
             let s = string(&a[0])?;
-            let base = number(&a[1])? as u32;
-            i64::from_str_radix(&s, base)
+            let base = number(&a[1])?;
+            if !(2.0..=36.0).contains(&base) || base.fract() != 0.0 {
+                return Err(Value::error("parseint: base must be a whole number between 2 and 36"));
+            }
+            i64::from_str_radix(&s, base as u32)
                 .map(|n| num(n as f64))
                 .map_err(|_| Value::error("parseint: invalid number"))
         }
@@ -707,9 +710,7 @@ fn dispatch(name: &str, a: &[Value]) -> R {
         "split" => {
             arity(a, 2)?;
             let (sep, s) = (string(&a[0])?, string(&a[1])?);
-            if s.is_empty() {
-                return Ok(Value::list(vec![]));
-            }
+            // Like Terraform (Go's strings.Split), "" splits to [""].
             Ok(Value::list(s.split(&*sep).map(Value::string).collect()))
         }
         "join" => {
@@ -1113,20 +1114,33 @@ fn cidrsubnet(p: &str, newbits: u32, netnum: u128) -> Result<String, String> {
 fn cidrsubnets(p: &str, bits: &[u32]) -> Result<Vec<String>, String> {
     let (addr, len, v6) = parse_cidr(p)?;
     let total = if v6 { 128 } else { 32 };
+    let mask = if len == 0 {
+        0
+    } else {
+        (!0u128) << (128 - len) >> (128 - total)
+    };
+    // Allocation starts at the network address and must stay inside the prefix.
+    let base = addr & mask;
+    let end = base + if total - len >= 128 { u128::MAX } else { (1u128 << (total - len)) - 1 };
     let mut out = Vec::new();
-    let mut cur = addr;
+    let mut cur = base;
     for &b in bits {
         let nl = len + b;
-        if nl > total {
+        if b == 0 || nl > total {
             return Err("cidrsubnets: not enough space".into());
         }
         let size = 1u128 << (total - nl);
         // align
         if cur % size != 0 {
-            cur = (cur / size + 1) * size;
+            cur = (cur / size + 1)
+                .checked_mul(size)
+                .ok_or("cidrsubnets: not enough remaining address space")?;
+        }
+        if cur > end || end - cur < size - 1 {
+            return Err("cidrsubnets: not enough remaining address space".into());
         }
         out.push(format!("{}/{}", render(cur, v6), nl));
-        cur += size;
+        cur = cur.saturating_add(size);
     }
     Ok(out)
 }
@@ -1140,7 +1154,7 @@ fn cidrhost(p: &str, h: i128) -> Result<String, String> {
     } else {
         1i128 << host_bits
     };
-    if h >= size || -h > size {
+    if h >= size || h < -size {
         return Err("cidrhost: host number out of range".into());
     }
     let mask = if len == 0 {

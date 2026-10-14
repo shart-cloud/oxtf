@@ -315,9 +315,26 @@ impl<'r, 'a> Evaluator<'r, 'a> {
                     v = v.index(&k);
                 }
                 TraversalOperator::LegacyIndex(l) => v = v.index(&Value::number(l.index as f64)),
-                TraversalOperator::AttrSplat(_) | TraversalOperator::FullSplat(_) => {
+                TraversalOperator::FullSplat(_) => {
                     let rest = &ops[i + 1..];
                     return self.splat(v, rest, sc);
+                }
+                // An attribute-only splat (`.*`) carries only the attribute
+                // accesses that directly follow it; later operators such as
+                // `[0]` apply to the resulting list, as in HCL.
+                TraversalOperator::AttrSplat(_) => {
+                    let rest = &ops[i + 1..];
+                    let n = rest
+                        .iter()
+                        .take_while(|op| {
+                            matches!(
+                                op,
+                                TraversalOperator::GetAttr(_) | TraversalOperator::LegacyIndex(_)
+                            )
+                        })
+                        .count();
+                    let splatted = self.splat(v, &rest[..n], sc);
+                    return self.apply_ops(splatted, &rest[n..], sc);
                 }
             }
             i += 1;

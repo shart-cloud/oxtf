@@ -2,6 +2,7 @@
 //! in the primary file and related diagnostics in other files) and JSON.
 
 use std::fmt;
+use std::sync::Arc;
 
 use miette::{
     Diagnostic, GraphicalReportHandler, GraphicalTheme, LabeledSpan, NamedSource, SourceSpan,
@@ -13,9 +14,10 @@ use tf_span::FileSpan;
 use crate::rule::{Finding, Severity};
 use crate::scan::ScanResult;
 
-fn source(files: &FileTable, at: FileSpan) -> NamedSource<String> {
+fn source(files: &FileTable, at: FileSpan) -> NamedSource<Arc<str>> {
     let f = files.get(at.file);
-    NamedSource::new(f.path.display().to_string(), f.text.to_string())
+    // Share the file text instead of copying it per finding and per step.
+    NamedSource::new(f.path.display().to_string(), Arc::clone(&f.text))
 }
 
 fn span(at: FileSpan) -> SourceSpan {
@@ -27,7 +29,7 @@ struct Report {
     code: String,
     message: String,
     severity: miette::Severity,
-    src: NamedSource<String>,
+    src: NamedSource<Arc<str>>,
     labels: Vec<LabeledSpan>,
     help: Option<String>,
     related: Vec<Related>,
@@ -36,7 +38,7 @@ struct Report {
 /// One provenance step in another file.
 struct Related {
     message: String,
-    src: NamedSource<String>,
+    src: NamedSource<Arc<str>>,
     label: LabeledSpan,
 }
 
