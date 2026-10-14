@@ -204,7 +204,8 @@ fn plan_fixtures_match_source() {
         table.join("\n")
     );
     println!("{} plans, {} failures", plans.len(), failures.len());
-    // 31 fixture cases; the 3 conditional_* cases are planned twice.
+    // The 31 rule fixture cases that existed in W5; the 3 conditional_* cases
+    // are planned twice. The 3 cases added after the review are source-only.
     assert_eq!(plans.len(), 34, "expected 34 plan fixtures");
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

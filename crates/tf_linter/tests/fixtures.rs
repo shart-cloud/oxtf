@@ -97,7 +97,9 @@ fn seed_rule_fixtures() {
         table.join("\n")
     );
     println!("{} cases, {} failures", cases, failures.len());
-    // 29 original cases + 2 added in W4 (aws_iam_policy_document data source).
-    assert_eq!(cases, 31, "expected 31 fixture cases");
+    // 29 original cases + 2 added in W4 (aws_iam_policy_document data source)
+    // + 3 added after the independent review (GCP variable and conditional,
+    // IAM dynamic statement in a policy document).
+    assert_eq!(cases, 34, "expected 34 fixture cases");
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

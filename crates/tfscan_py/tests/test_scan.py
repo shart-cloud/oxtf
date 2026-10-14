@@ -50,7 +50,7 @@ def test_recursive_all_fixtures_match_expect():
                 expected.add((rule, addr, sev, case.name))
     assert got == expected
     s = r.stats
-    assert s["roots"] == 31
+    assert s["roots"] == 34
     assert s["findings"] == len(r.findings)
     assert s["definite"] + s["conditional"] == s["findings"]
     assert r.diagnostics == [] or all("severity" in d for d in r.diagnostics)
