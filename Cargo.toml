@@ -18,6 +18,7 @@ tf_eval = { path = "crates/tf_eval" }
 tf_semantic = { path = "crates/tf_semantic" }
 tf_linter = { path = "crates/tf_linter" }
 tf_rule_ir = { path = "crates/tf_rule_ir" }
+tf_plan = { path = "crates/tf_plan" }
 bumpalo = { version = "3.20.3", features = ["collections", "boxed"] }
 insta = "1.49.0"
 miette = "7.6.0"

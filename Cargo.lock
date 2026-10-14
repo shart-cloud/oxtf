@@ -1176,6 +1176,7 @@ version = "0.0.0"
 dependencies = [
  "serde_json",
  "tf_linter",
+ "tf_plan",
  "tf_rule_ir",
  "tf_semantic",
 ]
@@ -1212,6 +1213,18 @@ dependencies = [
  "insta",
  "tf_allocator",
  "tf_ast",
+ "tf_span",
+]
+
+[[package]]
+name = "tf_plan"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "tf_eval",
+ "tf_linter",
+ "tf_schema",
+ "tf_semantic",
  "tf_span",
 ]
 
