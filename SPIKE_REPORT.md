@@ -62,7 +62,7 @@ _Answers are filled in as each workstream produces evidence._
 6. **Evaluator depth: the long tail is provider-computed values and remote modules, not functions.** ([W3 findings](docs/findings/W3.md), `cargo run -p tf_semantic --release --example q6_eval_depth -- corpus/repos`) Across 504 root modules, 1,039 security-relevant attribute locations and 4,353 evaluations: **77.3% wholly Known**, 6.7% partially Known, 15.8% Unknown, 0.2% Tainted. The first run was 60.3% Known; four measurement-driven fixes (`optional()` type defaults, `nullable`, `setproduct`/`base64*`, rendering `data.aws_iam_policy_document`) raised it. Function ranking over all 11,727 corpus call sites: `try` 30.1%, `lookup` 24.3%, `length` 6.4%, `merge` 6.2%, `keys` 4.4%, `coalesce` 3.0%; the top 10 cover 81.0%, and the 77 implemented functions cover 99.1%. Unimplemented are `regex`/`regexall`, `file`/`templatefile`, hash and time functions. Unknown origins: computed by provider 13.3% (plus data-source attributes such as `.partition` 3.1%, `.arn` 1.3%), remote module outputs 2.5%, unexpanded `count.index` 1.1%, unsupported functions 3 evaluations of 4,353. Next investments: more deterministic data sources, optional resolution of registry modules from a local cache, per-instance `count` expansion.
 7. **Arena lifetime across PyO3: the pattern works, but the owned model is the right boundary.** ([W6 findings](docs/findings/W6.md)) A `self_cell` + `Arc` + node-index prototype (`tfscan.parse`, `crates/tfscan_py/src/ast.rs`) compiles and costs nothing measurable: 1.88–1.91 ns per node access in Rust vs 1.82–1.85 ns for a plain owned vector; ~90–120 ns from Python, the same as the owned-model handles (79–135 ns), i.e. PyO3 call overhead. But it needs two `unsafe impl Send/Sync` (bumpalo's arena isn't `Sync`; pyclasses must be, and releasing the GIL needs `Send`) whose soundness argument rests on bumpalo internals, and it forces closure-only access (`#[not_covariant]`, because the arena `Box` makes the AST invariant; `#[covariant]` doesn't compile). Since rules need *evaluated* values and the W3 model is already owned and `Send + Sync`, the shipped boundary is `Arc<ScanData>` + indices with no `unsafe`. Expose the arena AST only as a read-only syntax API.
 8. **Rule portability: yes, for expression rules.** A rule built in Python with `rule()/col()` serializes to a JSON rule IR (`crates/tf_rule_ir`), saved with `tfscan.save_rules`, and runs under `env -i oxtf scan --rule-file rules.json` with no Python runtime. Findings are identical to the Python run, including message, primary file:line and full provenance: 7 on the fixtures, 0 on the corpus, 577 and 4,309 on two generated corpora. Callback rules don't port (`save_rules` raises `TypeError`); unknown IR operators are rejected (exit 2). IR v1 limits: no string/CIDR functions, cross-resource joins, module rules or JSON-document traversal, so seed rules 1, 4 and 5 are expressible and match the built-ins, while rules 2 (join) and 3 (policy JSON) are not.
-9. Speed versus incumbents — pending
+9. **Speed versus incumbents: oxtf is 3–4 orders of magnitude faster, with far fewer rules (directional).** Per-repo wall time, minimum of 3 runs (1 run when a run exceeded 300 s), each tool scanning each corpus repo recursively, on an otherwise idle 4-vCPU machine; full table and commands in the [benchmark section](#benchmark-q9). Totals across all 17 repos: **oxtf 0.51 s**, **Checkov 887 s**, **Trivy 1,588 s**. Without the two repos where Trivy's module evaluator blows up (Azure AVM storage, Google GKE): oxtf 0.42 s, Trivy 125 s, Checkov 741 s. Peak RSS: oxtf 34 MB, Checkov 409 MB, Trivy 1.4 GB. Caveat: oxtf runs 5 rules; Checkov ships 1,144 Terraform checks and Trivy fired 88 distinct check IDs on this corpus, so this measures architecture headroom, not a like-for-like product comparison. Parse + analysis (not rules) dominates oxtf's time (W6 measured rule evaluation at 0.5–0.7 ms of a ~0.3–0.5 s corpus scan), so adding rules should not change the order of magnitude.
 
 ## Success criteria
 
@@ -73,7 +73,7 @@ _Answers are filled in as each workstream produces evidence._
 | All five seed rules pass fixtures incl. variable-indirection and `dynamic` | **met**: 31/31 cases (29 original + 2 added for `aws_iam_policy_document`), `cargo test -p tf_linter --test fixtures` |
 | A finding shows a full provenance chain back to a `.tfvars` line | **met**: `oxtf scan fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local` shows `terraform.tfvars:1` → `variables.tf:1` → `locals.tf:2` → `main.tf:6`; also asserted by `tf_semantic/tests/exit.rs` |
 | Python: pip install wheel, scan, expression rule, Arrow findings | **met**: `maturin build --release` → `tfscan-0.0.1-cp310-abi3-manylinux_2_34_x86_64.whl` (1.9 MB); installed in a fresh venv, scan + expression rule + `findings_arrow()` (pyarrow `Table`) work; pytest 38 passed, 1 skipped (mypy not installed) in my re-run, 39/39 in the agent's |
-| Benchmarks vs Trivy and Checkov recorded with specs and commands | pending |
+| Benchmarks vs Trivy and Checkov recorded with specs and commands | **met**: [benchmark section](#benchmark-q9), `bench/compare.sh`, raw rows in `bench/results/compare.tsv` |
 
 ## Scope cuts
 
@@ -100,6 +100,36 @@ _Answers are filled in as each workstream produces evidence._
 - **Exit: expression vs callback benchmark** (rule evaluation only, single thread, min–median of 7, two full runs): real corpus built-in 0.5–0.7 ms, expression 0.5 ms, callback 3.6–5.6 ms; 3,000-root generated corpus 28.2–29.1 / 27.0–27.1 / 149.1–157.2 ms. Expression rules cost the same as compiled Rust; callbacks ~15 µs per resource. Callback scans get *slower* with threads (767 → 1,173 ms, 1 → 4 threads) from GIL contention, expression scans faster (349 → 174 ms).
 - Arrow: arrow-rs 60 columns handed over via the PyCapsule stream interface; 46–70 ms for 5,227 corpus resources, dominated by attribute-to-JSON (~40 ms). The `attributes` column is a JSON string, not typed structs.
 - `.pyi` stubs (`crates/tfscan_stubgen`) generated from the tf_schema allowlist: `Literal` attribute names, `TypedDict`s and typed `col_of` overloads; mypy rejects a misspelled attribute.
+
+## Benchmark (Q9)
+
+Command: `bench/compare.sh` (commit `da3e21d`; hardened afterwards in `c22df48` with a per-run kill limit and preflight checks, which don't change the measurement). Machine: Appendix A (4 vCPU Intel Xeon @ 2.80 GHz, 15 GiB), otherwise idle (no compiles running). Tools: oxtf release build at commit `df0183d`, `oxtf scan --recursive --format json <repo>`; Trivy 0.76.0, `trivy config --quiet --skip-check-update --misconfig-scanners terraform --format json <repo>`; Checkov 3.3.29, `checkov -d <repo> --framework terraform --quiet --compact -o json --skip-download --download-external-modules false`. No tool fetched remote modules (oxtf treats them as opaque, Checkov flag above, Trivy observed not to download; see `bench/NOTES.md`). Timing: `bench/timeit.py` (wall clock plus `getrusage` of the child). One untimed warm-up of each tool first. Raw rows: `bench/results/compare.tsv`; log: `bench/results/compare.log`. Checkov exits 1 whenever checks fail; that is expected.
+
+| Repo | oxtf (s) | Trivy (s) | Checkov (s) |
+| --- | ---: | ---: | ---: |
+| terraform-azurerm-aks | 0.02 | 27.75 | 107.68 |
+| terraform-azurerm-avm-res-storage-storageaccount | 0.05 | 1212.42 ✗ (failed, rc=1, empty output; 1 run) | 87.06 |
+| terraform-aws-alb | 0.01 | 7.21 | 9.65 |
+| terraform-aws-autoscaling | 0.02 | 4.48 | 43.09 |
+| terraform-aws-cloudfront | 0.01 | 2.39 | 9.36 |
+| terraform-aws-ec2-instance | 0.02 | 3.94 | 21.32 |
+| terraform-aws-eks | 0.04 | 13.74 | 113.21 |
+| terraform-aws-iam | 0.03 | 3.65 | 29.21 |
+| terraform-aws-lambda | 0.06 | 9.01 | 93.47 |
+| terraform-aws-rds | 0.04 | 13.58 | 43.66 |
+| terraform-aws-rds-aurora | 0.02 | 6.97 | 17.05 |
+| terraform-aws-s3-bucket | 0.03 | 5.46 | 85.45 |
+| terraform-aws-security-group | 0.03 | 3.38 | 43.91 |
+| terraform-aws-vpc | 0.05 | 10.10 | 103.05 |
+| terraform-google-cloud-storage | 0.01 | 4.27 | 4.30 |
+| terraform-google-kubernetes-engine | 0.04 | 249.67 | 59.08 |
+| terraform-google-network | 0.03 | 9.49 | 16.76 |
+| **Total, 17 repos** | **0.51** | **1,587.51** | **887.31** |
+| **Total, without AVM storage and GKE** | **0.42** | **125.42** | **741.17** |
+
+CPU time (user + sys, summed over the same best runs): oxtf 1.13 s, Trivy 2,666.56 s, Checkov 880.51 s. Findings reported in run 1 (for scale, not quality): oxtf 2, Trivy 978 (16 of 17 repos; AVM failed), Checkov 1,671 failed checks.
+
+Trivy's two outliers are not network: a 60 s `--debug` run on GKE logged 79,008 evaluator "Starting iteration" lines and no downloads; its fixpoint evaluator re-iterates nested local modules (see `bench/NOTES.md`). On the Azure AVM storage repo Trivy ran 1,212 s and then exited 1 with no output.
 
 ## Go / no-go
 

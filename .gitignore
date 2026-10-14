@@ -7,3 +7,4 @@
 schemas/providers/.terraform/
 /dist
 *.whl
+/bench/results/out/
