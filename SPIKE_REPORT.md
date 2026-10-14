@@ -15,6 +15,9 @@ Machine: cloud container, 4 vCPU, 15 GiB RAM, Linux 6.18 x86_64. Exact `lscpu` o
 | Terraform CLI | 1.16.6 | `checkpoint-api.hashicorp.com` current version, SHA256-verified |
 | hashicorp/aws | 6.68.0 | Latest 6.x on registry.terraform.io |
 | hashicorp/azurerm | 5.9.0 | Latest 5.x |
+| cloudflare/cloudflare | 5.28.0 | Latest overall; added at the owner's request 2026-10-14 (not in the original plan) |
+| hashicorp/kubernetes | 3.3.0 | Latest overall; added at the owner's request |
+| integrations/github | 6.13.0 | Latest overall; added at the owner's request |
 | hashicorp/google | 8.7.0 | Latest overall. **Deviation from plan:** the plan says 7.x; the owner asked on 2026-10-14 to target the latest major instead (7.46.1 was used briefly first) |
 
 Network check (step 1): crates.io, PyPI, the Terraform registry and releases.hashicorp.com were all reachable; GitHub is reachable over git (`codeload` tarballs return 403, so the corpus is fetched with `git clone`).
@@ -28,6 +31,11 @@ Network check (step 1): crates.io, PyPI, the Terraform registry and releases.has
 | aws 6.68.0 | 1730 | 685 | 19.7 MB |
 | azurerm 5.9.0 | 1106 | 396 | 3.2 MB |
 | google 8.7.0 | 1375 | 471 | 9.7 MB |
+| cloudflare 5.28.0 | 272 | 468 | 3.2 MB |
+| kubernetes 3.3.0 | 81 | 27 | 3.1 MB |
+| github 6.13.0 | 88 | 75 | 0.2 MB |
+
+Cloudflare 5.x is built on terraform-plugin-framework and uses nested attributes (`nested_type`) 2,997 times; kubernetes 16 times; the original three providers never. This exercises a schema shape the first three providers didn't.
 
 Google 7.46.1 → 8.7.0 removed 16 resource types (e.g. `google_notebooks_*`, `google_iap_brand`, `google_beyondcorp_app_*`) and added 45. `google_storage_bucket.uniform_bucket_level_access` is `optional + computed` in 8.7.0, so an absent value is not provably `false` from the schema alone (relevant to the defaults overlay and seed rule 5).
 
