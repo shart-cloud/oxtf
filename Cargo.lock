@@ -505,25 +505,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tf_ast_macros"
-version = "0.0.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
- "tf_ast_codegen",
-]
-
-[[package]]
-name = "tf_ast_pm"
-version = "0.0.0"
-dependencies = [
- "tf_allocator",
- "tf_ast_macros",
- "tf_span",
-]
-
-[[package]]
 name = "tf_parser"
 version = "0.0.0"
 dependencies = [
