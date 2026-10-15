@@ -1,9 +1,9 @@
 use serde_json::{Value as J, json};
 use std::path::Path;
 use tf_eval::{Kind, Truth, Value, Verdict, truth};
-use tf_linter::{Category, Level, Linter, Rule, RuleContext, RuleMeta};
+use tf_linter::{Category, Finding, Level, Linter, RuleInfo};
 use tf_semantic::references::{ReferenceMatch, match_resource_reference};
-use tf_semantic::{Analysis, AnalyzeOptions, FileTable, Module, Resource, analyze_module};
+use tf_semantic::{Analysis, AnalyzeOptions, FileTable, analyze_module};
 
 struct Case {
     name: &'static str,
@@ -54,22 +54,26 @@ fn truth_from_rank(rank: u64) -> Truth {
     }
 }
 
-// Use production RuleContext::report for existence gating and certainty.
-struct FixedVerdict(Verdict);
-impl RuleMeta for FixedVerdict {
-    const NAME: &'static str = "uncertainty-experiment";
-    const CATEGORY: Category = Category::Encryption;
-    const LEVEL: Level = Level::High;
-    const DESCRIPTION: &'static str = "Experiment only";
-    const RESOURCE_TYPES: &'static [&'static str] = &["aws_db_instance"];
-}
-impl Rule for FixedVerdict {
-    fn run_on_resource(&self, r: &Resource, ctx: &mut RuleContext<'_>) {
-        ctx.report(r, &self.0, |_| "experiment".into());
+// Use production finding construction for existence gating and certainty.
+fn probe_info(name: &str, category: Category) -> RuleInfo {
+    RuleInfo {
+        name: name.into(),
+        category,
+        level: Level::High,
+        description: "Experiment only".into(),
+        resource_types: Vec::new(),
+        runs_on_module: false,
     }
 }
 fn outcome(analysis: &Analysis, verdict: Verdict) -> J {
-    let findings = Linter::new(vec![Box::new(FixedVerdict(verdict))]).run(analysis);
+    let info = probe_info("uncertainty-experiment", Category::Encryption);
+    let findings: Vec<_> = analysis
+        .modules
+        .iter()
+        .flat_map(|m| m.resources.iter())
+        .filter(|r| &*r.ty == "aws_db_instance" && r.mode == tf_semantic::Mode::Managed)
+        .filter_map(|r| Finding::from_verdict(&info, r, &verdict, "experiment", &analysis.root_dir))
+        .collect();
     json!(
         findings
             .iter()
@@ -272,25 +276,6 @@ mod tests {
     }
 }
 
-struct ReportAt {
-    target: String,
-    verdict: Verdict,
-}
-impl RuleMeta for ReportAt {
-    const NAME: &'static str = "evidence-probe";
-    const CATEGORY: Category = Category::Storage;
-    const LEVEL: Level = Level::High;
-    const DESCRIPTION: &'static str = "Experiment evidence resolution";
-    const RUNS_ON_MODULE: bool = true;
-}
-impl Rule for ReportAt {
-    fn run_on_module(&self, m: &Module, ctx: &mut RuleContext<'_>) {
-        if let Some(r) = m.resources.iter().find(|r| *r.address == self.target) {
-            ctx.report(r, &self.verdict, |_| "probe".into());
-        }
-    }
-}
-
 fn evaluate(query: &str, input: &J) -> J {
     let mut e = regorus::Engine::new();
     e.add_policy(
@@ -379,12 +364,11 @@ fn evidence_probes() -> J {
             truth_from_rank(response["truth_rank"].as_u64().unwrap()),
             Some(resolve(&response).unwrap()),
         );
-        let run = |v| {
-            Linter::new(vec![Box::new(ReportAt {
-                target: target.address.to_string(),
-                verdict: v,
-            })])
-            .run(&a)
+        let probe = probe_info("evidence-probe", Category::Storage);
+        let run = |v: Verdict| -> Vec<Finding> {
+            Finding::from_verdict(&probe, target, &v, "probe", &a.root_dir)
+                .into_iter()
+                .collect()
         };
         let expected = run(native);
         let actual = run(reconstructed);

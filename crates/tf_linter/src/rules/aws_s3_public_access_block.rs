@@ -3,7 +3,7 @@ use tf_semantic::references::{ReferenceMatch as Match, match_resource_reference}
 use tf_semantic::{Module, Resource};
 
 use super::not_true;
-use crate::rule::{Category, Level, Rule, RuleContext, RuleMeta};
+use crate::rule::{Category, Level, Rule, RuleMeta};
 
 /// Every `aws_s3_bucket` needs an `aws_s3_bucket_public_access_block` in
 /// the same module instance whose `bucket` refers to it, with all four
@@ -51,11 +51,12 @@ fn permissive(pab: &Resource) -> Verdict {
 }
 
 impl Rule for AwsS3PublicAccessBlock {
-    fn run_on_module(&self, m: &Module, ctx: &mut RuleContext<'_>) {
+    fn module_verdicts<'m>(&self, m: &'m Module) -> Vec<(&'m Resource, Verdict)> {
         let pabs: Vec<&Resource> = m
             .resources_of("aws_s3_bucket_public_access_block")
             .filter(|p| p.existence != Truth::False)
             .collect();
+        let mut out = Vec::new();
         for b in m.resources_of("aws_s3_bucket") {
             let mut best: Option<Verdict> = None; // min over matching PABs
             let mut maybe = false;
@@ -77,31 +78,27 @@ impl Rule for AwsS3PublicAccessBlock {
             }
             match best {
                 None if maybe => {}
-                None => Self::report(b, ctx, &Verdict::new(Truth::True, None)),
-                Some(v) => Self::report(b, ctx, &v),
+                // TRUE without a witness: no PAB refers to this bucket at all.
+                None => out.push((b, Verdict::new(Truth::True, None))),
+                Some(v) => out.push((b, v)),
             }
         }
+        out
     }
-}
 
-impl AwsS3PublicAccessBlock {
-    /// Shared presentation; TRUE without a witness means no matching PAB.
-    pub fn report(b: &Resource, ctx: &mut RuleContext<'_>, v: &Verdict) {
+    fn message(&self, _b: &Resource, v: &Verdict) -> String {
         let flag = v
             .witness
             .as_ref()
             .and_then(|w| w.prov.last())
             .map(|s| s.label.to_string())
             .unwrap_or_default();
-        ctx.report(b, v, |_| {
-            if v.truth == Truth::True && v.witness.is_none() {
-                "no aws_s3_bucket_public_access_block in this module refers to this bucket"
-                    .to_string()
-            } else if flag.is_empty() {
-                "public access block for this bucket may not exist".to_string()
-            } else {
-                format!("public access block for this bucket is not fully enabled ({flag})")
-            }
-        });
+        if v.truth == Truth::True && v.witness.is_none() {
+            "no aws_s3_bucket_public_access_block in this module refers to this bucket".to_string()
+        } else if flag.is_empty() {
+            "public access block for this bucket may not exist".to_string()
+        } else {
+            format!("public access block for this bucket is not fully enabled ({flag})")
+        }
     }
 }

@@ -79,6 +79,14 @@ Exit: `git status` clean, five commits, suite green.
 
 ### Phase 1 — split verdict from finding construction
 
+**Done 2026-10-14** (branch `phase1-verdict-split`). Baseline byte-identical; corpus scan
+0.166–0.169 s before, 0.169–0.170 s after (min of 5, interleaved). Two deviations from the
+sketch below: `DynRule::info` still returns `RuleInfo` by value because the engine already
+caches it once per rule, and `review_regressions.rs` keeps its end-to-end existence-gating
+case alongside the new unit tests in `tests/finding_construction.rs`. The object-safe
+trait hands the engine a `Judgement` (verdict plus wording) rather than two calls, so a
+Python callback that returns several reports per resource fits without a side table.
+
 **Files.** `crates/tf_linter/src/rule.rs`, `rules/*.rs`, `engine.rs`, `crates/tf_rego/src/lib.rs`,
 `crates/tf_rule_ir/src/lib.rs`, `crates/tfscan_py/src/lib.rs` (callback rule), `bench/uncertainty/src/main.rs`.
 

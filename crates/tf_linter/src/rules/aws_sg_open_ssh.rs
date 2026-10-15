@@ -3,7 +3,7 @@ use tf_eval::{Value, Verdict};
 use tf_semantic::Resource;
 
 use super::{field, str_in};
-use crate::rule::{Category, Level, Rule, RuleContext, RuleMeta};
+use crate::rule::{Category, Level, Rule, RuleMeta};
 
 /// SSH (TCP 22) reachable from the whole internet (`0.0.0.0/0` or `::/0`).
 ///
@@ -61,28 +61,19 @@ fn inline_rule(rule: &Value) -> Verdict {
     })
 }
 
-fn message(w: Option<&Value>) -> String {
-    let src = w
-        .and_then(|v| v.to_str())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| "the internet".into());
-    format!("ingress allows SSH (port 22) from {src}")
-}
-
 impl AwsSgOpenSsh {
-    /// Shared native/Rego presentation of the deciding witness.
-    pub fn report(r: &Resource, ctx: &mut RuleContext<'_>, verdict: &Verdict) {
-        ctx.report(r, verdict, message);
+    /// Verdict over an `aws_security_group` `ingress` value: some inline
+    /// rule opens port 22 to the internet. Shared with the Rego equivalence
+    /// tests.
+    pub fn ingress_verdict(ingress: &Value) -> Verdict {
+        exists(ingress, &inline_rule)
     }
 }
 
 impl Rule for AwsSgOpenSsh {
-    fn run_on_resource(&self, r: &Resource, ctx: &mut RuleContext<'_>) {
-        let v = match &*r.ty {
-            "aws_security_group" => match r.value("ingress") {
-                Some(ingress) => exists(&ingress, &inline_rule),
-                None => return,
-            },
+    fn verdict(&self, r: &Resource) -> Option<Verdict> {
+        Some(match &*r.ty {
+            "aws_security_group" => Self::ingress_verdict(&r.value("ingress")?),
             "aws_vpc_security_group_ingress_rule" => {
                 let get = |n: &str| r.value(n).unwrap_or_else(Value::null);
                 let open = open_cidr(&get("cidr_ipv4")).or(open_cidr(&get("cidr_ipv6")));
@@ -103,8 +94,17 @@ impl Rule for AwsSgOpenSsh {
                 ))
                 .and(ingress)
             }
-            _ => return,
-        };
-        Self::report(r, ctx, &v);
+            _ => return None,
+        })
+    }
+
+    fn message(&self, _r: &Resource, v: &Verdict) -> String {
+        let src = v
+            .witness
+            .as_ref()
+            .and_then(|w| w.to_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "the internet".into());
+        format!("ingress allows SSH (port 22) from {src}")
     }
 }
