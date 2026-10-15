@@ -108,24 +108,25 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(rd) = std::fs::read_dir(dir) else {
         return;
     };
-    let mut entries: Vec<PathBuf> = rd.filter_map(|e| e.ok()).map(|e| e.path()).collect();
-    entries.sort();
-    if entries
-        .iter()
-        .any(|p| p.is_file() && p.extension().is_some_and(|x| x == "tf"))
-    {
+    // The entry type comes with the listing; a stat per entry would triple
+    // the syscalls of a recursive scan. A symlink is never followed into
+    // (one pointing at an ancestor would recurse until the path length
+    // limit) but one pointing at a `.tf` file still makes a root.
+    let mut entries: Vec<(PathBuf, std::fs::FileType)> = rd
+        .filter_map(|e| e.ok())
+        .filter_map(|e| Some((e.path(), e.file_type().ok()?)))
+        .collect();
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    if entries.iter().any(|(p, t)| {
+        p.extension().is_some_and(|x| x == "tf") && (t.is_file() || (t.is_symlink() && p.is_file()))
+    }) {
         out.push(dir.to_path_buf());
     }
-    for p in entries {
+    for (p, t) in entries {
         let hidden = p
             .file_name()
             .is_some_and(|n| n.to_string_lossy().starts_with('.'));
-        // Don't follow directory symlinks: one pointing at an ancestor
-        // would recurse until the path length limit.
-        let is_link = p
-            .symlink_metadata()
-            .is_ok_and(|m| m.file_type().is_symlink());
-        if p.is_dir() && !hidden && !is_link {
+        if t.is_dir() && !hidden {
             walk(&p, out);
         }
     }
@@ -179,10 +180,18 @@ pub fn scan_with(
             })
             .collect()
     };
-    // Deep reference chains recurse; give workers generous stacks.
+    // Deep reference chains recurse; give workers generous stacks. No more
+    // workers than roots: a one-root scan (an editor buffer, a patch) must
+    // not spawn a thread per CPU to use one of them.
+    let threads = opts.threads.unwrap_or_else(|| {
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
+            .min(roots.len().max(1))
+    });
     let pool = rayon::ThreadPoolBuilder::new()
         .stack_size(64 << 20)
-        .num_threads(opts.threads.unwrap_or(0))
+        .num_threads(threads)
         .build()
         .expect("thread pool");
     let results = pool.install(work);

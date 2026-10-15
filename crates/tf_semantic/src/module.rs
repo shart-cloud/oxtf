@@ -157,8 +157,9 @@ impl<'a> ModuleDef<'a> {
 pub fn module_files(files: &FileTable, dir: &Path) -> Vec<PathBuf> {
     files
         .read_dir(dir)
-        .into_iter()
+        .iter()
         .filter(|p| p.extension().is_some_and(|x| x == "tf"))
+        .cloned()
         .collect()
 }
 
@@ -170,11 +171,17 @@ pub fn auto_tfvars(files: &FileTable, dir: &Path) -> Vec<PathBuf> {
     if files.is_file(&t) {
         v.push(t);
     }
-    v.extend(files.read_dir(dir).into_iter().filter(|p| {
-        p.file_name()
-            .and_then(|n| n.to_str())
-            .is_some_and(|n| n.ends_with(".auto.tfvars"))
-    }));
+    v.extend(
+        files
+            .read_dir(dir)
+            .iter()
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.ends_with(".auto.tfvars"))
+            })
+            .cloned(),
+    );
     v
 }
 
