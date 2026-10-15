@@ -157,13 +157,14 @@ impl Resource {
             "{} {name} not set: provider default {} (defaults overlay; {note})",
             self.address, v
         );
-        Some(v.with_prov(Prov::single(
-            Step::new(StepKind::Default, self.span, label)
-                .with_resource(self.base_address.clone())
-                .with_attribute(name),
-        )))
+        Some(
+            v.with_prov(Prov::single(
+                Step::new(StepKind::Default, self.span, label)
+                    .with_resource(self.base_address.clone())
+                    .with_attribute(name),
+            )),
+        )
     }
-
 }
 
 /// `tf_schema` typed views work over the evaluated model:

@@ -321,7 +321,11 @@ impl ScanRecord {
     pub fn from_result(r: &ScanResult) -> ScanRecord {
         ScanRecord {
             schema: SCHEMA,
-            findings: r.findings.iter().map(|f| finding_record(&r.files, f)).collect(),
+            findings: r
+                .findings
+                .iter()
+                .map(|f| finding_record(&r.files, f))
+                .collect(),
             diagnostics: r
                 .diagnostics
                 .iter()
@@ -339,11 +343,32 @@ mod tests {
 
     #[test]
     fn fingerprint_is_stable_and_ignores_presentation() {
-        let a = fingerprint("aws-rds-unencrypted", "module.m.aws_db_instance.db", Some("storage_encrypted"));
-        assert_eq!(a, fingerprint("aws-rds-unencrypted", "module.m.aws_db_instance.db", Some("storage_encrypted")));
+        let a = fingerprint(
+            "aws-rds-unencrypted",
+            "module.m.aws_db_instance.db",
+            Some("storage_encrypted"),
+        );
+        assert_eq!(
+            a,
+            fingerprint(
+                "aws-rds-unencrypted",
+                "module.m.aws_db_instance.db",
+                Some("storage_encrypted")
+            )
+        );
         assert_eq!(a.len(), 16);
-        assert_ne!(a, fingerprint("aws-rds-unencrypted", "module.m.aws_db_instance.db", None));
-        assert_ne!(a, fingerprint("other", "module.m.aws_db_instance.db", Some("storage_encrypted")));
+        assert_ne!(
+            a,
+            fingerprint("aws-rds-unencrypted", "module.m.aws_db_instance.db", None)
+        );
+        assert_ne!(
+            a,
+            fingerprint(
+                "other",
+                "module.m.aws_db_instance.db",
+                Some("storage_encrypted")
+            )
+        );
         // Pinned: a change here is a change in every backlog's identities.
         assert_eq!(a, "146d70bdfd611a35");
     }
@@ -351,7 +376,10 @@ mod tests {
     #[test]
     fn value_records_carry_known_json_and_a_display() {
         let v = value_record(&Value::bool(false));
-        assert_eq!((v.kind.as_str(), v.value, v.display.as_str()), ("known", Some(Json::Bool(false)), "false"));
+        assert_eq!(
+            (v.kind.as_str(), v.value, v.display.as_str()),
+            ("known", Some(Json::Bool(false)), "false")
+        );
         let t = value_record(&Value::tainted("x"));
         assert_eq!((t.kind.as_str(), t.value), ("tainted", None));
         let j = value_record(&Value::json(Value::object(Default::default())));

@@ -7,7 +7,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use rayon::prelude::*;
-use tf_semantic::{Analysis, AnalyzeOptions, Diagnostic, FileTable, analyze_module};
+use tf_semantic::{
+    Analysis, AnalyzeOptions, Diagnostic, FileTable, ModuleStore, analyze_module_shared,
+};
 
 use crate::engine::Linter;
 use crate::record::RuleError;
@@ -152,6 +154,9 @@ pub fn scan_with(
 ) -> (ScanResult, Vec<Analysis>) {
     let start = Instant::now();
     let files = Arc::new(FileTable::with_overlay(opts.overlay.iter().cloned()));
+    // Parsed modules shared by every root: a recursive scan reaches most
+    // module directories from several roots.
+    let store = ModuleStore::new();
     let aopts = AnalyzeOptions {
         var_files: opts.var_files.clone(),
         ..AnalyzeOptions::default()
@@ -168,12 +173,16 @@ pub fn scan_with(
         roots
             .par_iter()
             .map(|r| {
-                let a = analyze_module(r, &aopts, &files);
+                let a = analyze_module_shared(r, &aopts, &files, &store);
                 let out = linter.run(&a);
                 RootResult {
                     module_instances: a.modules.len(),
                     resources: a.stats.resources,
-                    diagnostics: if opts.keep_models { Vec::new() } else { a.diagnostics.clone() },
+                    diagnostics: if opts.keep_models {
+                        Vec::new()
+                    } else {
+                        a.diagnostics.clone()
+                    },
                     out,
                     analysis: opts.keep_models.then_some(a),
                 }

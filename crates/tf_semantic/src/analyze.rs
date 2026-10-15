@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use tf_allocator::Allocator;
 use tf_ast::{Attribute, Body, Expression, TraversalOperator};
 use tf_eval::{
     Evaluator, Kind, Known, Map, NoResolver, Origin, Resolver, Scope, Step, StepKind, Truth, Value,
@@ -18,10 +17,10 @@ use tf_span::{FileId, FileSpan, Span};
 use crate::address::{Address, InstanceKey};
 use crate::model::{self, AnalysisStats, Attr, DiagSeverity, Diagnostic};
 use crate::module::{
-    Mode, ModuleDef, ModuleSource, ResourceDecl, SymbolRef, auto_tfvars, load_module, module_files,
-    parse_file,
+    Mode, ModuleDef, ModuleSource, ResourceDecl, SymbolRef, auto_tfvars, module_files,
 };
 use crate::source::{FileTable, SourceFile, normalize};
+use crate::store::ModuleStore;
 
 /// Options for [`analyze_module`].
 #[derive(Clone, Debug)]
@@ -74,9 +73,20 @@ pub fn analyze_module_observed(
     files: &FileTable,
     observer: Option<Observer<'_>>,
 ) -> model::Analysis {
-    let alloc = Allocator::new();
-    let an = Analyzer::new(&alloc, files, opts, observer, dir);
+    let store = ModuleStore::new();
+    let an = Analyzer::new(&store, files, opts, observer, dir);
     an.run()
+}
+
+/// Analyse `dir` with parsed modules taken from (and added to) `store`, so
+/// a scan of many roots parses each module directory once.
+pub fn analyze_module_shared(
+    dir: &Path,
+    opts: &AnalyzeOptions,
+    files: &FileTable,
+    store: &ModuleStore,
+) -> model::Analysis {
+    Analyzer::new(store, files, opts, None, dir).run()
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +113,7 @@ type ResAttrKey = (usize, Option<Arc<str>>, String);
 type Expansion = (Vec<InstBind>, Option<Value>, Option<Value>);
 
 struct Instance<'a> {
-    def: Rc<ModuleDef<'a>>,
+    def: &'a ModuleDef<'a>,
     address: Arc<str>,
     parent: Option<(usize, usize)>,
     binds: Vec<(&'static str, Value)>,
@@ -134,11 +144,13 @@ struct TfvarsBinding<'a> {
 }
 
 struct Analyzer<'a, 'o> {
-    alloc: &'a Allocator,
+    store: &'a ModuleStore,
     files: &'a FileTable,
     opts: &'a AnalyzeOptions,
     root_dir: PathBuf,
-    defs: RefCell<HashMap<PathBuf, Rc<ModuleDef<'a>>>>,
+    /// Definitions this root has taken from the store, by directory; the
+    /// store's lookup is a lock and a hash, this one is a hash.
+    defs: RefCell<HashMap<PathBuf, &'a ModuleDef<'a>>>,
     insts: RefCell<Vec<Rc<Instance<'a>>>>,
     tfvars: Vec<TfvarsBinding<'a>>,
     diags: RefCell<Vec<Diagnostic>>,
@@ -172,7 +184,7 @@ fn snippet(text: &str, span: Span, max: usize) -> String {
 
 impl<'a, 'o> Analyzer<'a, 'o> {
     fn new(
-        alloc: &'a Allocator,
+        store: &'a ModuleStore,
         files: &'a FileTable,
         opts: &'a AnalyzeOptions,
         observer: Option<Observer<'o>>,
@@ -186,17 +198,16 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         for p in var_files {
             match files.load(&p) {
                 Ok(sf) => {
-                    let mut errs = Vec::new();
-                    let f = parse_file(alloc, &sf, &mut errs);
-                    for (at, m) in errs {
+                    let parsed = store.file(&sf);
+                    for (at, m) in &parsed.errors {
                         diags.push(Diagnostic {
                             severity: DiagSeverity::Error,
                             code: "parse-error",
-                            message: m,
-                            at: Some(at),
+                            message: m.clone(),
+                            at: Some(*at),
                         });
                     }
-                    for a in f.body.attributes() {
+                    for a in parsed.file.body.attributes() {
                         tfvars.push(TfvarsBinding {
                             name: a.key.name.as_str(),
                             attr: a,
@@ -213,7 +224,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
             }
         }
         Analyzer {
-            alloc,
+            store,
             files,
             opts,
             root_dir,
@@ -242,15 +253,15 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         });
     }
 
-    fn load_def(&self, dir: &Path) -> Rc<ModuleDef<'a>> {
+    fn load_def(&self, dir: &Path) -> &'a ModuleDef<'a> {
         if let Some(d) = self.defs.borrow().get(dir) {
-            return d.clone();
+            return d;
         }
-        let d = Rc::new(load_module(self.alloc, self.files, dir));
+        let d = self.store.module(self.files, dir);
         for (at, m) in &d.parse_errors {
             self.diag(DiagSeverity::Error, "parse-error", m.clone(), Some(*at));
         }
-        self.defs.borrow_mut().insert(dir.to_path_buf(), d.clone());
+        self.defs.borrow_mut().insert(dir.to_path_buf(), d);
         d
     }
 
@@ -260,7 +271,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
 
     fn new_instance(
         &self,
-        def: Rc<ModuleDef<'a>>,
+        def: &'a ModuleDef<'a>,
         address: Arc<str>,
         parent: Option<(usize, usize)>,
         bind: InstBind,
@@ -693,13 +704,8 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                         existence: b.existence.min(inst.existence),
                         ..b
                     };
-                    let id = self.new_instance(
-                        def.clone(),
-                        addr.into(),
-                        Some((inst_id, ci)),
-                        b,
-                        anc.clone(),
-                    );
+                    let id =
+                        self.new_instance(def, addr.into(), Some((inst_id, ci)), b, anc.clone());
                     out.push((key, id));
                 }
             }
@@ -1078,14 +1084,16 @@ impl<'a, 'o> Analyzer<'a, 'o> {
 
     fn build_module(&self, inst_id: usize) -> model::Module {
         let inst = self.inst(inst_id);
-        let def = inst.def.clone();
+        let def = inst.def;
         let mut resources = Vec::new();
         for (ri, decl) in def.resources.iter().enumerate() {
             let insts = self.res_instances(inst_id, ri);
             let decl_id = Address::new(inst.address.clone(), decl.mode, decl.ty, decl.name, None);
             let base: Arc<str> = decl_id.base_string().into();
             for b in insts.0.iter() {
-                let id = decl_id.clone().with_key(b.key.clone().map(InstanceKey::Key));
+                let id = decl_id
+                    .clone()
+                    .with_key(b.key.clone().map(InstanceKey::Key));
                 let address: Arc<str> = id.to_string().into();
                 let ctx = BodyCtx {
                     inst: inst_id,

@@ -13,6 +13,7 @@ tf_ast.workspace = true
 tf_parser.workspace = true
 tf_schema.workspace = true
 tf_eval.workspace = true
+elsa = "1.11.2"
 
 
 [[example]]
