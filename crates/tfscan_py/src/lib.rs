@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex};
 use pyo3::exceptions::{PyKeyError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
-use tf_eval::{Kind, Known, Truth, Verdict};
+use tf_eval::{Kind, Known, Truth};
 use tf_linter::{Category, DynRule, Judgement, Level, Linter, RuleInfo, ScanOptions};
 use tf_semantic::{Analysis, FileTable, Mode, Module};
 use tf_span::FileSpan;
@@ -307,7 +307,7 @@ impl Value {
     /// Field of an object (missing → null), lifted over OneOf; Unknown /
     /// Tainted receivers return themselves.
     fn get(&self, name: &str) -> Value {
-        self.wrap(tf_rule_ir::field(&self.v, name))
+        self.wrap(self.v.field_or_null(name))
     }
     /// A Known `null`.
     #[staticmethod]
@@ -506,7 +506,7 @@ impl Finding {
     fn level(&self) -> &'static str {
         self.f().level.as_str()
     }
-    /// `"definite"` or `"conditional"`.
+    /// `"definite"`, `"conditional"` or `"indeterminate"` (foreign policies only).
     #[getter]
     fn severity(&self) -> &'static str {
         self.f().severity.as_str()
@@ -615,6 +615,7 @@ impl ScanResult {
         d.set_item("findings", s.findings)?;
         d.set_item("definite", s.definite)?;
         d.set_item("conditional", s.conditional)?;
+        d.set_item("indeterminate", s.indeterminate)?;
         d.set_item("elapsed_s", s.elapsed.as_secs_f64())?;
         d.set_item(
             "findings_by_rule",
@@ -796,14 +797,12 @@ impl DynRule for CallbackRule {
             Ok(reports) => reports
                 .into_iter()
                 .map(|rep| Judgement {
-                    verdict: Verdict::new(
-                        if rep.conditional {
-                            Truth::Tainted
-                        } else {
-                            Truth::True
-                        },
-                        rep.witness,
-                    ),
+                    severity: if rep.conditional {
+                        tf_linter::Severity::Conditional
+                    } else {
+                        tf_linter::Severity::Definite
+                    },
+                    witness: rep.witness,
                     message: rep.message,
                 })
                 .collect(),
@@ -837,6 +836,7 @@ fn category_of(s: &str) -> PyResult<Category> {
         "storage" => Category::Storage,
         "iam" => Category::Iam,
         "encryption" => Category::Encryption,
+        "other" => Category::Other,
         _ => return Err(PyValueError::new_err(format!("unknown category {s:?}"))),
     })
 }

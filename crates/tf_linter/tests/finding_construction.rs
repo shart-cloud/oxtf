@@ -152,6 +152,34 @@ fn tainted_existence_downgrades_and_says_so() {
 }
 
 #[test]
+fn caller_decided_severity_is_gated_and_downgraded_the_same_way() {
+    let build = |existence, severity| {
+        Finding::with_severity(&info(), &resource(existence), severity, None, "msg", Path::new("/r"))
+    };
+    assert_eq!(
+        build(Truth::True, Severity::Indeterminate).unwrap().severity,
+        Severity::Indeterminate
+    );
+    // Tainted existence never makes a finding more certain.
+    assert_eq!(
+        build(Truth::Tainted, Severity::Indeterminate).unwrap().severity,
+        Severity::Indeterminate
+    );
+    assert_eq!(
+        build(Truth::Tainted, Severity::Conditional).unwrap().message,
+        "msg (depends on an unconstrained variable)"
+    );
+    assert_eq!(
+        build(Truth::Tainted, Severity::Definite).unwrap().message,
+        "msg (resource exists depending on an unconstrained variable)"
+    );
+    assert!(build(Truth::Unknown, Severity::Indeterminate).is_none());
+    assert!(build(Truth::False, Severity::Definite).is_none());
+    // Indeterminate wording is the adapter's; no suffix is added.
+    assert_eq!(build(Truth::True, Severity::Indeterminate).unwrap().message, "msg");
+}
+
+#[test]
 fn definite_message_is_untouched() {
     let f = build(Truth::True, &Verdict::new(Truth::True, Some(Value::bool(false)))).unwrap();
     assert_eq!(f.severity, Severity::Definite);

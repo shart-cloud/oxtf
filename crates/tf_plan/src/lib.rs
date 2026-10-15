@@ -153,6 +153,7 @@ pub fn scan_plan(
         match f.severity {
             Severity::Definite => stats.definite += 1,
             Severity::Conditional => stats.conditional += 1,
+            Severity::Indeterminate => stats.indeterminate += 1,
         }
     }
     stats.files = files.len();

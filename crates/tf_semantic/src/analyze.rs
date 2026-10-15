@@ -549,11 +549,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                     } else if ns.iter().all(|n| n.is_some_and(|n| n >= 1.0)) {
                         vec![abstract_count(Truth::True)]
                     } else {
-                        vec![abstract_count(if o.tainted {
-                            Truth::Tainted
-                        } else {
-                            Truth::Unknown
-                        })]
+                        vec![abstract_count(tf_eval::truth::uncertainty(&v))]
                     }
                 }
             };
@@ -593,10 +589,10 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                     let u = Value::other("each (for_each too large to expand)");
                     vec![abstract_each(obj2(u.clone(), u), Truth::True)]
                 }
-                None => match &v.kind {
-                    Kind::Known(Known::Null) => vec![],
-                    Kind::Tainted(_) => vec![abstract_each(v.clone(), Truth::Tainted)],
-                    Kind::OneOf(o) if o.tainted => vec![abstract_each(
+                None => match (&v.kind, tf_eval::truth::uncertainty(&v)) {
+                    (Kind::Known(Known::Null), _) => vec![],
+                    (Kind::Tainted(_), _) => vec![abstract_each(v.clone(), Truth::Tainted)],
+                    (_, Truth::Tainted) => vec![abstract_each(
                         Value::tainted("(conditional for_each)").with_prov(v.prov.clone()),
                         Truth::Tainted,
                     )],
@@ -1323,9 +1319,9 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                         if other.is_none() && fv.is_null() {
                             continue;
                         }
-                        let (it, ex) = match &fv.kind {
-                            Kind::Tainted(_) => (fv.clone(), Truth::Tainted),
-                            Kind::OneOf(o) if o.tainted => (
+                        let (it, ex) = match (&fv.kind, tf_eval::truth::uncertainty(&fv)) {
+                            (Kind::Tainted(_), _) => (fv.clone(), Truth::Tainted),
+                            (_, Truth::Tainted) => (
                                 Value::tainted("(conditional for_each)").with_prov(fv.prov.clone()),
                                 Truth::Tainted,
                             ),

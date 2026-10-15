@@ -2,7 +2,7 @@ use tf_eval::truth::{self, exists, test};
 use tf_eval::{Value, Verdict};
 use tf_semantic::Resource;
 
-use super::{field, str_in};
+use super::str_in;
 use crate::rule::{Category, Level, Rule, RuleMeta};
 
 /// SSH (TCP 22) reachable from the whole internet (`0.0.0.0/0` or `::/0`).
@@ -52,28 +52,19 @@ fn reaches_22(protocol: &Value, from: &Value, to: &Value) -> Verdict {
 
 fn inline_rule(rule: &Value) -> Verdict {
     truth::map(rule, &|r| {
-        let open = open_list(&field(r, "cidr_blocks")).or(open_list(&field(r, "ipv6_cidr_blocks")));
+        let open = open_list(&r.field_or_null("cidr_blocks")).or(open_list(&r.field_or_null("ipv6_cidr_blocks")));
         open.and(reaches_22(
-            &field(r, "protocol"),
-            &field(r, "from_port"),
-            &field(r, "to_port"),
+            &r.field_or_null("protocol"),
+            &r.field_or_null("from_port"),
+            &r.field_or_null("to_port"),
         ))
     })
-}
-
-impl AwsSgOpenSsh {
-    /// Verdict over an `aws_security_group` `ingress` value: some inline
-    /// rule opens port 22 to the internet. Shared with the Rego equivalence
-    /// tests.
-    pub fn ingress_verdict(ingress: &Value) -> Verdict {
-        exists(ingress, &inline_rule)
-    }
 }
 
 impl Rule for AwsSgOpenSsh {
     fn verdict(&self, r: &Resource) -> Option<Verdict> {
         Some(match &*r.ty {
-            "aws_security_group" => Self::ingress_verdict(&r.value("ingress")?),
+            "aws_security_group" => exists(&r.value("ingress")?, &inline_rule),
             "aws_vpc_security_group_ingress_rule" => {
                 let get = |n: &str| r.value(n).unwrap_or_else(Value::null);
                 let open = open_cidr(&get("cidr_ipv4")).or(open_cidr(&get("cidr_ipv6")));

@@ -1,0 +1,3 @@
+# count is a OneOf with a Tainted alternative: the instance exists
+# depending on var.replicas, so the definite violation is conditional.
+aws-rds-unencrypted aws_db_instance.db conditional

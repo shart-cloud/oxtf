@@ -358,6 +358,22 @@ impl Value {
         }
     }
 
+    /// Field `name` of an object, where a missing field of a Known object
+    /// is null (attributes not written in a block are unset). Lifts over
+    /// `OneOf`; Unknown and Tainted receivers stay themselves. The lenient
+    /// accessor rules use; [`Value::get_attr`] is the strict one the
+    /// evaluator uses.
+    pub fn field_or_null(&self, name: &str) -> Value {
+        crate::eval::lift1(self, &|v| match v.as_known() {
+            Some(Known::Object(m)) => m
+                .get(name)
+                .map(|x| x.child_of(v))
+                .unwrap_or_else(Value::null),
+            Some(Known::Null) => Value::null(),
+            _ => v.get_attr(name),
+        })
+    }
+
     /// `self[key]`.
     pub fn index(&self, key: &Value) -> Value {
         match (&self.kind, &key.kind) {

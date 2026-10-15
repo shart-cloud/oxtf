@@ -221,6 +221,12 @@ must remain distinguishable until their uncertainty behavior is validated.
 The experiment inherits the native lattice's approximations; it is a compatibility
 check, not a proof of logical soundness for all unconstrained values.
 
+> **Superseded 2026-10-14.** The slices below re-implemented the truth lattice inside
+> Rego. `ARCHITECTURE_PLAN.md` Phase 2 replaced them: Rego never sees an abstract value,
+> the RDS and GCS rules run as single-subject leaf policies behind `--rego-native`, and
+> foreign policies run unchanged over a Known-only projection behind `--policy`. The
+> `--rego-rds` flag and the SSH, IAM and S3 ports are gone.
+
 ### First native Rego slice (implemented)
 
 `oxtf scan PATH --rego-rds` (also supported with `--plan`) replaces only
