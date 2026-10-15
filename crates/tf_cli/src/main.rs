@@ -15,6 +15,18 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use tf_linter::Linter;
+
+/// The scan allocates many short-lived small objects from worker threads;
+/// mimalloc cut single-thread CPU by about a quarter against glibc malloc,
+/// which also grew worker arenas with thousands of mprotect calls. Its
+/// worker heaps keep freed memory committed until exit, so a multi-threaded
+/// corpus scan peaks at ~190 MB where glibc peaked at ~60 MB; running with
+/// `MIMALLOC_PURGE_DELAY=0 MIMALLOC_ARENA_EAGER_COMMIT=0` brings that to
+/// ~50 MB at the same speed. (Setting those through `mi_option_set` at the
+/// start of `main` does not have the same effect: the first arena is
+/// already reserved by then.)
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 use tf_linter::render::{location, render_finding, result_json};
 use tf_scan::{Catalog, ScanInput, ScanRequest};
 
