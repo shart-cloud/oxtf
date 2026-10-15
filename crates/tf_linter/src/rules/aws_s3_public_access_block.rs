@@ -1,9 +1,9 @@
-use tf_eval::{Truth, Verdict};
+use tf_eval::{StepKind, Truth, Verdict};
 use tf_semantic::references::{ReferenceMatch as Match, match_resource_reference};
-use tf_semantic::{Module, Resource};
+use tf_semantic::{Address, Module, Resource};
 
 use super::not_true;
-use crate::rule::{Category, Level, Rule, RuleMeta};
+use crate::rule::{Category, FixAction, FixHint, Level, Rule, RuleMeta};
 
 /// Every `aws_s3_bucket` needs an `aws_s3_bucket_public_access_block` in
 /// the same module instance whose `bucket` refers to it, with all four
@@ -84,6 +84,21 @@ impl Rule for AwsS3PublicAccessBlock {
             }
         }
         out
+    }
+
+    /// Set the deciding flag to true on the public-access block that carries
+    /// it. No hint when no block refers to the bucket: adding a resource is
+    /// not a mechanical edit.
+    fn fix_hint(&self, _b: &Resource, v: &Verdict) -> Option<FixHint> {
+        let step = v.witness.as_ref()?.prov.last()?.clone();
+        let resource = Address::parse(step.resource.as_deref()?).ok()?;
+        Some(FixHint {
+            resource,
+            attribute: step.attribute.as_deref()?.to_string(),
+            action: FixAction::Set,
+            value: serde_json::Value::Bool(true),
+            site: (step.kind != StepKind::Default).then_some(step.at),
+        })
     }
 
     fn message(&self, _b: &Resource, v: &Verdict) -> String {

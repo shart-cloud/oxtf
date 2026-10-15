@@ -16,11 +16,14 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
+
 use tf_eval::{Kind, Step, Truth, Verdict};
 use tf_semantic::{Module, Resource};
 use tf_span::FileSpan;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Category {
     Network,
     Storage,
@@ -43,7 +46,8 @@ impl Category {
 }
 
 /// How bad a rule's finding is (rule metadata, independent of certainty).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Level {
     Low,
     Medium,
@@ -63,7 +67,8 @@ impl Level {
 }
 
 /// Certainty of a finding, ordered from most to least certain.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Severity {
     /// Insecure as written (for the configuration with its defaults and
     /// tfvars).

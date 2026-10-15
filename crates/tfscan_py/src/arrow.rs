@@ -75,12 +75,16 @@ fn step_fields() -> Fields {
         utf8("file", false),
         Field::new("line", DataType::UInt32, false),
         Field::new("column", DataType::UInt32, false),
+        utf8("resource", true),
+        utf8("attribute", true),
     ])
 }
 
 pub fn findings_schema() -> Schema {
     Schema::new(vec![
+        utf8("fingerprint", false),
         utf8("rule", false),
+        utf8("category", false),
         utf8("level", false),
         utf8("severity", false),
         utf8("address", false),
@@ -88,6 +92,7 @@ pub fn findings_schema() -> Schema {
         utf8("module", false),
         utf8("message", false),
         utf8("root", false),
+        utf8("attribute", true),
         utf8("file", false),
         Field::new("line", DataType::UInt32, false),
         Field::new("column", DataType::UInt32, false),
@@ -100,13 +105,17 @@ pub fn findings_schema() -> Schema {
             ))),
             false,
         ),
+        // The complete finding record as JSON, for fields with no column.
+        utf8("record", false),
     ])
 }
 
 pub fn findings_batch(d: &ScanData) -> Result<RecordBatch, ArrowError> {
     let files = d.files();
     let fs = &d.result.findings;
-    let mut cols: Vec<StringBuilder> = (0..9).map(|_| StringBuilder::new()).collect();
+    let mut cols: Vec<StringBuilder> = (0..11).map(|_| StringBuilder::new()).collect();
+    let mut attribute = StringBuilder::new();
+    let mut record = StringBuilder::new();
     let mut line = UInt32Builder::with_capacity(fs.len());
     let mut column = UInt32Builder::with_capacity(fs.len());
     let step_builders: Vec<Box<dyn arrow_array::builder::ArrayBuilder>> = vec![
@@ -115,13 +124,18 @@ pub fn findings_batch(d: &ScanData) -> Result<RecordBatch, ArrowError> {
         Box::new(StringBuilder::new()),
         Box::new(UInt32Builder::new()),
         Box::new(UInt32Builder::new()),
+        Box::new(StringBuilder::new()),
+        Box::new(StringBuilder::new()),
     ];
     let mut prov = ListBuilder::new(StructBuilder::new(step_fields(), step_builders));
     for f in fs {
         let (file, l, c) = loc(files, f.primary);
         let root = f.root.display().to_string();
-        let vals: [&str; 9] = [
+        let fingerprint = tf_linter::record::fingerprint(&f.rule, &f.address, f.attribute.as_deref());
+        let vals: [&str; 11] = [
+            &fingerprint,
             &f.rule,
+            f.category.as_str(),
             f.level.as_str(),
             f.severity.as_str(),
             &f.address,
@@ -134,6 +148,8 @@ pub fn findings_batch(d: &ScanData) -> Result<RecordBatch, ArrowError> {
         for (b, v) in cols.iter_mut().zip(vals) {
             b.append_value(v);
         }
+        attribute.append_option(f.attribute.as_deref());
+        record.append_value(tf_linter::render::finding_json(files, f).to_string());
         line.append_value(l);
         column.append_value(c);
         let sb = prov.values();
@@ -154,6 +170,12 @@ pub fn findings_batch(d: &ScanData) -> Result<RecordBatch, ArrowError> {
             sb.field_builder::<UInt32Builder>(4)
                 .unwrap()
                 .append_value(sc);
+            sb.field_builder::<StringBuilder>(5)
+                .unwrap()
+                .append_option(s.resource.as_deref());
+            sb.field_builder::<StringBuilder>(6)
+                .unwrap()
+                .append_option(s.attribute.as_deref());
             sb.append(true);
         }
         prov.append(true);
@@ -162,9 +184,14 @@ pub fn findings_batch(d: &ScanData) -> Result<RecordBatch, ArrowError> {
         .iter_mut()
         .map(|b| Arc::new(b.finish()) as ArrayRef)
         .collect();
+    // Column order: 10 strings up to root, then attribute, file, line, column, provenance, record.
+    let file = arrays.pop().unwrap();
+    arrays.push(Arc::new(attribute.finish()));
+    arrays.push(file);
     arrays.push(Arc::new(line.finish()));
     arrays.push(Arc::new(column.finish()));
     arrays.push(Arc::new(prov.finish()));
+    arrays.push(Arc::new(record.finish()));
     // The list's item field from ListBuilder is nullable "item"; match it.
     RecordBatch::try_new(Arc::new(findings_schema()), arrays)
 }

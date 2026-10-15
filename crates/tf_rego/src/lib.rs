@@ -158,6 +158,12 @@ impl Seed {
             Seed::GcpStorage => GcpStorageUniformAccess.message(r, v),
         }
     }
+    fn fix_hint(self, r: &Resource, v: &Verdict) -> Option<tf_linter::FixHint> {
+        match self {
+            Seed::Rds => AwsRdsUnencrypted.fix_hint(r, v),
+            Seed::GcpStorage => GcpStorageUniformAccess.fix_hint(r, v),
+        }
+    }
     fn source(self) -> (&'static str, &'static str) {
         match self {
             Seed::Rds => ("oxtf.rds", include_str!("rds.rego")),
@@ -290,7 +296,11 @@ impl DynRule for NativePolicy {
     fn judge_resource(&self, r: &Resource) -> Vec<Judgement> {
         match self.verdict(r) {
             Ok(v) => v
-                .and_then(|v| Judgement::from_verdict(v, |v| self.seed.message(r, v)))
+                .and_then(|v| {
+                    let fix_hint = self.seed.fix_hint(r, &v);
+                    Judgement::from_verdict(v, |v| self.seed.message(r, v))
+                        .map(|j| Judgement { fix_hint, ..j })
+                })
                 .into_iter()
                 .collect(),
             Err(e) => {

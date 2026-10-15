@@ -1,3 +1,5 @@
+import json
+
 import pyarrow as pa
 import pytest
 
@@ -5,8 +7,9 @@ import tfscan
 from conftest import FIXTURES, SSH_FIXTURES
 
 FINDING_COLUMNS = [
-    "rule", "level", "severity", "address", "resource_type", "module", "message",
-    "root", "file", "line", "column", "provenance",
+    "fingerprint", "rule", "category", "level", "severity", "address", "resource_type",
+    "module", "message", "root", "attribute", "file", "line", "column", "provenance",
+    "record",
 ]
 RESOURCE_COLUMNS = [
     "root", "module", "address", "base_address", "mode", "type", "name", "key",
@@ -23,7 +26,8 @@ def test_findings_table():
     assert t.schema.field("line").type == pa.uint32()
     prov = t.schema.field("provenance").type
     assert pa.types.is_list(prov)
-    assert [f.name for f in prov.value_type] == ["kind", "label", "file", "line", "column"]
+    assert [f.name for f in prov.value_type] == [
+        "kind", "label", "file", "line", "column", "resource", "attribute"]
     rows = t.to_pylist()
     by_addr = {(x["address"], x["root"]): x for x in rows}
     for f in r.findings:
@@ -31,6 +35,9 @@ def test_findings_table():
         assert (x["rule"], x["severity"], x["message"], x["file"], x["line"]) == (
             f.rule, f.severity, f.message, f.file, f.line)
         assert [p["label"] for p in x["provenance"]] == [p["label"] for p in f.provenance]
+        rec = json.loads(x["record"])
+        assert rec["fingerprint"] == x["fingerprint"] == f.fingerprint
+        assert rec == f.to_dict()
 
 
 def test_resources_table():

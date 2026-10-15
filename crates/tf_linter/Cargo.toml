@@ -13,6 +13,7 @@ tf_eval.workspace = true
 tf_semantic.workspace = true
 rayon.workspace = true
 miette = { workspace = true, features = ["fancy-no-backtrace"] }
+serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]

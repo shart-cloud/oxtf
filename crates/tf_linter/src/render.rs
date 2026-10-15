@@ -7,7 +7,7 @@ use std::sync::Arc;
 use miette::{
     Diagnostic, GraphicalReportHandler, GraphicalTheme, LabeledSpan, NamedSource, SourceSpan,
 };
-use serde_json::{Value as J, json};
+use serde_json::Value as J;
 use tf_semantic::FileTable;
 use tf_span::FileSpan;
 
@@ -176,53 +176,12 @@ pub fn render_finding(files: &FileTable, f: &Finding, color: bool) -> String {
     out
 }
 
+/// One finding as JSON: the finding record (`docs/FINDING_SCHEMA.md`).
 pub fn finding_json(files: &FileTable, f: &Finding) -> J {
-    let loc = |at: FileSpan| {
-        let sf = files.get(at.file);
-        let (line, col) = sf.line_col(at.span.start);
-        json!({ "file": sf.path.display().to_string(), "line": line, "column": col,
-                "start": at.span.start, "end": at.span.end })
-    };
-    json!({
-        "rule": &*f.rule,
-        "level": f.level.as_str(),
-        "severity": f.severity.as_str(),
-        "address": &*f.address,
-        "resource_type": &*f.resource_type,
-        "module": &*f.module,
-        "root": f.root.display().to_string(),
-        "message": f.message,
-        "location": loc(f.primary),
-        "provenance": f.provenance.iter().map(|s| {
-            let mut l = loc(s.at);
-            l["kind"] = J::from(s.kind.as_str());
-            l["label"] = J::from(&*s.label);
-            l
-        }).collect::<Vec<_>>(),
-    })
+    serde_json::to_value(crate::record::finding_record(files, f)).expect("finding record is JSON")
 }
 
 /// The whole scan result as JSON.
 pub fn result_json(r: &ScanResult) -> J {
-    json!({
-        "findings": r.findings.iter().map(|f| finding_json(&r.files, f)).collect::<Vec<_>>(),
-        "diagnostics": r.diagnostics.iter().map(|d| json!({
-            "severity": format!("{:?}", d.severity).to_lowercase(),
-            "code": d.code,
-            "message": d.message,
-            "location": d.at.map(|a| location(&r.files, a)),
-        })).collect::<Vec<_>>(),
-        "stats": {
-            "roots": r.stats.roots,
-            "module_instances": r.stats.module_instances,
-            "files": r.stats.files,
-            "resources": r.stats.resources,
-            "findings": r.stats.findings,
-            "definite": r.stats.definite,
-            "conditional": r.stats.conditional,
-            "indeterminate": r.stats.indeterminate,
-            "findings_by_rule": r.stats.findings_by_rule,
-            "elapsed_ms": r.stats.elapsed.as_secs_f64() * 1000.0,
-        }
-    })
+    serde_json::to_value(crate::record::ScanRecord::from_result(r)).expect("scan record is JSON")
 }

@@ -112,7 +112,7 @@ fn scan_rule_file() {
             .iter()
             .map(|f| {
                 (
-                    f["address"].clone(),
+                    f["resource"]["address"].clone(),
                     f["severity"].clone(),
                     f["message"].clone(),
                 )
@@ -151,7 +151,7 @@ fn scan_plan_maps_to_source() {
     assert!(out.status.success());
     let j: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     let f = &j["findings"][0];
-    assert_eq!(f["address"], "aws_s3_bucket.data");
+    assert_eq!(f["resource"]["address"], "aws_s3_bucket.data");
     assert_eq!(f["severity"], "definite");
     assert!(
         f["location"]["file"]

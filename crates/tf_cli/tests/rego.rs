@@ -79,7 +79,7 @@ fn existence_and_module_tfvars_provenance_match_native() {
     assert!(
         findings
             .iter()
-            .any(|f| f["address"] == "module.db.aws_db_instance.db")
+            .any(|f| f["resource"]["address"] == "module.db.aws_db_instance.db")
     );
     assert!(actual["findings"].to_string().contains("terraform.tfvars"));
     assert_eq!(
@@ -106,7 +106,7 @@ fn rule_selection_applies_to_native_tier_policies() {
                 .as_array()
                 .unwrap()
                 .iter()
-                .all(|f| f["rule"] == rule)
+                .all(|f| f["rule"]["id"] == rule)
         );
     }
 }
@@ -122,7 +122,7 @@ fn gcp_defaults_uncertainty_and_provenance_match_native() {
     assert!(
         findings
             .iter()
-            .any(|f| f["address"] == "module.bucket.google_storage_bucket.bucket")
+            .any(|f| f["resource"]["address"] == "module.bucket.google_storage_bucket.bucket")
     );
     assert!(actual["findings"].to_string().contains("terraform.tfvars"));
     assert_eq!(
@@ -154,14 +154,14 @@ fn unmodified_conftest_policy_yields_each_certainty_class() {
         .iter()
         .map(|f| {
             (
-                f["address"].as_str().unwrap().to_string(),
+                f["resource"]["address"].as_str().unwrap().to_string(),
                 f["severity"].as_str().unwrap().to_string(),
                 f["message"].as_str().unwrap().to_string(),
             )
         })
         .collect();
     rows.sort();
-    assert!(findings.iter().all(|f| f["rule"] == "rego:conftest_hcl2_deny"));
+    assert!(findings.iter().all(|f| f["rule"]["id"] == "rego:conftest_hcl2_deny"));
     // hcl2json renders every block body as a list, so the policy's
     // `not disk.encryption_settings.enabled` is true for any disk that has the
     // block at all: the encrypted `ok` disk is flagged too. That is what the

@@ -158,7 +158,9 @@ impl Resource {
             self.address, v
         );
         Some(v.with_prov(Prov::single(
-            Step::new(StepKind::Default, self.span, label).with_resource(self.base_address.clone()),
+            Step::new(StepKind::Default, self.span, label)
+                .with_resource(self.base_address.clone())
+                .with_attribute(name),
         )))
     }
 

@@ -163,6 +163,7 @@ pub fn scan_plan(
         findings,
         diagnostics: a.diagnostics,
         stats,
+        rule_errors: Vec::new(),
         files,
     })
 }

@@ -229,9 +229,39 @@ fn steps_to_py<'py>(
             d.set_item("column", c)?;
         }
         d.set_item("resource", s.resource.as_deref())?;
+        d.set_item("attribute", s.attribute.as_deref())?;
         out.append(d)?;
     }
     Ok(out)
+}
+
+/// Plain JSON to Python objects (dicts, lists, str, int/float, bool, None).
+fn json_to_py(py: Python<'_>, j: &serde_json::Value) -> PyResult<Py<PyAny>> {
+    use serde_json::Value as J;
+    Ok(match j {
+        J::Null => py.None(),
+        J::Bool(b) => b.into_pyobject(py)?.to_owned().into_any().unbind(),
+        J::Number(n) => match (n.as_i64(), n.as_f64()) {
+            (Some(i), _) => i.into_pyobject(py)?.into_any().unbind(),
+            (None, Some(f)) => f.into_pyobject(py)?.into_any().unbind(),
+            _ => py.None(),
+        },
+        J::String(s) => s.into_pyobject(py)?.into_any().unbind(),
+        J::Array(items) => {
+            let out = PyList::empty(py);
+            for x in items {
+                out.append(json_to_py(py, x)?)?;
+            }
+            out.into_any().unbind()
+        }
+        J::Object(m) => {
+            let out = PyDict::new(py);
+            for (k, v) in m {
+                out.set_item(k, json_to_py(py, v)?)?;
+            }
+            out.into_any().unbind()
+        }
+    })
 }
 
 #[pymethods]
@@ -494,6 +524,12 @@ impl Finding {
     fn f(&self) -> &tf_linter::Finding {
         &self.data.result.findings[self.i]
     }
+    fn record(&self) -> serde_json::Value {
+        tf_linter::render::finding_json(self.data.files(), self.f())
+    }
+    fn record_field(&self, py: Python<'_>, field: &str) -> PyResult<Py<PyAny>> {
+        json_to_py(py, &self.record()[field])
+    }
 }
 
 #[pymethods]
@@ -530,6 +566,54 @@ impl Finding {
     #[getter]
     fn root(&self) -> String {
         self.f().root.display().to_string()
+    }
+    /// Stable identity across scans (rule, address, attribute path).
+    #[getter]
+    fn fingerprint(&self) -> String {
+        let f = self.f();
+        tf_linter::record::fingerprint(&f.rule, &f.address, f.attribute.as_deref())
+    }
+    #[getter]
+    fn category(&self) -> &'static str {
+        self.f().category.as_str()
+    }
+    #[getter]
+    fn description(&self) -> &str {
+        &self.f().description
+    }
+    /// Attribute path of the deciding value within the resource, if any.
+    #[getter]
+    fn attribute(&self) -> Option<&str> {
+        self.f().attribute.as_deref()
+    }
+    /// The deciding top-level attribute as written: `{"kind", "value", "display"}`, or None.
+    #[getter]
+    fn configured(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.record_field(py, "configured")
+    }
+    /// The same after the defaults overlay.
+    #[getter]
+    fn effective(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.record_field(py, "effective")
+    }
+    /// A mechanical fix (`resource`, `attribute`, `action`, `value`, `site`), or None.
+    #[getter]
+    fn fix_hint(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.record_field(py, "fix_hint")
+    }
+    /// Inputs a foreign policy could not see: `[{"path", "kind"}]`.
+    #[getter]
+    fn hidden(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.record_field(py, "hidden")
+    }
+    /// The resource instance's identity, structured.
+    #[getter]
+    fn resource(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.record_field(py, "resource")
+    }
+    /// The whole finding record (`docs/FINDING_SCHEMA.md`) as a dict.
+    fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        json_to_py(py, &self.record())
     }
     #[getter]
     fn file(&self) -> String {
@@ -636,6 +720,8 @@ impl ScanResult {
                 d.set_item("file", f)?;
                 d.set_item("line", l)?;
                 d.set_item("column", c)?;
+                d.set_item("start", at.span.start)?;
+                d.set_item("end", at.span.end)?;
             }
             out.append(d)?;
         }
