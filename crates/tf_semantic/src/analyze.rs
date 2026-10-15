@@ -15,6 +15,7 @@ use tf_eval::{
 use tf_schema::Member;
 use tf_span::{FileId, FileSpan, Span};
 
+use crate::address::{Address, InstanceKey};
 use crate::model::{self, AnalysisStats, Attr, DiagSeverity, Diagnostic};
 use crate::module::{
     Mode, ModuleDef, ModuleSource, ResourceDecl, SymbolRef, auto_tfvars, load_module, module_files,
@@ -679,7 +680,12 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                 anc.push(dir.clone());
                 for b in binds {
                     let addr = match &b.key {
-                        Some(k) => format!("{}module.{}[{k:?}]", inst.prefix(), call.name),
+                        Some(k) => format!(
+                            "{}module.{}[{}]",
+                            inst.prefix(),
+                            call.name,
+                            crate::address::quote(k)
+                        ),
                         None => format!("{}module.{}", inst.prefix(), call.name),
                     };
                     let key = b.key.clone();
@@ -747,20 +753,10 @@ impl<'a, 'o> Analyzer<'a, 'o> {
             }
             _ => {}
         }
-        let base = format!(
-            "{}{}{ty}.{name}",
-            inst.prefix(),
-            if mode == Mode::Data { "data." } else { "" }
-        );
+        let base = Address::new(inst.address.clone(), mode, ty, name, None);
         let Some(attr) = ops.get(i).and_then(|o| o.attr_name()) else {
-            return (
-                Value::unknown(Origin::Computed {
-                    resource: base.into(),
-                    key,
-                    attr: "(whole object)".into(),
-                }),
-                i,
-            );
+            let instance = base.with_key(key.map(InstanceKey::Key));
+            return (Value::unknown(instance.computed("(whole object)")), i);
         };
         let v = self.resource_attr(inst_id, ri, key, attr, &base);
         (if splat { Value::list(vec![v]) } else { v }, i + 1)
@@ -772,10 +768,12 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         ri: usize,
         key: Option<Arc<str>>,
         attr: &str,
-        base: &str,
+        base: &Address,
     ) -> Value {
         let inst = self.inst(inst_id);
         let k = (ri, key.clone(), attr.to_string());
+        let instance = base.clone().with_key(key.clone().map(InstanceKey::Key));
+        let base_str = base.base_string();
         self.memo(
             &inst.res_attrs,
             k,
@@ -786,7 +784,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                     && decl.ty == "aws_iam_policy_document"
                     && (attr == "json" || attr == "minified_json")
                 {
-                    return self.iam_policy_document(inst_id, ri, key.as_deref(), base);
+                    return self.iam_policy_document(inst_id, ri, key.as_deref(), &base_str);
                 }
                 if let Some(a) = decl
                     .block
@@ -823,40 +821,26 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                         .and_then(|s| s.attribute(attr))
                         .is_some_and(|at| at.is_computed());
                     if v.is_null() && is_computed {
-                        return Value::unknown(Origin::Computed {
-                            resource: base.into(),
-                            key: key.clone(),
-                            attr: attr.into(),
-                        });
+                        return Value::unknown(instance.computed(attr));
                     }
                     return v.push(
                         Step::new(
                             StepKind::Attribute,
                             FileSpan::new(decl.file, a.span),
-                            format!("{base} {attr}"),
+                            format!("{base_str} {attr}"),
                         )
-                        .with_resource(base.into()),
+                        .with_resource(base_str.clone().into()),
                     );
                 }
-                let computed = || {
-                    Value::unknown(Origin::Computed {
-                        resource: base.into(),
-                        key: key.clone(),
-                        attr: attr.into(),
-                    })
-                };
+                let computed = || Value::unknown(instance.computed(attr));
                 match decl.schema {
                     Some(s) => match s.member(attr) {
                         Some(Member::Attribute(at)) if at.is_computed() => computed(),
-                        Some(Member::Attribute(_)) => match tf_schema::default_for(decl.ty, attr) {
-                            Some(tf_schema::DefaultValue::Bool(b)) => Value::bool(b),
-                            Some(tf_schema::DefaultValue::Number(n)) => Value::number(n),
-                            Some(tf_schema::DefaultValue::String(s)) => Value::string(s),
-                            Some(tf_schema::DefaultValue::Empty) => Value::list(vec![]),
-                            None => Value::null(),
-                        },
+                        Some(Member::Attribute(_)) => tf_schema::default_for(decl.ty, attr)
+                            .map(model::default_value)
+                            .unwrap_or_else(Value::null),
                         Some(Member::Block(_)) => {
-                            Value::other(format!("nested block reference {base}.{attr}"))
+                            Value::other(format!("nested block reference {base_str}.{attr}"))
                         }
                         None => {
                             Value::error(format!("unsupported attribute \"{attr}\" on {}", decl.ty))
@@ -1097,16 +1081,11 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         let mut resources = Vec::new();
         for (ri, decl) in def.resources.iter().enumerate() {
             let insts = self.res_instances(inst_id, ri);
-            let local = match decl.mode {
-                Mode::Managed => format!("{}.{}", decl.ty, decl.name),
-                Mode::Data => format!("data.{}.{}", decl.ty, decl.name),
-            };
-            let base: Arc<str> = format!("{}{local}", inst.prefix()).into();
+            let decl_id = Address::new(inst.address.clone(), decl.mode, decl.ty, decl.name, None);
+            let base: Arc<str> = decl_id.base_string().into();
             for b in insts.0.iter() {
-                let address: Arc<str> = match &b.key {
-                    Some(k) => format!("{base}[{k:?}]").into(),
-                    None => base.clone(),
-                };
+                let id = decl_id.clone().with_key(b.key.clone().map(InstanceKey::Key));
+                let address: Arc<str> = id.to_string().into();
                 let ctx = BodyCtx {
                     inst: inst_id,
                     file: decl.file,
@@ -1129,21 +1108,15 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                         true,
                     )
                 });
-                resources.push(model::Resource {
-                    mode: decl.mode,
-                    ty: decl.ty.into(),
-                    name: decl.name.into(),
-                    key: b.key.clone(),
-                    address,
-                    base_address: base.clone(),
-                    module: inst.address.clone(),
-                    span: FileSpan::new(decl.file, header_span(decl.block)),
+                resources.push(model::Resource::new(
+                    id,
+                    FileSpan::new(decl.file, header_span(decl.block)),
                     body,
-                    existence: b.existence.min(inst.existence),
-                    count: insts.1.clone(),
-                    for_each: insts.2.clone(),
-                    provider: decl.schema.map(|s| s.provider),
-                });
+                    b.existence.min(inst.existence),
+                    insts.1.clone(),
+                    insts.2.clone(),
+                    decl.schema.map(|s| s.provider),
+                ));
             }
         }
         let variables = def

@@ -10,7 +10,18 @@ use tf_eval::{Prov, Step, StepKind, Truth, Value};
 use tf_schema::DefaultValue;
 use tf_span::FileSpan;
 
+pub use crate::address::{Address, InstanceKey};
 pub use crate::module::{Mode, SymbolRef};
+
+/// A provider default from the defaults overlay as a value.
+pub fn default_value(d: DefaultValue) -> Value {
+    match d {
+        DefaultValue::Bool(b) => Value::bool(b),
+        DefaultValue::Number(n) => Value::number(n),
+        DefaultValue::String(s) => Value::string(s),
+        DefaultValue::Empty => Value::list(vec![]),
+    }
+}
 
 /// An attribute in configuration, evaluated.
 #[derive(Clone, Debug)]
@@ -57,9 +68,12 @@ impl Body {
     }
 }
 
-/// One resource or data-source instance.
+/// One resource or data-source instance. Build it with [`Resource::new`]
+/// so the string forms of the address are spelled by [`Address`].
 #[derive(Clone, Debug)]
 pub struct Resource {
+    /// The instance's identity.
+    pub id: Address,
     pub mode: Mode,
     pub ty: Arc<str>,
     pub name: Arc<str>,
@@ -86,6 +100,33 @@ pub struct Resource {
 }
 
 impl Resource {
+    pub fn new(
+        id: Address,
+        span: FileSpan,
+        body: Body,
+        existence: Truth,
+        count: Option<Value>,
+        for_each: Option<Value>,
+        provider: Option<tf_schema::Provider>,
+    ) -> Resource {
+        Resource {
+            mode: id.mode,
+            ty: id.ty.clone(),
+            name: id.name.clone(),
+            key: id.key_str(),
+            address: id.to_string().into(),
+            base_address: id.base_string().into(),
+            module: id.module.clone(),
+            id,
+            span,
+            body,
+            existence,
+            count,
+            for_each,
+            provider,
+        }
+    }
+
     pub fn attr(&self, name: &str) -> Option<&Attr> {
         self.body.attr(name)
     }
@@ -111,12 +152,7 @@ impl Resource {
             .find(|e| e.path == name)
             .map(|e| e.note)
             .unwrap_or("");
-        let v = match d {
-            DefaultValue::Bool(b) => Value::bool(b),
-            DefaultValue::Number(n) => Value::number(n),
-            DefaultValue::String(s) => Value::string(s),
-            DefaultValue::Empty => Value::list(vec![]),
-        };
+        let v = default_value(d);
         let label = format!(
             "{} {name} not set: provider default {} (defaults overlay; {note})",
             self.address, v
@@ -126,13 +162,6 @@ impl Resource {
         )))
     }
 
-    /// `aws_s3_bucket.b` style local address (no module prefix, no key).
-    pub fn local_address(&self) -> String {
-        match self.mode {
-            Mode::Managed => format!("{}.{}", self.ty, self.name),
-            Mode::Data => format!("data.{}.{}", self.ty, self.name),
-        }
-    }
 }
 
 /// `tf_schema` typed views work over the evaluated model:

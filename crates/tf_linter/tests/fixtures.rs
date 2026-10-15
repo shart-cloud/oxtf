@@ -100,7 +100,8 @@ fn seed_rule_fixtures() {
     // 29 original cases + 2 added in W4 (aws_iam_policy_document data source)
     // + 3 added after the independent review (GCP variable and conditional,
     // IAM dynamic statement in a policy document) + 1 for count with a
-    // tainted alternative (added before the lattice unification).
-    assert_eq!(cases, 35, "expected 34 fixture cases");
+    // tainted alternative (added before the lattice unification) + 1 for an
+    // instance key that needs escaping (added with the Address type).
+    assert_eq!(cases, 36, "expected 36 fixture cases");
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

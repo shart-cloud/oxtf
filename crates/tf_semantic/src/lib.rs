@@ -12,12 +12,14 @@
 //! }
 //! ```
 
+pub mod address;
 pub mod analyze;
 pub mod model;
 pub mod module;
 pub mod references;
 pub mod source;
 
+pub use address::{Address, AddressError, InstanceKey};
 pub use analyze::{AnalyzeOptions, ObservedAttr, analyze_module, analyze_module_observed};
 pub use model::{
     Analysis, Attr, Block, Body, DiagSeverity, Diagnostic, Mode, Module, Resource, SymbolRef,

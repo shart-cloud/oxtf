@@ -2409,6 +2409,21 @@
         "roots": 1
       }
     },
+    "source:fixtures/rules/aws-s3-public-access-block/pass_escaped_instance_key": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 1,
+        "findings": 0,
+        "findings_by_rule": {},
+        "indeterminate": 0,
+        "module_instances": 1,
+        "resources": 4,
+        "roots": 1
+      }
+    },
     "source:fixtures/rules/aws-s3-public-access-block/pass_full_block": {
       "diagnostics": [],
       "findings": [],

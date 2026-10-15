@@ -224,6 +224,18 @@ backend on.
 
 ### Phase 3 — Address type and Resource constructor
 
+**Done 2026-10-14** (branch `phase3-address`). `tf_semantic::Address` (module path, mode,
+type, name, `InstanceKey::{Index, Key}`) parses and spells Terraform addresses, including
+quoted keys with escapes, and is the only source of `Origin::Computed` and of the string
+fields on `Resource`. Both front ends build through `Resource::new`; the plan front end
+parses Terraform's own spelling, so `[0]` and `["0"]` stay distinct. One deviation: the
+reference matcher still compares the strings `Origin::Computed` carries, because tf_eval
+sits below tf_semantic and cannot hold an `Address`; the strings now come from one
+formatter, which was the actual risk. The key-quoting divergence turned out to be
+exotic (Rust's Debug and Terraform agree on quotes and backslashes; they differ on
+control characters), so the new fixture pins spelling through a dedicated test rather
+than a baseline diff. Corpus scan 0.169–0.173 s before, 0.167–0.173 s after.
+
 **Files.** `crates/tf_semantic/src/model.rs`, `analyze.rs`, `references.rs`,
 `crates/tf_plan/src/lib.rs`, `refs.rs`.
 
