@@ -31,6 +31,7 @@
         "findings_by_rule": {
           "aws-s3-public-access-block": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 3,
         "roots": 1
@@ -84,6 +85,7 @@
         "findings_by_rule": {
           "aws-s3-public-access-block": 2
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 3,
         "roots": 1
@@ -138,6 +140,7 @@
         "findings_by_rule": {
           "aws-iam-wildcard-policy": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -183,6 +186,7 @@
         "findings_by_rule": {
           "aws-iam-wildcard-policy": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -228,6 +232,7 @@
         "findings_by_rule": {
           "aws-iam-wildcard-policy": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -282,6 +287,7 @@
         "findings_by_rule": {
           "aws-iam-wildcard-policy": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -336,6 +342,7 @@
         "findings_by_rule": {
           "aws-iam-wildcard-policy": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -350,6 +357,7 @@
         "files": 2,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -364,6 +372,7 @@
         "files": 2,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -418,6 +427,7 @@
         "findings_by_rule": {
           "aws-rds-unencrypted": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -432,6 +442,7 @@
         "files": 2,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -477,6 +488,7 @@
         "findings_by_rule": {
           "aws-rds-unencrypted": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -522,6 +534,7 @@
         "findings_by_rule": {
           "aws-rds-unencrypted": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -576,6 +589,7 @@
         "findings_by_rule": {
           "aws-rds-unencrypted": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -590,6 +604,7 @@
         "files": 3,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -644,6 +659,7 @@
         "findings_by_rule": {
           "aws-s3-public-access-block": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -658,6 +674,7 @@
         "files": 2,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -703,6 +720,7 @@
         "findings_by_rule": {
           "aws-s3-public-access-block": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -738,6 +756,7 @@
         "findings_by_rule": {
           "aws-s3-public-access-block": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 3,
         "roots": 1
@@ -773,6 +792,7 @@
         "findings_by_rule": {
           "aws-s3-public-access-block": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -818,6 +838,7 @@
         "findings_by_rule": {
           "aws-s3-public-access-block": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -832,6 +853,7 @@
         "files": 2,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -846,6 +868,7 @@
         "files": 2,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -900,6 +923,7 @@
         "findings_by_rule": {
           "aws-sg-open-ssh": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -914,6 +938,7 @@
         "files": 2,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -959,6 +984,7 @@
         "findings_by_rule": {
           "aws-sg-open-ssh": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -1004,6 +1030,7 @@
         "findings_by_rule": {
           "aws-sg-open-ssh": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -1077,6 +1104,7 @@
         "findings_by_rule": {
           "aws-sg-open-ssh": 2
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -1131,6 +1159,7 @@
         "findings_by_rule": {
           "aws-sg-open-ssh": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -1176,6 +1205,7 @@
         "findings_by_rule": {
           "aws-sg-open-ssh": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -1190,6 +1220,7 @@
         "files": 2,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -1204,6 +1235,7 @@
         "files": 2,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -1218,6 +1250,7 @@
         "files": 3,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -1263,6 +1296,7 @@
         "findings_by_rule": {
           "gcp-storage-uniform-access": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -1317,6 +1351,7 @@
         "findings_by_rule": {
           "gcp-storage-uniform-access": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -1331,6 +1366,7 @@
         "files": 2,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -1366,6 +1402,7 @@
         "findings_by_rule": {
           "aws-s3-public-access-block": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 3,
         "roots": 1
@@ -1401,6 +1438,7 @@
         "findings_by_rule": {
           "aws-s3-public-access-block": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 3,
         "roots": 1
@@ -1436,6 +1474,7 @@
         "findings_by_rule": {
           "aws-s3-public-access-block": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 3,
         "roots": 1
@@ -1489,6 +1528,7 @@
         "findings_by_rule": {
           "aws-s3-public-access-block": 2
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 3,
         "roots": 1
@@ -1543,6 +1583,7 @@
         "findings_by_rule": {
           "aws-iam-wildcard-policy": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -1588,6 +1629,7 @@
         "findings_by_rule": {
           "aws-iam-wildcard-policy": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -1633,6 +1675,7 @@
         "findings_by_rule": {
           "aws-iam-wildcard-policy": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -1687,6 +1730,7 @@
         "findings_by_rule": {
           "aws-iam-wildcard-policy": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -1750,6 +1794,7 @@
         "findings_by_rule": {
           "aws-iam-wildcard-policy": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -1831,6 +1876,7 @@
         "findings_by_rule": {
           "aws-iam-wildcard-policy": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -1845,6 +1891,7 @@
         "files": 1,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -1859,6 +1906,7 @@
         "files": 1,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -1904,6 +1952,7 @@
         "findings_by_rule": {
           "aws-rds-unencrypted": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -1958,6 +2007,7 @@
         "findings_by_rule": {
           "aws-rds-unencrypted": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -2003,6 +2053,7 @@
         "findings_by_rule": {
           "aws-rds-unencrypted": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -2048,6 +2099,7 @@
         "findings_by_rule": {
           "aws-rds-unencrypted": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -2102,6 +2154,7 @@
         "findings_by_rule": {
           "aws-rds-unencrypted": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -2116,6 +2169,7 @@
         "files": 2,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -2170,6 +2224,7 @@
         "findings_by_rule": {
           "aws-s3-public-access-block": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -2215,6 +2270,7 @@
         "findings_by_rule": {
           "aws-s3-public-access-block": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -2250,6 +2306,7 @@
         "findings_by_rule": {
           "aws-s3-public-access-block": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 3,
         "roots": 1
@@ -2285,6 +2342,7 @@
         "findings_by_rule": {
           "aws-s3-public-access-block": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -2330,6 +2388,7 @@
         "findings_by_rule": {
           "aws-s3-public-access-block": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -2344,6 +2403,7 @@
         "files": 1,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -2358,6 +2418,7 @@
         "files": 1,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -2412,6 +2473,7 @@
         "findings_by_rule": {
           "aws-sg-open-ssh": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -2475,6 +2537,7 @@
         "findings_by_rule": {
           "aws-sg-open-ssh": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -2520,6 +2583,7 @@
         "findings_by_rule": {
           "aws-sg-open-ssh": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -2593,6 +2657,7 @@
         "findings_by_rule": {
           "aws-sg-open-ssh": 2
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -2665,6 +2730,7 @@
         "findings_by_rule": {
           "aws-sg-open-ssh": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -2710,6 +2776,7 @@
         "findings_by_rule": {
           "aws-sg-open-ssh": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -2724,6 +2791,7 @@
         "files": 1,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -2738,6 +2806,7 @@
         "files": 1,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 2,
         "roots": 1
@@ -2752,6 +2821,7 @@
         "files": 2,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -2806,6 +2876,7 @@
         "findings_by_rule": {
           "gcp-storage-uniform-access": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -2851,6 +2922,7 @@
         "findings_by_rule": {
           "gcp-storage-uniform-access": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -2905,6 +2977,7 @@
         "findings_by_rule": {
           "gcp-storage-uniform-access": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -2968,6 +3041,7 @@
         "findings_by_rule": {
           "gcp-storage-uniform-access": 1
         },
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1
@@ -2982,6 +3056,7 @@
         "files": 1,
         "findings": 0,
         "findings_by_rule": {},
+        "indeterminate": 0,
         "module_instances": 1,
         "resources": 1,
         "roots": 1

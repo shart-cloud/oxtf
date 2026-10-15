@@ -152,6 +152,7 @@ fn report(files: &FileTable, f: &Finding) -> Report {
         severity: match f.severity {
             Severity::Definite => miette::Severity::Error,
             Severity::Conditional => miette::Severity::Warning,
+            Severity::Indeterminate => miette::Severity::Advice,
         },
         src: source(files, f.primary),
         labels,
@@ -219,6 +220,7 @@ pub fn result_json(r: &ScanResult) -> J {
             "findings": r.stats.findings,
             "definite": r.stats.definite,
             "conditional": r.stats.conditional,
+            "indeterminate": r.stats.indeterminate,
             "findings_by_rule": r.stats.findings_by_rule,
             "elapsed_ms": r.stats.elapsed.as_secs_f64() * 1000.0,
         }

@@ -37,6 +37,7 @@ pub struct ScanStats {
     pub findings: usize,
     pub definite: usize,
     pub conditional: usize,
+    pub indeterminate: usize,
     pub findings_by_rule: BTreeMap<String, usize>,
     pub elapsed: Duration,
 }
@@ -162,6 +163,7 @@ pub fn scan_with(
         match f.severity {
             Severity::Definite => stats.definite += 1,
             Severity::Conditional => stats.conditional += 1,
+            Severity::Indeterminate => stats.indeterminate += 1,
         }
     }
     stats.findings = findings.len();

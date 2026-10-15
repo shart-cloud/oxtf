@@ -59,7 +59,7 @@ impl Level {
     }
 }
 
-/// Certainty of a finding.
+/// Certainty of a finding, ordered from most to least certain.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Severity {
     /// Insecure as written (for the configuration with its defaults and
@@ -68,6 +68,11 @@ pub enum Severity {
     /// Insecure depending on an unconstrained variable (a root variable with
     /// no default and no tfvars value).
     Conditional,
+    /// A foreign policy fired on the resource's Known values, but an input it
+    /// may depend on is only known at apply time (provider-computed). Native
+    /// rules never produce this: they return no finding on Unknown. A
+    /// downstream tool must treat it as needing a human.
+    Indeterminate,
 }
 
 impl Severity {
@@ -75,6 +80,7 @@ impl Severity {
         match self {
             Severity::Definite => "definite",
             Severity::Conditional => "conditional",
+            Severity::Indeterminate => "indeterminate",
         }
     }
 }
@@ -228,37 +234,50 @@ impl Finding {
         message: &str,
         root: &Path,
     ) -> Option<Finding> {
-        let mut severity = match verdict.truth {
+        let severity = match verdict.truth {
             Truth::True => Severity::Definite,
             Truth::Tainted => Severity::Conditional,
             _ => return None,
         };
-        match resource.existence {
+        Self::with_severity(info, resource, severity, verdict.witness.as_ref(), message, root)
+    }
+
+    /// Build a finding whose certainty the caller has already decided
+    /// (adapters for foreign policies classify from their own evidence).
+    /// Applies the same existence gate, downgrade, primary location and
+    /// suffixes as [`Finding::from_verdict`]; `witness` supplies provenance.
+    pub fn with_severity(
+        info: &RuleInfo,
+        resource: &Resource,
+        severity: Severity,
+        witness: Option<&tf_eval::Value>,
+        message: &str,
+        root: &Path,
+    ) -> Option<Finding> {
+        let mut downgraded = false;
+        let severity = match resource.existence {
             Truth::False | Truth::Unknown => return None,
-            Truth::Tainted => severity = Severity::Conditional,
-            _ => {}
-        }
-        let provenance = verdict
-            .witness
-            .as_ref()
-            .map(|w| w.prov.steps())
-            .unwrap_or_default();
+            Truth::Tainted => {
+                downgraded = severity == Severity::Definite;
+                severity.max(Severity::Conditional)
+            }
+            Truth::True => severity,
+        };
+        let provenance = witness.map(|w| w.prov.steps()).unwrap_or_default();
         let primary = provenance
             .iter()
             .rev()
             .find(|s| s.resource.as_deref() == Some(&*resource.base_address))
             .map(|s| s.at)
             .unwrap_or(resource.span);
-        let message = match (&severity, verdict.witness.as_ref().map(|w| &w.kind)) {
+        let message = match (severity, witness.map(|w| &w.kind)) {
             (Severity::Conditional, Some(Kind::Tainted(t))) if !t.variable.starts_with('(') => {
                 format!(
                     "{message} (depends on unconstrained variable var.{})",
                     t.variable
                 )
             }
-            (Severity::Conditional, _)
-                if resource.existence == Truth::Tainted && verdict.truth == Truth::True =>
-            {
+            (Severity::Conditional, _) if downgraded => {
                 format!("{message} (resource exists depending on an unconstrained variable)")
             }
             (Severity::Conditional, _) => {

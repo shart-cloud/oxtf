@@ -249,10 +249,11 @@ fn print_result(r: &tf_linter::ScanResult, a: &Args) -> ExitCode {
         .collect();
     let _ = writeln!(
         out,
-        "{} findings ({} definite, {} conditional) in {} root modules, {} module instances, {} files, {} resources; {} diagnostics; {:.1} ms{}",
+        "{} findings ({} definite, {} conditional, {} indeterminate) in {} root modules, {} module instances, {} files, {} resources; {} diagnostics; {:.1} ms{}",
         s.findings,
         s.definite,
         s.conditional,
+        s.indeterminate,
         s.roots,
         s.module_instances,
         s.files,

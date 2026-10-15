@@ -506,7 +506,7 @@ impl Finding {
     fn level(&self) -> &'static str {
         self.f().level.as_str()
     }
-    /// `"definite"` or `"conditional"`.
+    /// `"definite"`, `"conditional"` or `"indeterminate"` (foreign policies only).
     #[getter]
     fn severity(&self) -> &'static str {
         self.f().severity.as_str()
@@ -615,6 +615,7 @@ impl ScanResult {
         d.set_item("findings", s.findings)?;
         d.set_item("definite", s.definite)?;
         d.set_item("conditional", s.conditional)?;
+        d.set_item("indeterminate", s.indeterminate)?;
         d.set_item("elapsed_s", s.elapsed.as_secs_f64())?;
         d.set_item(
             "findings_by_rule",
