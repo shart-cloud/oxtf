@@ -29,8 +29,12 @@ scan options:
       --rule ID           only run this rule (repeatable)
       --rule-file FILE    also run rules from a JSON rule-IR file (repeatable; e.g. written
                           by the tfscan Python expression API)
-      --rego-native       use bundled Rego for all five seed rules
-      --rego-rds          evaluate the RDS encryption rule using bundled native Rego
+      --rego-native       run the seed rules that have a bundled native-tier Rego
+                          policy (RDS encryption, GCS uniform access) as Rego
+      --policy FILE       also run a foreign Rego policy over every resource
+                          (repeatable; Conftest / OPA style, unchanged)
+      --policy-shape S    input document shape for --policy: plan (default) or hcl
+      --policy-entry R    rule path read for violations (default: data.main.deny)
       --threads N         worker threads (default: all CPUs)
       --color             force colored output
       --no-diagnostics    do not print parse / strict-bool / module diagnostics
@@ -41,8 +45,10 @@ struct Args {
     plan: Option<PathBuf>,
     source: Option<PathBuf>,
     rule_files: Vec<PathBuf>,
-    rego_rds: bool,
     rego_native: bool,
+    policies: Vec<PathBuf>,
+    policy_shape: Option<tf_rego::Shape>,
+    policy_entry: Option<String>,
     opts: ScanOptions,
     json: bool,
     color: bool,
@@ -56,8 +62,10 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
         plan: None,
         source: None,
         rule_files: Vec::new(),
-        rego_rds: false,
         rego_native: false,
+        policies: Vec::new(),
+        policy_shape: None,
+        policy_entry: None,
         opts: ScanOptions::default(),
         json: false,
         color: std::io::stdout().is_terminal(),
@@ -85,7 +93,15 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
                 .rule_files
                 .push(it.next().ok_or("--rule-file needs a value")?.into()),
             "--rego-native" => a.rego_native = true,
-            "--rego-rds" => a.rego_rds = true,
+            "--policy" => a
+                .policies
+                .push(it.next().ok_or("--policy needs a value")?.into()),
+            "--policy-shape" => {
+                a.policy_shape = Some(it.next().ok_or("--policy-shape needs a value")?.parse()?)
+            }
+            "--policy-entry" => {
+                a.policy_entry = Some(it.next().ok_or("--policy-entry needs a value")?)
+            }
             "--plan" => a.plan = Some(it.next().ok_or("--plan needs a value")?.into()),
             "--source" => a.source = Some(it.next().ok_or("--source needs a value")?.into()),
             "--threads" => {
@@ -167,14 +183,23 @@ fn scan(a: Args) -> ExitCode {
             }
         }
     }
-    let run = |rules| scan_rules(&a, rules);
-    let result = if a.rego_native {
-        tf_rego::with_native_policies(rules, run)
-    } else if a.rego_rds {
-        tf_rego::with_rds_policy(rules, run)
-    } else {
-        run(rules)
+    let mut foreign = Vec::new();
+    for p in &a.policies {
+        match tf_rego::load_policy(p) {
+            Ok(f) => foreign.push(f),
+            Err(e) => {
+                eprintln!("error: {e}");
+                return ExitCode::from(2);
+            }
+        }
+    }
+    let policies = tf_rego::Policies {
+        native: a.rego_native,
+        foreign,
+        shape: a.policy_shape,
+        entry: a.policy_entry.clone(),
     };
+    let result = tf_rego::with_policies(&policies, rules, |rules| scan_rules(&a, rules));
     match result {
         Ok(r) => print_result(&r, &a),
         Err(e) => {

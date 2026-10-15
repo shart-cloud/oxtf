@@ -1,14 +1,12 @@
+# aws-rds-unencrypted as a native-tier leaf policy. The adapter reads the
+# subject with the lattice and calls `violates` only on Known values.
 package oxtf.rds
 import rego.v1
-import data.oxtf.boolean.verdict
 
-replica if { input.replica.kind != "missing"; input.replica.kind != "null" }
-result := {"rank": 0, "evidence": null} if replica
-result := {"rank": 0, "evidence": null} if {
-    not replica
-    input.effective.kind == "missing"
-}
-result := verdict(input.effective) if {
-    not replica
-    input.effective.kind != "missing"
-}
+subject := {"attribute": "storage_encrypted", "mode": "effective"}
+
+# Read replicas inherit encryption from their source.
+default skip := false
+skip if input.configured.replicate_source_db.set
+
+violates if input.subject.boolean != true

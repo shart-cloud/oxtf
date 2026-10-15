@@ -26,6 +26,8 @@ pub enum Category {
     Storage,
     Iam,
     Encryption,
+    /// Rules whose category is not declared (foreign policies).
+    Other,
 }
 
 impl Category {
@@ -35,6 +37,7 @@ impl Category {
             Category::Storage => "storage",
             Category::Iam => "iam",
             Category::Encryption => "encryption",
+            Category::Other => "other",
         }
     }
 }
@@ -76,6 +79,15 @@ pub enum Severity {
 }
 
 impl Severity {
+    /// `True` → definite, `Tainted` → conditional, anything else → no finding.
+    pub fn from_truth(truth: Truth) -> Option<Severity> {
+        match truth {
+            Truth::True => Some(Severity::Definite),
+            Truth::Tainted => Some(Severity::Conditional),
+            Truth::False | Truth::Unknown => None,
+        }
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Severity::Definite => "definite",
@@ -127,11 +139,29 @@ pub trait Rule: RuleMeta + Send + Sync {
     fn message(&self, resource: &Resource, verdict: &Verdict) -> String;
 }
 
-/// A verdict together with its wording, as handed from a rule to the engine.
+/// What a rule hands the engine about one resource instance: a certainty,
+/// the value that decided it (for provenance), and the wording. Rules built
+/// on the lattice get one from a verdict; adapters that classify certainty
+/// from their own evidence (foreign policies) build one directly.
 #[derive(Clone, Debug)]
 pub struct Judgement {
-    pub verdict: Verdict,
+    pub severity: Severity,
+    pub witness: Option<tf_eval::Value>,
     pub message: String,
+}
+
+impl Judgement {
+    /// `None` when the verdict yields no finding (`False` / `Unknown`), so
+    /// `message` is only rendered for verdicts that hold.
+    pub fn from_verdict(verdict: Verdict, message: impl FnOnce(&Verdict) -> String) -> Option<Self> {
+        let severity = Severity::from_truth(verdict.truth)?;
+        let message = message(&verdict);
+        Some(Judgement {
+            severity,
+            witness: verdict.witness,
+            message,
+        })
+    }
 }
 
 /// Owned metadata, for object-safe dispatch and for listing rules.
@@ -149,7 +179,8 @@ pub struct RuleInfo {
 /// rules at runtime implement this directly; `T: Rule` gets it for free.
 pub trait DynRule: Send + Sync {
     fn info(&self) -> RuleInfo;
-    /// Judgements on one resource instance (usually zero or one).
+    /// Judgements on one resource instance (usually zero or one); only
+    /// judgements that can become findings are returned.
     fn judge_resource(&self, resource: &Resource) -> Vec<Judgement>;
     /// Judgements of a cross-resource rule over one module instance.
     fn judge_module<'m>(&self, module: &'m Module) -> Vec<(&'m Resource, Judgement)>;
@@ -168,30 +199,17 @@ impl<T: Rule> DynRule for T {
     }
     fn judge_resource(&self, resource: &Resource) -> Vec<Judgement> {
         self.verdict(resource)
-            .map(|verdict| self.judge(resource, verdict))
+            .and_then(|v| Judgement::from_verdict(v, |v| self.message(resource, v)))
             .into_iter()
             .collect()
     }
     fn judge_module<'m>(&self, module: &'m Module) -> Vec<(&'m Resource, Judgement)> {
         self.module_verdicts(module)
             .into_iter()
-            .map(|(r, verdict)| (r, self.judge(r, verdict)))
+            .filter_map(|(r, v)| Judgement::from_verdict(v, |v| self.message(r, v)).map(|j| (r, j)))
             .collect()
     }
 }
-
-/// Word a verdict only when it can become a finding.
-trait Judge: Rule {
-    fn judge(&self, resource: &Resource, verdict: Verdict) -> Judgement {
-        let message = if verdict.holds() {
-            self.message(resource, &verdict)
-        } else {
-            String::new()
-        };
-        Judgement { verdict, message }
-    }
-}
-impl<T: Rule> Judge for T {}
 
 /// A finding.
 #[derive(Clone, Debug)]
@@ -234,11 +252,7 @@ impl Finding {
         message: &str,
         root: &Path,
     ) -> Option<Finding> {
-        let severity = match verdict.truth {
-            Truth::True => Severity::Definite,
-            Truth::Tainted => Severity::Conditional,
-            _ => return None,
-        };
+        let severity = Severity::from_truth(verdict.truth)?;
         Self::with_severity(info, resource, severity, verdict.witness.as_ref(), message, root)
     }
 

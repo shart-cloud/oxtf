@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex};
 use pyo3::exceptions::{PyKeyError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
-use tf_eval::{Kind, Known, Truth, Verdict};
+use tf_eval::{Kind, Known, Truth};
 use tf_linter::{Category, DynRule, Judgement, Level, Linter, RuleInfo, ScanOptions};
 use tf_semantic::{Analysis, FileTable, Mode, Module};
 use tf_span::FileSpan;
@@ -797,14 +797,12 @@ impl DynRule for CallbackRule {
             Ok(reports) => reports
                 .into_iter()
                 .map(|rep| Judgement {
-                    verdict: Verdict::new(
-                        if rep.conditional {
-                            Truth::Tainted
-                        } else {
-                            Truth::True
-                        },
-                        rep.witness,
-                    ),
+                    severity: if rep.conditional {
+                        tf_linter::Severity::Conditional
+                    } else {
+                        tf_linter::Severity::Definite
+                    },
+                    witness: rep.witness,
                     message: rep.message,
                 })
                 .collect(),
@@ -838,6 +836,7 @@ fn category_of(s: &str) -> PyResult<Category> {
         "storage" => Category::Storage,
         "iam" => Category::Iam,
         "encryption" => Category::Encryption,
+        "other" => Category::Other,
         _ => return Err(PyValueError::new_err(format!("unknown category {s:?}"))),
     })
 }

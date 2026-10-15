@@ -61,19 +61,10 @@ fn inline_rule(rule: &Value) -> Verdict {
     })
 }
 
-impl AwsSgOpenSsh {
-    /// Verdict over an `aws_security_group` `ingress` value: some inline
-    /// rule opens port 22 to the internet. Shared with the Rego equivalence
-    /// tests.
-    pub fn ingress_verdict(ingress: &Value) -> Verdict {
-        exists(ingress, &inline_rule)
-    }
-}
-
 impl Rule for AwsSgOpenSsh {
     fn verdict(&self, r: &Resource) -> Option<Verdict> {
         Some(match &*r.ty {
-            "aws_security_group" => Self::ingress_verdict(&r.value("ingress")?),
+            "aws_security_group" => exists(&r.value("ingress")?, &inline_rule),
             "aws_vpc_security_group_ingress_rule" => {
                 let get = |n: &str| r.value(n).unwrap_or_else(Value::null);
                 let open = open_cidr(&get("cidr_ipv4")).or(open_cidr(&get("cidr_ipv6")));

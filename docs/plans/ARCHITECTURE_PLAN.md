@@ -129,6 +129,30 @@ suffix. `review_regressions.rs` moves off the temp directory onto `from_verdict`
 
 ### Phase 2 — one truth lattice, Rego receives lifted atoms
 
+**Done 2026-10-14** (branch `phase2-lattice`, four commits). Findings that changed the sketch:
+
+- **Native tier is single-subject only.** A policy that must traverse nested abstract data
+  (SSH ingress lists, IAM statements, the S3 join) cannot be expressed as leaf decisions
+  without re-implementing the lattice in Rego, which is what this phase removes. The RDS
+  and GCS seed rules run as native-tier leaf policies with exact verdict and witness
+  parity (unit matrix plus all 75 fixture scans); the other three stay native Rust and
+  their Rego ports, bespoke projections and fixtures were deleted. `tf_rego` went from
+  1,283 lines to about 840, of which 21 are Rego.
+- **Foreign tier works on an unmodified public policy.** Conftest's `examples/hcl2`
+  policy (pinned by commit in `fixtures/rego/foreign/README.md`) runs unchanged over the
+  HCL-shaped projection and yields Definite, Conditional and Indeterminate findings with
+  provenance to the variable. Two shapes exist (plan JSON and hcl2json), so the projection
+  is a real seam. The HCL shape is faithful to hcl2json, lists everywhere, which means the
+  public policy also flags an encrypted disk; the test says so.
+- **Engine gap surfaced loudly.** regorus 0.12 does not implement Go's `%q` format verb,
+  which that policy's required-tags rule uses. The scan fails with the resource and the
+  verb named (`fixtures/rego/foreign_sprintf`), never a missing violation.
+- The count / for_each / dynamic existence classifiers now use `truth::uncertainty`; a
+  OneOf with a Tainted alternative is Tainted, giving one new Conditional finding in the
+  baseline (pinned first, then fixed, in separate commits).
+- Still per-resource `engine.clone()`; Phase 5 owns that measurement. Rule errors still
+  travel through the mutex side channel until Phase 5.
+
 **Files.** `crates/tf_eval/src/truth.rs`, `value.rs`, `crates/tf_semantic/src/analyze.rs`
 (existence classification), `crates/tf_rule_ir/src/lib.rs`, `crates/tf_linter/src/rules/mod.rs`,
 all of `crates/tf_rego/src`, `bench/uncertainty/policy.rego`.

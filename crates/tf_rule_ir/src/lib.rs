@@ -290,6 +290,7 @@ fn parse_category(s: &str) -> Result<Category, String> {
         "storage" => Category::Storage,
         "iam" => Category::Iam,
         "encryption" => Category::Encryption,
+        "other" => Category::Other,
         _ => {
             return Err(format!(
                 "unknown category {s:?} (network|storage|iam|encryption)"
@@ -685,14 +686,7 @@ impl DynRule for CompiledRule {
     }
     fn judge_resource(&self, r: &Resource) -> Vec<Judgement> {
         self.verdict(r)
-            .map(|verdict| {
-                let message = if verdict.holds() {
-                    self.render(r, verdict.witness.as_ref())
-                } else {
-                    String::new()
-                };
-                Judgement { verdict, message }
-            })
+            .and_then(|v| Judgement::from_verdict(v, |v| self.render(r, v.witness.as_ref())))
             .into_iter()
             .collect()
     }
