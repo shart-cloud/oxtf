@@ -1,6 +1,6 @@
 use tf_eval::{Origin, Value};
 use tf_semantic::references::{ReferenceMatch, match_resource_reference};
-use tf_semantic::{AnalyzeOptions, FileTable, analyze_module};
+use tf_semantic::{AnalyzeOptions, FileTable, InstanceKey, Resource, analyze_module};
 
 #[test]
 fn ambiguous_references_do_not_claim_exact_instance_identity() {
@@ -8,13 +8,20 @@ fn ambiguous_references_do_not_claim_exact_instance_identity() {
         .join("../../fixtures/rules/aws-s3-public-access-block/pass_full_block");
     let files = FileTable::new();
     let analysis = analyze_module(&root, &AnalyzeOptions::default(), &files);
-    let mut bucket = analysis.modules[0]
+    let found = analysis.modules[0]
         .resources_of("aws_s3_bucket")
         .next()
-        .unwrap()
-        .clone();
-    bucket.key = Some("a".into());
-    bucket.address = "aws_s3_bucket.data[\"a\"]".into();
+        .unwrap();
+    let bucket = Resource::new(
+        found.id.clone().with_key(Some(InstanceKey::Key("a".into()))),
+        found.span,
+        found.body.clone(),
+        found.existence,
+        None,
+        None,
+        found.provider,
+    );
+    assert_eq!(&*bucket.address, "aws_s3_bucket.data[\"a\"]");
     let computed = |key: Option<&str>| {
         Value::unknown(Origin::Computed {
             resource: bucket.base_address.clone(),

@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use tf_eval::{Prov, Step, StepKind, Truth, Value, Verdict};
 use tf_linter::{Category, Finding, Level, RuleInfo, Severity};
-use tf_semantic::{Mode, Resource};
+use tf_semantic::{Address, Resource};
 use tf_span::{FileId, FileSpan, Span};
 
 fn info() -> RuleInfo {
@@ -26,21 +26,15 @@ fn header() -> FileSpan {
 }
 
 fn resource(existence: Truth) -> Resource {
-    Resource {
-        mode: Mode::Managed,
-        ty: "aws_s3_bucket".into(),
-        name: "b".into(),
-        key: None,
-        address: "module.m.aws_s3_bucket.b".into(),
-        base_address: "module.m.aws_s3_bucket.b".into(),
-        module: "module.m".into(),
-        span: header(),
-        body: Default::default(),
+    Resource::new(
+        Address::parse("module.m.aws_s3_bucket.b").unwrap(),
+        header(),
+        Default::default(),
         existence,
-        count: None,
-        for_each: None,
-        provider: None,
-    }
+        None,
+        None,
+        None,
+    )
 }
 
 fn step(kind: StepKind, at: u32, resource: Option<&str>) -> Step {

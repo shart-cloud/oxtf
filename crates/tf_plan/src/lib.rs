@@ -55,6 +55,7 @@ use serde_json::Value as J;
 use tf_eval::{Origin, Prov, Step, StepKind, Truth, Value};
 use tf_linter::{Linter, ScanResult, ScanStats, Severity};
 use tf_semantic::model::{AnalysisStats, VariableInfo};
+use tf_semantic::{Address, InstanceKey};
 use tf_semantic::{
     Analysis, AnalyzeOptions, Attr, Block, Body, DiagSeverity, Diagnostic, FileTable, Mode, Module,
     Resource, SymbolRef, analyze_module,
@@ -474,16 +475,19 @@ impl<'p> Builder<'p> {
     }
 
     fn resource(&mut self, pr: &PlanRes<'p>) -> Resource {
-        let local = match pr.mode {
-            Mode::Managed => format!("{}.{}", pr.ty, pr.name),
-            Mode::Data => format!("data.{}.{}", pr.ty, pr.name),
+        // The plan's own spelling of the address is authoritative for the
+        // instance key's kind (`[0]` versus `["0"]`).
+        let id = match Address::parse(&pr.address) {
+            Ok(id) => id,
+            Err(_) => Address::new(
+                pr.module.as_str(),
+                pr.mode,
+                pr.ty.as_str(),
+                pr.name.as_str(),
+                pr.key.as_deref().map(|k| InstanceKey::Key(k.into())),
+            ),
         };
-        let prefix = if pr.module.is_empty() {
-            String::new()
-        } else {
-            format!("{}.", pr.module)
-        };
-        let base: Arc<str> = format!("{prefix}{local}").into();
+        let local = id.local();
         let src = self.src_instance(&pr.module, pr.mode, &pr.ty, &pr.name, pr.key.as_deref());
         let span = match src {
             Some(s) => s.span,
@@ -513,11 +517,8 @@ impl<'p> Builder<'p> {
             &pr.ty,
         );
         let ctx = ResCtx {
-            address: &pr.address,
-            base: base.clone(),
-            prefix: &prefix,
+            id: &id,
             module: &pr.module,
-            key: pr.key.as_deref().map(Arc::from),
             header: span,
         };
         let body = self.body(
@@ -530,21 +531,15 @@ impl<'p> Builder<'p> {
             src.map(|s| &s.body),
             exprs,
         );
-        Resource {
-            mode: pr.mode,
-            ty: pr.ty.as_str().into(),
-            name: pr.name.as_str().into(),
-            key: ctx.key.clone(),
-            address: pr.address.as_str().into(),
-            base_address: base,
-            module: pr.module.as_str().into(),
+        Resource::new(
+            id.clone(),
             span,
             body,
-            existence: Truth::True,
-            count: None,
-            for_each: None,
-            provider: schema.map(|s| s.provider),
-        }
+            Truth::True,
+            None,
+            None,
+            schema.map(|s| s.provider),
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -656,15 +651,11 @@ impl<'p> Builder<'p> {
                 {
                     return o.clone();
                 }
-                Origin::Computed {
-                    resource: ctx.base.clone(),
-                    key: ctx.key.clone(),
-                    attr: if sub.is_empty() {
-                        full.as_str().into()
-                    } else {
-                        format!("{full}{sub}").into()
-                    },
-                }
+                ctx.id.computed(if sub.is_empty() {
+                    full.clone()
+                } else {
+                    format!("{full}{sub}")
+                })
             });
             let sensitive_any = any_true(sv);
             let mut prov = Prov::EMPTY;
@@ -690,9 +681,9 @@ impl<'p> Builder<'p> {
                 Step::new(
                     StepKind::Attribute,
                     at,
-                    format!("{} {full}{what}", ctx.address),
+                    format!("{} {full}{what}", ctx.id),
                 )
-                .with_resource(ctx.base.clone()),
+                .with_resource(ctx.id.base_string().into()),
             );
             out.attrs.push(Attr {
                 name: name.into(),
@@ -740,27 +731,23 @@ impl<'p> Builder<'p> {
         if resources.len() == 1
             && !others
             && let Some((local, (key, Some(attr)))) = resources.iter().next()
+            && let Ok(target) = Address::parse_local(ctx.module, local)
         {
-            return Origin::Computed {
-                resource: format!("{}{local}", ctx.prefix).into(),
-                key: key.map(Arc::from),
-                attr: (*attr).into(),
-            };
+            return target
+                .with_key(key.map(|k| InstanceKey::Key(k.into())))
+                .computed(*attr);
         }
         if resources.len() == 1
             && !others
             && let Some(local) = resources.keys().next()
             && let Some(o @ Origin::Computed { resource, .. }) = src_value.and_then(Value::origin)
-            && **resource == *format!("{}{local}", ctx.prefix)
+            && let Ok(target) = Address::parse_local(ctx.module, local)
+            && **resource == *target.base_string()
         {
             return o.clone();
         }
         if !configured {
-            return Origin::Computed {
-                resource: ctx.base.clone(),
-                key: ctx.key.clone(),
-                attr: full.into(),
-            };
+            return ctx.id.computed(full);
         }
         let names: Vec<String> = refs
             .iter()
@@ -837,14 +824,12 @@ impl<'p> Builder<'p> {
                         && done.insert(format!("{local}.{}", attr.as_deref().unwrap_or(""))) =>
                 {
                     let attr = attr.as_deref().unwrap_or("");
-                    let target: Arc<str> = format!("{}{local}", ctx.prefix).into();
-                    let (mode, rest) = match local.strip_prefix("data.") {
-                        Some(r) => (Mode::Data, r),
-                        None => (Mode::Managed, local.as_str()),
+                    let Ok(referenced) = Address::parse_local(ctx.module, local) else {
+                        continue;
                     };
-                    let (ty, name) = rest.split_once('.').unwrap_or((rest, ""));
+                    let target: Arc<str> = referenced.base_string().into();
                     let span = self
-                        .src_resource(ctx.module, mode, ty, name)
+                        .src_resource(ctx.module, referenced.mode, &referenced.ty, &referenced.name)
                         .map(|r| r.attr(attr).map(|a| a.span).unwrap_or(r.span))
                         .unwrap_or(ctx.header);
                     steps.push(
@@ -864,12 +849,8 @@ impl<'p> Builder<'p> {
 }
 
 struct ResCtx<'c> {
-    address: &'c str,
-    base: Arc<str>,
-    /// Module prefix with trailing dot (`""` for the root).
-    prefix: &'c str,
+    id: &'c Address,
     module: &'c str,
-    key: Option<Arc<str>>,
     header: FileSpan,
 }
 

@@ -76,7 +76,7 @@ fn native_findings_match_baseline() {
     }
     assert_eq!(
         cases.len(),
-        35,
+        36,
         "seed fixture inventory changed; review the baseline coverage"
     );
     let mut plans = 0;
@@ -157,7 +157,7 @@ fn native_findings_match_baseline() {
             cases.insert(format!("plan:{plan_path}"), result);
         }
     }
-    assert_eq!(cases.len(), 75);
+    assert_eq!(cases.len(), 76);
     let actual = json!({"version": 1, "backend": "native", "cases": cases});
     let baseline = repo.join("fixtures/baseline/native.json");
     if std::env::var("OXTF_UPDATE_BASELINE").as_deref() == Ok("1") {
