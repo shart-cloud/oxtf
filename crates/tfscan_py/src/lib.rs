@@ -307,7 +307,7 @@ impl Value {
     /// Field of an object (missing → null), lifted over OneOf; Unknown /
     /// Tainted receivers return themselves.
     fn get(&self, name: &str) -> Value {
-        self.wrap(tf_rule_ir::field(&self.v, name))
+        self.wrap(self.v.field_or_null(name))
     }
     /// A Known `null`.
     #[staticmethod]

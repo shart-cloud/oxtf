@@ -3,7 +3,7 @@ use tf_eval::value::from_json;
 use tf_eval::{Kind, Known, Value, Verdict};
 use tf_semantic::Resource;
 
-use super::{field, str_in};
+use super::str_in;
 use crate::rule::{Category, Level, Rule, RuleMeta};
 
 /// An IAM policy statement with `Effect = "Allow"`, `Action = "*"` and
@@ -46,16 +46,16 @@ fn wildcard(v: &Value) -> Verdict {
 
 fn statement(s: &Value) -> Verdict {
     truth::map(s, &|s| {
-        let action = wildcard(&field(s, "Action"));
-        let resource = wildcard(&field(s, "Resource"));
-        let effect = test(&field(s, "Effect"), &|e| e.as_str() == Some("Allow"));
+        let action = wildcard(&s.field_or_null("Action"));
+        let resource = wildcard(&s.field_or_null("Resource"));
+        let effect = test(&s.field_or_null("Effect"), &|e| e.as_str() == Some("Allow"));
         action.and(resource).and(effect)
     })
 }
 
 fn policy(v: &Value) -> Verdict {
     truth::map(v, &|p| match document(p) {
-        Some(doc) => truth::map(&doc, &|d| exists(&field(d, "Statement"), &statement)),
+        Some(doc) => truth::map(&doc, &|d| exists(&d.field_or_null("Statement"), &statement)),
         None => Verdict::FALSE,
     })
 }

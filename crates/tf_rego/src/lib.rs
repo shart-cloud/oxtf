@@ -202,13 +202,8 @@ fn decode(result: regorus::Value, evidence: &[Value], entry: &str) -> Result<Ver
     let decision: Decision =
         serde_json::from_str(&result.to_json_str().map_err(|e| e.to_string())?)
             .map_err(|e| format!("invalid Rego decision: {e}"))?;
-    let truth = match decision.rank {
-        0 => Truth::False,
-        1 => Truth::Unknown,
-        2 => Truth::Tainted,
-        3 => Truth::True,
-        n => return Err(format!("invalid Rego truth rank: {n}")),
-    };
+    let truth = Truth::from_rank(decision.rank)
+        .ok_or_else(|| format!("invalid Rego truth rank: {}", decision.rank))?;
     let witness = decision
         .evidence
         .map(|id| {

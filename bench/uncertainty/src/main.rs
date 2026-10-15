@@ -45,13 +45,7 @@ fn native(c: &Case) -> Verdict {
     }
 }
 fn truth_from_rank(rank: u64) -> Truth {
-    match rank {
-        0 => Truth::False,
-        1 => Truth::Unknown,
-        2 => Truth::Tainted,
-        3 => Truth::True,
-        _ => panic!("invalid truth rank"),
-    }
+    Truth::from_rank(u8::try_from(rank).expect("truth rank")).expect("invalid truth rank")
 }
 
 // Use production finding construction for existence gating and certainty.

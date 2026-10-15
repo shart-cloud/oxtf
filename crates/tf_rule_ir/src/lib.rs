@@ -480,32 +480,11 @@ enum Scope<'s> {
     Value(&'s Value),
 }
 
-/// Field `name` of an object value; a missing field of a Known object is
-/// null (attributes not written in a block are unset). Lifts over `OneOf`.
-/// Same semantics as the seed rules' helper.
-pub fn field(obj: &Value, name: &str) -> Value {
-    match &obj.kind {
-        Kind::Known(Known::Object(m)) => match m.get(name) {
-            Some(v) => v.child_of(obj),
-            None => Value::null(),
-        },
-        Kind::Known(Known::Null) => Value::null(),
-        Kind::OneOf(o) => Value::one_of(
-            o.alternatives
-                .iter()
-                .map(|a| field(&a.child_of(obj), name))
-                .collect(),
-            o.tainted,
-        ),
-        _ => obj.get_attr(name),
-    }
-}
-
 fn step(v: &Value, s: &Seg) -> Value {
     if let (Some(i), Kind::Known(Known::List(_))) = (s.index, &v.kind) {
         return v.index(&Value::number(i as f64));
     }
-    field(v, &s.name)
+    v.field_or_null(&s.name)
 }
 
 /// Loose equality of two Known values, with Terraform conversions.
@@ -621,8 +600,7 @@ fn eval_pred(n: &Node, s: Scope<'_>) -> Verdict {
         }
         Node::ListAll(l, p) => {
             let list = eval_value(l, s);
-            let v = truth::exists(&list, &|e| negate(eval_pred(p, Scope::Value(e))));
-            negate(v)
+            truth::forall(&list, &|e| eval_pred(p, Scope::Value(e)))
         }
         Node::And(args) => {
             let mut acc = eval_pred(&args[0], s);
@@ -644,17 +622,13 @@ fn eval_pred(n: &Node, s: Scope<'_>) -> Verdict {
             }
             acc
         }
-        Node::Not(a) => negate(eval_pred(a, s)),
+        Node::Not(a) => eval_pred(a, s).negate(),
         Node::IsNull(e) => truth::test(&eval_value(e, s), &|x| x.is_null()),
         Node::IsKnown(e) => {
             let v = eval_value(e, s);
             Verdict::new(Truth::from_bool(v.is_wholly_known()), Some(v))
         }
     }
-}
-
-fn negate(v: Verdict) -> Verdict {
-    Verdict::new(v.truth.negate(), v.witness)
 }
 
 impl CompiledRule {

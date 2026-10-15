@@ -46,7 +46,7 @@ fn scan_json_and_recursive() {
         .output()
         .unwrap();
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(v["stats"]["roots"], 5);
+    assert_eq!(v["stats"]["roots"], 6);
     let sev: Vec<&str> = v["findings"]
         .as_array()
         .unwrap()
@@ -54,7 +54,7 @@ fn scan_json_and_recursive() {
         .map(|f| f["severity"].as_str().unwrap())
         .collect();
     assert_eq!(sev.iter().filter(|s| **s == "definite").count(), 3);
-    assert_eq!(sev.iter().filter(|s| **s == "conditional").count(), 1);
+    assert_eq!(sev.iter().filter(|s| **s == "conditional").count(), 2);
 }
 
 #[test]

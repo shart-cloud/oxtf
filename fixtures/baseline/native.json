@@ -1866,13 +1866,44 @@
     },
     "source:fixtures/rules/aws-rds-unencrypted/conditional_count_tainted_alternative": {
       "diagnostics": [],
-      "findings": [],
+      "findings": [
+        {
+          "address": "aws_db_instance.db",
+          "level": "high",
+          "location": {
+            "column": 3,
+            "end": 472,
+            "file": "fixtures/rules/aws-rds-unencrypted/conditional_count_tainted_alternative/main.tf",
+            "line": 15,
+            "start": 447
+          },
+          "message": "storage_encrypted is false (resource exists depending on an unconstrained variable)",
+          "module": "",
+          "provenance": [
+            {
+              "column": 3,
+              "end": 472,
+              "file": "fixtures/rules/aws-rds-unencrypted/conditional_count_tainted_alternative/main.tf",
+              "kind": "attribute",
+              "label": "aws_db_instance.db storage_encrypted",
+              "line": 15,
+              "start": 447
+            }
+          ],
+          "resource_type": "aws_db_instance",
+          "root": "fixtures/rules/aws-rds-unencrypted/conditional_count_tainted_alternative",
+          "rule": "aws-rds-unencrypted",
+          "severity": "conditional"
+        }
+      ],
       "stats": {
-        "conditional": 0,
+        "conditional": 1,
         "definite": 0,
         "files": 1,
-        "findings": 0,
-        "findings_by_rule": {},
+        "findings": 1,
+        "findings_by_rule": {
+          "aws-rds-unencrypted": 1
+        },
         "module_instances": 1,
         "resources": 2,
         "roots": 1

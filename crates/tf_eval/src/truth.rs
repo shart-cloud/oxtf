@@ -47,6 +47,25 @@ impl Truth {
             x => x,
         }
     }
+    /// Position in the order `False < Unknown < Tainted < True`, for
+    /// adapters that carry a truth value through a foreign engine.
+    pub fn rank(self) -> u8 {
+        match self {
+            Truth::False => 0,
+            Truth::Unknown => 1,
+            Truth::Tainted => 2,
+            Truth::True => 3,
+        }
+    }
+    pub fn from_rank(rank: u8) -> Option<Truth> {
+        Some(match rank {
+            0 => Truth::False,
+            1 => Truth::Unknown,
+            2 => Truth::Tainted,
+            3 => Truth::True,
+            _ => return None,
+        })
+    }
 }
 
 /// A truth value plus the value that decided it (with its full provenance
@@ -82,6 +101,32 @@ impl Verdict {
 
     pub fn holds(&self) -> bool {
         matches!(self.truth, Truth::True | Truth::Tainted)
+    }
+
+    /// Negation; the witness is kept (it still decided the result).
+    #[must_use]
+    pub fn negate(self) -> Verdict {
+        Verdict::new(self.truth.negate(), self.witness)
+    }
+}
+
+/// How an abstract value is uncertain: `True` for a Known value, `Tainted`
+/// when the uncertainty traces to an unconstrained input (a Tainted value,
+/// or a `OneOf` whose choice or some alternative is tainted), `Unknown`
+/// otherwise. This is the one rule for classifying an abstract value, used
+/// for resource existence (`count` / `for_each`) and by adapters.
+pub fn uncertainty(v: &Value) -> Truth {
+    match &v.kind {
+        Kind::Known(_) => Truth::True,
+        Kind::Tainted(_) => Truth::Tainted,
+        Kind::Unknown(_) => Truth::Unknown,
+        Kind::OneOf(o) => {
+            if o.tainted || o.alternatives.iter().any(|a| uncertainty(a) == Truth::Tainted) {
+                Truth::Tainted
+            } else {
+                Truth::Unknown
+            }
+        }
     }
 }
 
@@ -155,7 +200,16 @@ pub fn exists(v: &Value, pred: &dyn Fn(&Value) -> Verdict) -> Verdict {
     }
 }
 
-fn combine_one_of(vs: Vec<Verdict>, tainted: bool) -> Verdict {
+/// "Every element of the list `v` satisfies `pred`"; the dual of [`exists`].
+pub fn forall(v: &Value, pred: &dyn Fn(&Value) -> Verdict) -> Verdict {
+    exists(v, &|e| pred(e).negate()).negate()
+}
+
+/// Combine the verdicts of a `OneOf`'s alternatives. `True` when every
+/// alternative holds (the first one's witness); otherwise the strongest
+/// alternative's witness with `Tainted` when the ambiguity is tainted (the
+/// OneOf's flag or a Tainted alternative) and `Unknown` otherwise.
+pub fn combine_one_of(vs: Vec<Verdict>, tainted: bool) -> Verdict {
     let tainted = tainted || vs.iter().any(|x| x.truth == Truth::Tainted);
     if !vs.is_empty() && vs.iter().all(|x| x.truth == Truth::True) {
         return vs.into_iter().next().unwrap();
@@ -180,6 +234,57 @@ fn combine_one_of(vs: Vec<Verdict>, tainted: bool) -> Verdict {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn uncertainty_follows_the_one_of_rule() {
+        use Truth::*;
+        assert_eq!(uncertainty(&Value::bool(true)), True);
+        assert_eq!(uncertainty(&Value::tainted("x")), Tainted);
+        assert_eq!(uncertainty(&Value::other("computed")), Unknown);
+        let alts = || vec![Value::number(1.0), Value::number(0.0)];
+        assert_eq!(uncertainty(&Value::one_of(alts(), false)), Unknown);
+        assert_eq!(uncertainty(&Value::one_of(alts(), true)), Tainted);
+        // A Tainted alternative taints the choice even when the flag is off,
+        // exactly as combine_one_of treats a Tainted alternative verdict.
+        let mixed = Value::one_of(vec![Value::tainted("n"), Value::number(0.0)], false);
+        assert_eq!(uncertainty(&mixed), Tainted);
+        assert_eq!(
+            test(&mixed, &|x| x.as_number().is_some_and(|n| n >= 1.0)).truth,
+            Tainted
+        );
+    }
+
+    #[test]
+    fn forall_negate_and_ranks() {
+        let all = Value::list(vec![Value::number(1.0), Value::number(2.0)]);
+        let pos = |e: &Value| test(e, &|x| x.as_number().is_some_and(|n| n > 0.0));
+        assert_eq!(forall(&all, &pos).truth, Truth::True);
+        let some = Value::list(vec![Value::number(1.0), Value::number(-2.0)]);
+        let v = forall(&some, &pos);
+        assert_eq!(v.truth, Truth::False);
+        assert_eq!(v.witness.and_then(|w| w.as_number()), Some(-2.0));
+        let open = Value::list(vec![Value::number(1.0), Value::tainted("t")]);
+        assert_eq!(forall(&open, &pos).truth, Truth::Tainted);
+        assert_eq!(Verdict::new(Truth::Unknown, None).negate().truth, Truth::Unknown);
+        for t in [Truth::False, Truth::Unknown, Truth::Tainted, Truth::True] {
+            assert_eq!(Truth::from_rank(t.rank()), Some(t));
+        }
+        assert_eq!(Truth::from_rank(4), None);
+    }
+
+    #[test]
+    fn field_or_null_is_lenient_and_lifts() {
+        let obj = Value::object([("a".into(), Value::bool(true))].into());
+        assert_eq!(obj.field_or_null("a").as_bool(), Some(true));
+        assert!(obj.field_or_null("b").is_null());
+        assert!(Value::null().field_or_null("a").is_null());
+        assert!(Value::tainted("t").field_or_null("a").is_tainted());
+        let o = Value::one_of(vec![obj, Value::null()], true);
+        match &o.field_or_null("a").kind {
+            Kind::OneOf(x) => assert!(x.tainted && x.alternatives.len() == 2),
+            k => panic!("{k:?}"),
+        }
+    }
 
     #[test]
     fn lattice() {

@@ -2,7 +2,7 @@ use tf_eval::truth::{self, exists, test};
 use tf_eval::{Value, Verdict};
 use tf_semantic::Resource;
 
-use super::{field, str_in};
+use super::str_in;
 use crate::rule::{Category, Level, Rule, RuleMeta};
 
 /// SSH (TCP 22) reachable from the whole internet (`0.0.0.0/0` or `::/0`).
@@ -52,11 +52,11 @@ fn reaches_22(protocol: &Value, from: &Value, to: &Value) -> Verdict {
 
 fn inline_rule(rule: &Value) -> Verdict {
     truth::map(rule, &|r| {
-        let open = open_list(&field(r, "cidr_blocks")).or(open_list(&field(r, "ipv6_cidr_blocks")));
+        let open = open_list(&r.field_or_null("cidr_blocks")).or(open_list(&r.field_or_null("ipv6_cidr_blocks")));
         open.and(reaches_22(
-            &field(r, "protocol"),
-            &field(r, "from_port"),
-            &field(r, "to_port"),
+            &r.field_or_null("protocol"),
+            &r.field_or_null("from_port"),
+            &r.field_or_null("to_port"),
         ))
     })
 }
