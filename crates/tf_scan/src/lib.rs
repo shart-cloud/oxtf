@@ -124,6 +124,10 @@ pub struct ScanRequest {
     /// the way the input paths are written. This is how an unsaved buffer,
     /// stdin, or a proposed patch is scanned without touching the checkout.
     pub overlay: Vec<(PathBuf, Arc<str>)>,
+    /// Return the analysed models in `ScanOutput::analyses`. Off, each
+    /// root's model is dropped once its rules have run (the CLI wants
+    /// findings only); `analyses` is then empty.
+    pub keep_models: bool,
 }
 
 impl ScanRequest {
@@ -136,6 +140,7 @@ impl ScanRequest {
             var_files: Vec::new(),
             threads: None,
             overlay: Vec::new(),
+            keep_models: true,
         }
     }
 
@@ -148,13 +153,15 @@ impl ScanRequest {
             var_files: Vec::new(),
             threads: None,
             overlay: Vec::new(),
+            keep_models: true,
         }
     }
 }
 
 pub struct ScanOutput {
     pub result: ScanResult,
-    /// The analysed model of every root (one entry for a plan).
+    /// The analysed model of every root (one entry for a plan); empty
+    /// when the request's `keep_models` was off.
     pub analyses: Vec<Analysis>,
 }
 
@@ -247,6 +254,7 @@ pub fn scan(req: ScanRequest) -> Result<ScanOutput, ScanError> {
                 var_files: req.var_files,
                 threads: req.threads,
                 overlay: req.overlay,
+                keep_models: req.keep_models,
             };
             let (result, analyses) = tf_linter::scan_with(&linter, &roots, &opts);
             Ok(ScanOutput { result, analyses })

@@ -159,6 +159,8 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
         var_files,
         threads,
         overlay,
+        // The CLI prints findings; it never reads the models.
+        keep_models: false,
     };
     Ok(a)
 }
