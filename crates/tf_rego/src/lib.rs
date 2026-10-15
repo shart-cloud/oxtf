@@ -120,18 +120,23 @@ fn engine_with(name: &str, source: &str) -> Result<regorus::Engine, String> {
     engine
         .add_policy(format!("{name}.rego"), source.to_string())
         .map_err(|e| format!("policy {name}: {e}"))?;
+    // Prepare (schedule, hoist, gather rules) once here. A clone of a
+    // prepared engine stays prepared, so the per-resource clones in `eval`
+    // only pay for the evaluation; an unprepared engine would redo this
+    // work for every resource.
+    engine
+        .eval_query("true".to_string(), false)
+        .map_err(|e| format!("policy {name}: {e}"))?;
     Ok(engine)
 }
 
-fn eval(engine: &regorus::Engine, input: &Json, rule: &str) -> Result<regorus::Value, String> {
+fn eval(engine: &regorus::Engine, input: Json, rule: &str) -> Result<regorus::Value, String> {
     let mut engine = engine.clone();
-    engine.set_input(
-        regorus::Value::from_json_str(&input.to_string()).map_err(|e| e.to_string())?,
-    );
+    engine.set_input(regorus::Value::from(input));
     engine.eval_rule(rule.to_string()).map_err(|e| e.to_string())
 }
 
-fn eval_bool(engine: &regorus::Engine, input: &Json, rule: &str) -> Result<bool, String> {
+fn eval_bool(engine: &regorus::Engine, input: Json, rule: &str) -> Result<bool, String> {
     match eval(engine, input, rule)? {
         regorus::Value::Undefined => Ok(false),
         v => v
@@ -202,7 +207,7 @@ impl NativePolicy {
     fn compile(seed: Seed, package: &'static str, source: &str) -> Result<Self, String> {
         let engine = engine_with(package, source)?;
         let probe = json!({"configured": {}, "subject": {"value": null, "boolean": null, "number": null, "text": null}});
-        let declared = eval(&engine, &probe, &format!("data.{package}.subject"))?;
+        let declared = eval(&engine, probe.clone(), &format!("data.{package}.subject"))?;
         let declared: Json = serde_json::from_str(
             &declared.to_json_str().map_err(|e| e.to_string())?,
         )
@@ -217,8 +222,8 @@ impl NativePolicy {
             _ => return Err(format!("policy {package}: subject.mode must be \"effective\" or \"configured\"")),
         };
         // Both decision rules must exist and be boolean before any scan runs.
-        eval_bool(&engine, &probe, &format!("data.{package}.skip"))?;
-        eval_bool(&engine, &probe, &format!("data.{package}.violates"))?;
+        eval_bool(&engine, probe.clone(), &format!("data.{package}.skip"))?;
+        eval_bool(&engine, probe, &format!("data.{package}.violates"))?;
         Ok(NativePolicy {
             seed,
             info: seed.info(),
@@ -246,7 +251,7 @@ impl NativePolicy {
     fn verdict(&self, r: &Resource) -> Result<Option<Verdict>, String> {
         let configured = Self::configured(r);
         let input = json!({"configured": configured});
-        if eval_bool(&self.engine, &input, &format!("data.{}.skip", self.package))? {
+        if eval_bool(&self.engine, input, &format!("data.{}.skip", self.package))? {
             return Ok(None);
         }
         let value = if self.subject.effective {
@@ -278,7 +283,7 @@ impl NativePolicy {
                     "text": known.to_str(),
                 },
             });
-            match eval_bool(&self.engine, &input, &rule) {
+            match eval_bool(&self.engine, input, &rule) {
                 Ok(b) => Truth::from_bool(b),
                 Err(e) => {
                     *error.borrow_mut() = Some(e);
@@ -335,7 +340,7 @@ impl ForeignPolicy {
             Shape::Hcl => json!({"resource": {}}),
             Shape::Plan => json!({"format_version": "1.2", "resource_changes": [], "planned_values": {"root_module": {"resources": []}}}),
         };
-        violations(&eval(&engine, &empty, entry).map_err(|e| format!("policy {}: {e}", file.name))?)
+        violations(&eval(&engine, empty, entry).map_err(|e| format!("policy {}: {e}", file.name))?)
             .map_err(|e| format!("policy {}: {e}", file.name))?;
         Ok(ForeignPolicy {
             info: RuleInfo {
@@ -358,7 +363,7 @@ impl ForeignPolicy {
     fn judge(&self, r: &Resource) -> Result<Vec<Judgement>, String> {
         let projection = projection::project(r, self.shape);
         let input = projection::input(r, &projection, self.shape);
-        let messages = violations(&eval(&self.engine, &input, &self.entry)?)?;
+        let messages = violations(&eval(&self.engine, input, &self.entry)?)?;
         if messages.is_empty() {
             return Ok(Vec::new());
         }
