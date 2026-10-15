@@ -14,7 +14,7 @@ pub use gcp_storage_uniform_access::GcpStorageUniformAccess;
 
 use tf_eval::{Value, Verdict, truth};
 
-use crate::rule::DynRule;
+use crate::rule::{DynRule, FixAction, FixHint};
 
 pub fn all() -> Vec<Box<dyn DynRule>> {
     vec![
@@ -24,6 +24,18 @@ pub fn all() -> Vec<Box<dyn DynRule>> {
         Box::new(AwsRdsUnencrypted),
         Box::new(GcpStorageUniformAccess),
     ]
+}
+
+/// A fix that sets top-level `attribute` of `r` to `value`: at the attribute
+/// when it is written, else by insertion into the block.
+pub(crate) fn set_attribute(r: &tf_semantic::Resource, attribute: &str, value: serde_json::Value) -> FixHint {
+    FixHint {
+        resource: r.id.clone(),
+        attribute: attribute.to_string(),
+        action: FixAction::Set,
+        value,
+        site: r.attr(attribute).map(|a| a.span),
+    }
 }
 
 /// The string value (`to_str` of a Known primitive) equals one of `set`.

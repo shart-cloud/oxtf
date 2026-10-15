@@ -16,11 +16,14 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
+
 use tf_eval::{Kind, Step, Truth, Verdict};
 use tf_semantic::{Module, Resource};
 use tf_span::FileSpan;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Category {
     Network,
     Storage,
@@ -43,7 +46,8 @@ impl Category {
 }
 
 /// How bad a rule's finding is (rule metadata, independent of certainty).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Level {
     Low,
     Medium,
@@ -63,7 +67,8 @@ impl Level {
 }
 
 /// Certainty of a finding, ordered from most to least certain.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Severity {
     /// Insecure as written (for the configuration with its defaults and
     /// tfvars).
@@ -137,6 +142,11 @@ pub trait Rule: RuleMeta + Send + Sync {
     /// Wording for a verdict on a resource. Only called for verdicts that
     /// hold; [`Finding::from_verdict`] appends any certainty suffix.
     fn message(&self, resource: &Resource, verdict: &Verdict) -> String;
+
+    /// A mechanical fix for a verdict that holds, when the rule knows one.
+    fn fix_hint(&self, _resource: &Resource, _verdict: &Verdict) -> Option<FixHint> {
+        None
+    }
 }
 
 /// What a rule hands the engine about one resource instance: a certainty,
@@ -148,6 +158,10 @@ pub struct Judgement {
     pub severity: Severity,
     pub witness: Option<tf_eval::Value>,
     pub message: String,
+    /// Inputs the rule could not see (foreign policies over a Known-only
+    /// projection); empty for rules on the lattice.
+    pub hidden: Vec<Hidden>,
+    pub fix_hint: Option<FixHint>,
 }
 
 impl Judgement {
@@ -160,7 +174,49 @@ impl Judgement {
             severity,
             witness: verdict.witness,
             message,
+            hidden: Vec::new(),
+            fix_hint: None,
         })
+    }
+}
+
+/// A configured value a rule did not see, with why.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Hidden {
+    /// Attribute path within the resource body.
+    pub path: String,
+    /// `Tainted` (unconstrained variable) or `Unknown` (apply-time).
+    pub truth: Truth,
+}
+
+/// What a mechanical fix would do, for a patch tool. Judgement about
+/// *whether* to apply it stays with the caller.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FixHint {
+    /// The resource instance to edit (not always the finding's: the S3 rule
+    /// points at the public-access block).
+    pub resource: tf_semantic::Address,
+    /// Attribute path to set.
+    pub attribute: String,
+    pub action: FixAction,
+    /// The literal to write.
+    pub value: serde_json::Value,
+    /// Where the attribute is written today, or `None` to insert into the
+    /// resource block.
+    pub site: Option<FileSpan>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FixAction {
+    /// Set (or add) a top-level attribute to a literal.
+    Set,
+}
+
+impl FixAction {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            FixAction::Set => "set",
+        }
     }
 }
 
@@ -199,23 +255,35 @@ impl<T: Rule> DynRule for T {
     }
     fn judge_resource(&self, resource: &Resource) -> Vec<Judgement> {
         self.verdict(resource)
-            .and_then(|v| Judgement::from_verdict(v, |v| self.message(resource, v)))
+            .and_then(|v| self.judge(resource, v))
             .into_iter()
             .collect()
     }
     fn judge_module<'m>(&self, module: &'m Module) -> Vec<(&'m Resource, Judgement)> {
         self.module_verdicts(module)
             .into_iter()
-            .filter_map(|(r, v)| Judgement::from_verdict(v, |v| self.message(r, v)).map(|j| (r, j)))
+            .filter_map(|(r, v)| self.judge(r, v).map(|j| (r, j)))
             .collect()
     }
 }
+
+trait Judge: Rule {
+    fn judge(&self, r: &Resource, v: Verdict) -> Option<Judgement> {
+        let fix_hint = Severity::from_truth(v.truth).and_then(|_| self.fix_hint(r, &v));
+        Judgement::from_verdict(v, |v| self.message(r, v)).map(|j| Judgement { fix_hint, ..j })
+    }
+}
+impl<T: Rule> Judge for T {}
 
 /// A finding.
 #[derive(Clone, Debug)]
 pub struct Finding {
     pub rule: Arc<str>,
+    pub category: Category,
+    pub description: Arc<str>,
     pub level: Level,
+    /// The resource instance's identity.
+    pub resource: tf_semantic::Address,
     /// Resource address, module path included (`module.m.aws_s3_bucket.b`).
     pub address: Arc<str>,
     pub resource_type: Arc<str>,
@@ -230,6 +298,15 @@ pub struct Finding {
     pub provenance: Vec<Step>,
     /// The root module directory whose analysis produced this finding.
     pub root: PathBuf,
+    /// Attribute path of the deciding value within this resource, when the
+    /// provenance names one.
+    pub attribute: Option<Arc<str>>,
+    /// The deciding top-level attribute as written (`None` when absent).
+    pub configured: Option<tf_eval::Value>,
+    /// The same after the defaults overlay.
+    pub effective: Option<tf_eval::Value>,
+    pub hidden: Vec<Hidden>,
+    pub fix_hint: Option<FixHint>,
 }
 
 impl Finding {
@@ -268,6 +345,22 @@ impl Finding {
         message: &str,
         root: &Path,
     ) -> Option<Finding> {
+        Self::build(info, resource, severity, witness, message, root, Vec::new(), None)
+    }
+
+    /// [`Finding::with_severity`] plus the hidden inputs and fix hint a
+    /// judgement carries. The engine's entry point.
+    #[allow(clippy::too_many_arguments)]
+    pub fn build(
+        info: &RuleInfo,
+        resource: &Resource,
+        severity: Severity,
+        witness: Option<&tf_eval::Value>,
+        message: &str,
+        root: &Path,
+        hidden: Vec<Hidden>,
+        fix_hint: Option<FixHint>,
+    ) -> Option<Finding> {
         let mut downgraded = false;
         let severity = match resource.existence {
             Truth::False | Truth::Unknown => return None,
@@ -278,12 +371,17 @@ impl Finding {
             Truth::True => severity,
         };
         let provenance = witness.map(|w| w.prov.steps()).unwrap_or_default();
-        let primary = provenance
+        let deciding = provenance
             .iter()
             .rev()
-            .find(|s| s.resource.as_deref() == Some(&*resource.base_address))
-            .map(|s| s.at)
-            .unwrap_or(resource.span);
+            .find(|s| s.resource.as_deref() == Some(&*resource.base_address));
+        let primary = deciding.map(|s| s.at).unwrap_or(resource.span);
+        let attribute = deciding.and_then(|s| s.attribute.clone());
+        let top = attribute
+            .as_deref()
+            .map(|p| p.split(['.', '[']).next().unwrap_or(p).to_string());
+        let configured = top.as_deref().and_then(|t| resource.value(t));
+        let effective = top.as_deref().and_then(|t| resource.value_or_default(t));
         let message = match (severity, witness.map(|w| &w.kind)) {
             (Severity::Conditional, Some(Kind::Tainted(t))) if !t.variable.starts_with('(') => {
                 format!(
@@ -301,7 +399,10 @@ impl Finding {
         };
         Some(Finding {
             rule: info.name.clone(),
+            category: info.category,
+            description: info.description.clone(),
             level: info.level,
+            resource: resource.id.clone(),
             address: resource.address.clone(),
             resource_type: resource.ty.clone(),
             module: resource.module.clone(),
@@ -310,6 +411,11 @@ impl Finding {
             primary,
             provenance,
             root: root.to_path_buf(),
+            attribute,
+            configured,
+            effective,
+            hidden,
+            fix_hint,
         })
     }
 }

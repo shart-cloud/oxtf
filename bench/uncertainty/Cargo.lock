@@ -822,6 +822,7 @@ version = "0.0.0"
 dependencies = [
  "miette",
  "rayon",
+ "serde",
  "serde_json",
  "tf_eval",
  "tf_schema",

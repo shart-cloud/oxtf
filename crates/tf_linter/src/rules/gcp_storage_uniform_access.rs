@@ -1,8 +1,8 @@
 use tf_eval::Verdict;
 use tf_semantic::Resource;
 
-use super::not_true;
-use crate::rule::{Category, Level, Rule, RuleMeta};
+use super::{not_true, set_attribute};
+use crate::rule::{Category, FixHint, Level, Rule, RuleMeta};
 
 /// `google_storage_bucket` without uniform bucket-level access:
 /// `uniform_bucket_level_access` false or absent (defaults overlay: false;
@@ -21,6 +21,10 @@ impl RuleMeta for GcpStorageUniformAccess {
 impl Rule for GcpStorageUniformAccess {
     fn verdict(&self, r: &Resource) -> Option<Verdict> {
         Some(not_true(&r.value_or_default("uniform_bucket_level_access")?))
+    }
+
+    fn fix_hint(&self, r: &Resource, _v: &Verdict) -> Option<FixHint> {
+        Some(set_attribute(r, "uniform_bucket_level_access", serde_json::Value::Bool(true)))
     }
 
     fn message(&self, r: &Resource, v: &Verdict) -> String {

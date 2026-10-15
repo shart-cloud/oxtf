@@ -63,13 +63,15 @@ impl Linter {
         for m in &analysis.modules {
             for &i in &self.module_rules {
                 for (r, j) in self.rules[i].judge_module(m) {
-                    out.extend(Finding::with_severity(
+                    out.extend(Finding::build(
                         &self.infos[i],
                         r,
                         j.severity,
                         j.witness.as_ref(),
                         &j.message,
                         root,
+                        j.hidden,
+                        j.fix_hint,
                     ));
                 }
             }
@@ -80,13 +82,15 @@ impl Linter {
                 if let Some(rs) = self.by_type.get(&*r.ty) {
                     for &i in rs {
                         for j in self.rules[i].judge_resource(r) {
-                            out.extend(Finding::with_severity(
+                            out.extend(Finding::build(
                                 &self.infos[i],
                                 r,
                                 j.severity,
                                 j.witness.as_ref(),
                                 &j.message,
                                 root,
+                                j.hidden,
+                                j.fix_hint,
                             ));
                         }
                     }

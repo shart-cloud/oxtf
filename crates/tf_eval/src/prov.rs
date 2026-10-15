@@ -78,6 +78,9 @@ pub struct Step {
     /// owning resource's address (module path included, instance key
     /// excluded). This is explanation metadata, not evidence of identity.
     pub resource: Option<Arc<str>>,
+    /// For [`StepKind::Attribute`] steps: the attribute path within the
+    /// resource body (`storage_encrypted`, `ingress.cidr_blocks`).
+    pub attribute: Option<Arc<str>>,
 }
 
 impl Step {
@@ -87,11 +90,17 @@ impl Step {
             at,
             label: label.into(),
             resource: None,
+            attribute: None,
         }
     }
 
     pub fn with_resource(mut self, address: Arc<str>) -> Self {
         self.resource = Some(address);
+        self
+    }
+
+    pub fn with_attribute(mut self, path: impl Into<Arc<str>>) -> Self {
+        self.attribute = Some(path.into());
         self
     }
 

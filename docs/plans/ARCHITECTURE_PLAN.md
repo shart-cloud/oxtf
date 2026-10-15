@@ -272,6 +272,20 @@ one site.
 
 ### Phase 4 — the finding record: the agent-facing contract
 
+**Done 2026-10-14** (branch `phase4-record`). `tf_linter::record` defines schema 1
+(`docs/FINDING_SCHEMA.md` has the worked example and per-output coverage). JSON is the
+record verbatim; the Python `Finding` gets record-backed getters and `to_dict()`; Arrow
+gains `fingerprint`, `category`, `attribute` and a `record` JSON column plus `resource` and
+`attribute` on provenance steps. Provenance steps now carry the attribute path, which is
+how the record knows the deciding attribute and its configured and effective values. The
+three rules with a mechanical fix (RDS, GCS, S3) supply fix hints; the S3 hint targets the
+public-access block, and no hint is given when adding a resource would be needed.
+Baseline regenerated once; a review script confirmed every rule, address, severity,
+message, location, provenance step and stat of all 58 findings in 76 cases survived
+unchanged. Deviation: `rule_errors` is present and always empty until Phase 5 turns the
+Rego error channel into a value. The S3 join's findings have no `attribute` because the
+deciding value is on the other resource; the fix hint still points at it.
+
 **Files.** New `crates/tf_linter/src/record.rs`; `render.rs`; `crates/tf_cli/src/main.rs`;
 `crates/tfscan_py/src/{lib,arrow}.rs`; `tests/native_baseline.rs`; `fixtures/baseline/`.
 

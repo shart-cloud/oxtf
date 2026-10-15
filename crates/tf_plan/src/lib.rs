@@ -163,6 +163,7 @@ pub fn scan_plan(
         findings,
         diagnostics: a.diagnostics,
         stats,
+        rule_errors: Vec::new(),
         files,
     })
 }
@@ -683,7 +684,8 @@ impl<'p> Builder<'p> {
                     at,
                     format!("{} {full}{what}", ctx.id),
                 )
-                .with_resource(ctx.id.base_string().into()),
+                .with_resource(ctx.id.base_string().into())
+                .with_attribute(full.as_str()),
             );
             out.attrs.push(Attr {
                 name: name.into(),
@@ -838,7 +840,8 @@ impl<'p> Builder<'p> {
                             span,
                             format!("{target}.{attr} (reference in plan configuration)"),
                         )
-                        .with_resource(target),
+                        .with_resource(target)
+                        .with_attribute(attr),
                     );
                 }
                 _ => {}

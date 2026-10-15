@@ -127,12 +127,13 @@ fn native_findings_match_baseline() {
         } else {
             vec!["aws_s3_bucket.b[\"b\"]"]
         };
-        let addresses: Vec<_> = result["findings"]
+        let mut addresses: Vec<_> = result["findings"]
             .as_array()
             .unwrap()
             .iter()
-            .map(|f| f["address"].as_str().unwrap())
+            .map(|f| f["resource"]["address"].as_str().unwrap())
             .collect();
+        addresses.sort();
         assert_eq!(addresses, expected, "{path}");
         assert_eq!(result["diagnostics"], json!([]));
         cases.insert(format!("source:{path}"), result);
@@ -147,12 +148,13 @@ fn native_findings_match_baseline() {
                     path.into(),
                 ],
             );
-            let addresses: Vec<_> = result["findings"]
+            let mut addresses: Vec<_> = result["findings"]
                 .as_array()
                 .unwrap()
                 .iter()
-                .map(|f| f["address"].as_str().unwrap())
+                .map(|f| f["resource"]["address"].as_str().unwrap())
                 .collect();
+            addresses.sort();
             assert_eq!(addresses, expected, "{plan_path}");
             cases.insert(format!("plan:{plan_path}"), result);
         }

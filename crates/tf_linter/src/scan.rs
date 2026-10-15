@@ -47,6 +47,8 @@ pub struct ScanResult {
     /// Parse errors, strict-bool warnings, missing local modules, ...
     pub diagnostics: Vec<Diagnostic>,
     pub stats: ScanStats,
+    /// Rules that failed to run; never silent (see `record::RuleError`).
+    pub rule_errors: Vec<crate::record::RuleError>,
     /// Resolves the `FileId`s in findings, provenance and diagnostics.
     pub files: Arc<FileTable>,
 }
@@ -174,6 +176,7 @@ pub fn scan_with(
             findings,
             diagnostics,
             stats,
+            rule_errors: Vec::new(),
             files,
         },
         analyses,
