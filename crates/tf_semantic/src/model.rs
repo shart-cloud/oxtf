@@ -218,7 +218,8 @@ pub struct Module {
     pub outputs: Vec<VariableInfo>,
     pub module_calls: Vec<ModuleCallInfo>,
     pub symbols: Vec<SymbolInfo>,
-    pub references: Vec<crate::module::Reference>,
+    /// The definition's reference edges, shared by its instances.
+    pub references: Arc<Vec<crate::module::Reference>>,
 }
 
 impl Module {

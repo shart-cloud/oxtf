@@ -121,7 +121,11 @@ pub fn uncertainty(v: &Value) -> Truth {
         Kind::Tainted(_) => Truth::Tainted,
         Kind::Unknown(_) => Truth::Unknown,
         Kind::OneOf(o) => {
-            if o.tainted || o.alternatives.iter().any(|a| uncertainty(a) == Truth::Tainted) {
+            if o.tainted
+                || o.alternatives
+                    .iter()
+                    .any(|a| uncertainty(a) == Truth::Tainted)
+            {
                 Truth::Tainted
             } else {
                 Truth::Unknown
@@ -265,7 +269,10 @@ mod tests {
         assert_eq!(v.witness.and_then(|w| w.as_number()), Some(-2.0));
         let open = Value::list(vec![Value::number(1.0), Value::tainted("t")]);
         assert_eq!(forall(&open, &pos).truth, Truth::Tainted);
-        assert_eq!(Verdict::new(Truth::Unknown, None).negate().truth, Truth::Unknown);
+        assert_eq!(
+            Verdict::new(Truth::Unknown, None).negate().truth,
+            Truth::Unknown
+        );
         for t in [Truth::False, Truth::Unknown, Truth::Tainted, Truth::True] {
             assert_eq!(Truth::from_rank(t.rank()), Some(t));
         }

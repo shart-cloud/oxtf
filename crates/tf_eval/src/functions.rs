@@ -597,7 +597,9 @@ fn dispatch(name: &str, a: &[Value]) -> R {
             let s = string(&a[0])?;
             let base = number(&a[1])?;
             if !(2.0..=36.0).contains(&base) || base.fract() != 0.0 {
-                return Err(Value::error("parseint: base must be a whole number between 2 and 36"));
+                return Err(Value::error(
+                    "parseint: base must be a whole number between 2 and 36",
+                ));
             }
             i64::from_str_radix(&s, base as u32)
                 .map(|n| num(n as f64))
@@ -1121,7 +1123,12 @@ fn cidrsubnets(p: &str, bits: &[u32]) -> Result<Vec<String>, String> {
     };
     // Allocation starts at the network address and must stay inside the prefix.
     let base = addr & mask;
-    let end = base + if total - len >= 128 { u128::MAX } else { (1u128 << (total - len)) - 1 };
+    let end = base
+        + if total - len >= 128 {
+            u128::MAX
+        } else {
+            (1u128 << (total - len)) - 1
+        };
     let mut out = Vec::new();
     let mut cur = base;
     for &b in bits {

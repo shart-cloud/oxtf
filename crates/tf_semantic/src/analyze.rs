@@ -1,8 +1,8 @@
 //! Module-instance tree, reference resolution and schema-aware evaluation of
 //! resource bodies into the owned [`crate::model`].
 
+use rustc_hash::FxHashMap as HashMap;
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -228,7 +228,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
             files,
             opts,
             root_dir,
-            defs: RefCell::new(HashMap::new()),
+            defs: RefCell::new(HashMap::default()),
             insts: RefCell::new(Vec::new()),
             tfvars,
             diags: RefCell::new(diags),
@@ -284,12 +284,12 @@ impl<'a, 'o> Analyzer<'a, 'o> {
             binds: bind.binds,
             existence: bind.existence,
             ancestors,
-            children: RefCell::new(HashMap::new()),
-            vars: RefCell::new(HashMap::new()),
-            locals: RefCell::new(HashMap::new()),
-            outputs: RefCell::new(HashMap::new()),
-            res_attrs: RefCell::new(HashMap::new()),
-            res_insts: RefCell::new(HashMap::new()),
+            children: RefCell::new(HashMap::default()),
+            vars: RefCell::new(HashMap::default()),
+            locals: RefCell::new(HashMap::default()),
+            outputs: RefCell::new(HashMap::default()),
+            res_attrs: RefCell::new(HashMap::default()),
+            res_insts: RefCell::new(HashMap::default()),
         };
         let mut v = self.insts.borrow_mut();
         v.push(Rc::new(inst));
@@ -351,14 +351,22 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         Evaluator::new(&NoResolver, file).eval(e, Scope::EMPTY)
     }
 
-    fn memo<K: std::hash::Hash + Eq + Clone>(
+    /// Memoised evaluation. The lookup is by the borrowed form `k`; the
+    /// owned key is only built (`key`) on a miss, so a hit allocates
+    /// nothing.
+    fn memo<K, Q>(
         &self,
         map: &RefCell<HashMap<K, Slot>>,
-        k: K,
+        k: &Q,
+        key: impl FnOnce() -> K,
         what: impl FnOnce() -> String,
         compute: impl FnOnce() -> Value,
-    ) -> Value {
-        if let Some(s) = map.borrow().get(&k) {
+    ) -> Value
+    where
+        K: std::hash::Hash + Eq + std::borrow::Borrow<Q>,
+        Q: std::hash::Hash + Eq + ?Sized,
+    {
+        if let Some(s) = map.borrow().get(k) {
             return match s {
                 Slot::Busy => Value::error(format!("cycle while evaluating {}", what())),
                 Slot::Done(v) => v.clone(),
@@ -367,11 +375,13 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         if self.depth.get() > MAX_DEPTH {
             return Value::error(format!("evaluation too deep at {}", what()));
         }
-        map.borrow_mut().insert(k.clone(), Slot::Busy);
+        map.borrow_mut().insert(key(), Slot::Busy);
         self.depth.set(self.depth.get() + 1);
         let v = compute();
         self.depth.set(self.depth.get() - 1);
-        map.borrow_mut().insert(k, Slot::Done(v.clone()));
+        if let Some(slot) = map.borrow_mut().get_mut(k) {
+            *slot = Slot::Done(v.clone());
+        }
         v
     }
 
@@ -381,7 +391,8 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         let inst = self.inst(inst_id);
         self.memo(
             &inst.vars,
-            name.to_string(),
+            name,
+            || name.to_string(),
             || format!("var.{name}"),
             || {
                 let Some(decl) = inst.def.variable(name) else {
@@ -467,7 +478,8 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         let inst = self.inst(inst_id);
         self.memo(
             &inst.locals,
-            name.to_string(),
+            name,
+            || name.to_string(),
             || format!("local.{name}"),
             || {
                 let Some(decl) = inst.def.local(name) else {
@@ -487,7 +499,8 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         let inst = self.inst(inst_id);
         self.memo(
             &inst.outputs,
-            name.to_string(),
+            name,
+            || name.to_string(),
             || format!("output {name}"),
             || {
                 let Some(decl) = inst.def.output(name) else {
@@ -782,7 +795,8 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         let base_str = base.base_string();
         self.memo(
             &inst.res_attrs,
-            k,
+            &k,
+            || k.clone(),
             || format!("{base}.{attr}"),
             || {
                 let decl: &ResourceDecl<'a> = &inst.def.resources[ri];
@@ -1292,7 +1306,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                     Some(items) if items.len() <= self.opts.max_expand => {
                         for (k, v) in items {
                             let it = obj2(k, v);
-                            let bd = sc.with(it_name, it, |s| {
+                            let bd = sc.with(it_name, &it, |s| {
                                 self.eval_body(ctx, &content.body, nested, s, &sub, false)
                             });
                             raw.push((label, bd, true, Truth::True, b.span, as_attr));
@@ -1319,7 +1333,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                             ),
                         };
                         let it = obj2(it.clone(), it);
-                        let bd = sc.with(it_name, it, |s| {
+                        let bd = sc.with(it_name, &it, |s| {
                             self.eval_body(ctx, &content.body, nested, s, &sub, false)
                         });
                         raw.push((label, bd, true, ex, b.span, as_attr));
