@@ -1864,6 +1864,20 @@
         "roots": 1
       }
     },
+    "source:fixtures/rules/aws-rds-unencrypted/conditional_count_tainted_alternative": {
+      "diagnostics": [],
+      "findings": [],
+      "stats": {
+        "conditional": 0,
+        "definite": 0,
+        "files": 1,
+        "findings": 0,
+        "findings_by_rule": {},
+        "module_instances": 1,
+        "resources": 2,
+        "roots": 1
+      }
+    },
     "source:fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable": {
       "diagnostics": [],
       "findings": [
