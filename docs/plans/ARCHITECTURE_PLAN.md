@@ -55,6 +55,9 @@ Dependencies run downward. Phases 1 and 3 are independent and can run in paralle
    every changed line in the commit message. Phases 1, 2, 3 and 5 must leave it byte-identical.
    Phase 4 changes its shape once, deliberately, and regenerates it.
 2. `cargo test --workspace` and `cargo clippy --workspace --all-targets` clean at every commit.
+   The Python crate needs maturin: `cd crates/tfscan_py && maturin develop --release` into a venv
+   with `pytest pyarrow mypy`, then `python -m pytest`. 42 tests as of Phase 4; the recursive
+   fixture test pins the root count (36) alongside `crates/tf_linter/tests/fixtures.rs`.
 3. Performance guard: `oxtf scan --recursive --format json corpus/repos`, release build, min of 5
    runs, before and after each phase. Record both numbers in the commit. A regression above
    10 % blocks the merge until explained.
