@@ -190,3 +190,54 @@ fn unknown_rule_ids_are_errors_even_with_valid_ids() {
         assert!(out.stdout.is_empty());
     }
 }
+
+/// A policy that fails on one resource at runtime: the scan completes,
+/// the record carries the rule error, stderr names it, and the exit code
+/// is 1 so a caller cannot read the output as clean.
+#[test]
+fn rule_errors_exit_one_with_output() {
+    let repo = format!("{}/../..", env!("CARGO_MANIFEST_DIR"));
+    let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .args([
+            "scan",
+            "--format",
+            "json",
+            &format!("{repo}/fixtures/rego/foreign_sprintf"),
+            "--policy",
+            &format!("{repo}/fixtures/rego/foreign/conftest_hcl2_deny.rego"),
+            "--policy-shape",
+            "hcl",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("aws_security_group_rule.open") && err.contains("%q"), "{err}");
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["rule_errors"][0]["resource"], "aws_security_group_rule.open");
+}
+
+/// A policy that does not compile refuses the scan: exit 2, no output.
+#[test]
+fn policy_compile_errors_exit_two() {
+    let repo = format!("{}/../..", env!("CARGO_MANIFEST_DIR"));
+    let dir = std::env::temp_dir().join(format!("oxtf-cli-rego-bad-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let bad = dir.join("bad.rego");
+    std::fs::write(&bad, "package main\nimport rego.v1\ndeny contains msg if { msg := 1 / 0 }").unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .args([
+            "scan",
+            "--format",
+            "json",
+            &format!("{repo}/fixtures/rego/foreign"),
+            "--policy",
+            bad.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("bad"));
+    assert!(out.stdout.is_empty());
+    std::fs::remove_dir_all(dir).unwrap();
+}

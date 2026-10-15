@@ -7,23 +7,43 @@ use std::sync::Arc;
 use tf_eval::Truth;
 use tf_semantic::Analysis;
 
+use crate::record::RuleError;
 use crate::rule::{DynRule, Finding, RuleInfo};
+
+/// What one module-instance pass produced.
+#[derive(Default)]
+pub struct RunOutput {
+    pub findings: Vec<Finding>,
+    /// Hooks that returned `Err`, one per (rule, resource) or (rule, module).
+    pub rule_errors: Vec<RuleError>,
+}
 
 pub struct Linter {
     rules: Vec<Box<dyn DynRule>>,
     infos: Vec<RuleInfo>,
     by_type: HashMap<Arc<str>, Vec<usize>>,
+    /// Rules whose `resource_types` is `["*"]`: judged on every managed
+    /// resource instance (foreign policies declare no types).
+    any_type: Vec<usize>,
     module_rules: Vec<usize>,
 }
+
+/// The resource type that means "every managed resource".
+pub const ANY_TYPE: &str = "*";
 
 impl Linter {
     pub fn new(rules: Vec<Box<dyn DynRule>>) -> Self {
         let infos: Vec<RuleInfo> = rules.iter().map(|r| r.info()).collect();
         let mut by_type: HashMap<Arc<str>, Vec<usize>> = HashMap::new();
+        let mut any_type = Vec::new();
         let mut module_rules = Vec::new();
         for (i, info) in infos.iter().enumerate() {
             for t in &info.resource_types {
-                by_type.entry(t.clone()).or_default().push(i);
+                if &**t == ANY_TYPE {
+                    any_type.push(i);
+                } else {
+                    by_type.entry(t.clone()).or_default().push(i);
+                }
             }
             if info.runs_on_module {
                 module_rules.push(i);
@@ -33,6 +53,7 @@ impl Linter {
             rules,
             infos,
             by_type,
+            any_type,
             module_rules,
         }
     }
@@ -56,13 +77,26 @@ impl Linter {
     }
 
     /// Run every rule over every module instance of `analysis`. This is
-    /// the only place findings are constructed.
-    pub fn run(&self, analysis: &Analysis) -> Vec<Finding> {
+    /// the only place findings are constructed, and the only place a rule
+    /// failure is turned into a [`RuleError`].
+    pub fn run(&self, analysis: &Analysis) -> RunOutput {
         let root = analysis.root_dir.as_path();
         let mut out = Vec::new();
+        let mut rule_errors = Vec::new();
         for m in &analysis.modules {
             for &i in &self.module_rules {
-                for (r, j) in self.rules[i].judge_module(m) {
+                let judged = match self.rules[i].judge_module(m) {
+                    Ok(j) => j,
+                    Err(message) => {
+                        rule_errors.push(RuleError {
+                            rule: self.infos[i].name.to_string(),
+                            resource: None,
+                            message,
+                        });
+                        continue;
+                    }
+                };
+                for (r, j) in judged {
                     out.extend(Finding::build(
                         &self.infos[i],
                         r,
@@ -79,25 +113,38 @@ impl Linter {
                 if r.existence == Truth::False || r.mode != tf_semantic::Mode::Managed {
                     continue;
                 }
-                if let Some(rs) = self.by_type.get(&*r.ty) {
-                    for &i in rs {
-                        for j in self.rules[i].judge_resource(r) {
-                            out.extend(Finding::build(
-                                &self.infos[i],
-                                r,
-                                j.severity,
-                                j.witness.as_ref(),
-                                &j.message,
-                                root,
-                                j.hidden,
-                                j.fix_hint,
-                            ));
+                let typed = self.by_type.get(&*r.ty).into_iter().flatten();
+                for &i in typed.chain(&self.any_type) {
+                    let judged = match self.rules[i].judge_resource(r) {
+                        Ok(j) => j,
+                        Err(message) => {
+                            rule_errors.push(RuleError {
+                                rule: self.infos[i].name.to_string(),
+                                resource: Some(r.address.to_string()),
+                                message,
+                            });
+                            continue;
                         }
+                    };
+                    for j in judged {
+                        out.extend(Finding::build(
+                            &self.infos[i],
+                            r,
+                            j.severity,
+                            j.witness.as_ref(),
+                            &j.message,
+                            root,
+                            j.hidden,
+                            j.fix_hint,
+                        ));
                     }
                 }
             }
         }
-        out
+        RunOutput {
+            findings: out,
+            rule_errors,
+        }
     }
 }
 
@@ -115,8 +162,8 @@ impl std::fmt::Display for RuleSelectionError {
 
 impl std::error::Error for RuleSelectionError {}
 
-/// Validate and select from the caller's catalog. CLI callers pass built-in
-/// and loaded rules; Python's `builtin` option passes only built-in rules.
+/// Validate and select from the caller's whole catalog (built-in, loaded
+/// and runtime rules alike): selection means one thing everywhere.
 pub fn select_rules(
     rules: Vec<Box<dyn DynRule>>,
     ids: &[String],

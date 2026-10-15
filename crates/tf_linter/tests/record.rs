@@ -9,7 +9,7 @@ use tf_linter::{ScanOptions, scan_dir};
 
 fn scan(case: &str) -> ScanRecord {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/rules").join(case);
-    ScanRecord::from_result(&scan_dir(&root, &ScanOptions::default()).unwrap())
+    ScanRecord::from_result(&scan_dir(&root, &ScanOptions::default()))
 }
 
 fn keys(v: &serde_json::Value) -> Vec<String> {

@@ -13,7 +13,7 @@ def keys(r, msg=False):
 
 
 def triple(path, recursive=False):
-    b = tfscan.scan(path, recursive=recursive, builtin=["aws-sg-open-ssh"])
+    b = tfscan.scan(path, recursive=recursive, select=["aws-sg-open-ssh"])
     e = tfscan.scan(path, recursive=recursive, builtin=False, rules=[EXPR_RULE])
     c = tfscan.scan(path, recursive=recursive, builtin=False, rules=[CALLBACK_RULE])
     return b, e, c

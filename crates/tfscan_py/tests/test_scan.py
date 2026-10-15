@@ -60,8 +60,8 @@ def test_builtin_selection_and_paths():
     r = tfscan.scan([SSH_FIXTURES / "fail_inline_literal", SSH_FIXTURES / "pass_restricted"])
     assert r.stats["roots"] == 2 and len(r.findings) == 1
     assert tfscan.scan(SSH_FIXTURES / "fail_inline_literal", builtin=False).findings == []
-    assert len(tfscan.scan(SSH_FIXTURES / "fail_inline_literal", builtin=["aws-sg-open-ssh"]).findings) == 1
-    assert tfscan.scan(SSH_FIXTURES / "fail_inline_literal", builtin=["aws-rds-unencrypted"]).findings == []
+    assert len(tfscan.scan(SSH_FIXTURES / "fail_inline_literal", select=["aws-sg-open-ssh"]).findings) == 1
+    assert tfscan.scan(SSH_FIXTURES / "fail_inline_literal", select=["aws-rds-unencrypted"]).findings == []
     names = {r["name"] for r in tfscan.builtin_rules()}
     assert "aws-sg-open-ssh" in names and len(names) == 5
 
@@ -115,10 +115,58 @@ def test_defaults_overlay_and_unknown():
 
 
 @pytest.mark.parametrize("ids", [["typo"], ["aws-sg-open-ssh", "typo"]])
-def test_unknown_builtin_rule_is_an_error(ids):
+def test_unknown_rule_id_is_an_error(ids):
     with pytest.raises(ValueError, match="unknown rule ID.*typo"):
-        tfscan.scan(SSH_FIXTURES / "fail_inline_literal", builtin=ids)
+        tfscan.scan(SSH_FIXTURES / "fail_inline_literal", select=ids)
 
 
-def test_explicit_empty_builtin_selection():
-    assert tfscan.scan(SSH_FIXTURES / "fail_inline_literal", builtin=[]).findings == []
+def test_explicit_empty_selection():
+    assert tfscan.scan(SSH_FIXTURES / "fail_inline_literal", select=[]).findings == []
+    assert tfscan.scan(SSH_FIXTURES / "fail_inline_literal", builtin=False).rule_errors == []
+
+
+def test_selection_covers_custom_rules_too():
+    from tfscan.examples.sg_open_ssh import EXPR_RULE
+
+    r = tfscan.scan(SSH_FIXTURES / "fail_inline_literal", rules=[EXPR_RULE], select=[EXPR_RULE.name])
+    assert {f.rule for f in r.findings} == {EXPR_RULE.name}
+    r = tfscan.scan(SSH_FIXTURES / "fail_inline_literal", rules=[EXPR_RULE], select=["aws-sg-open-ssh"])
+    assert {f.rule for f in r.findings} == {"aws-sg-open-ssh"}
+    r = tfscan.scan(SSH_FIXTURES / "fail_inline_literal", rules=[EXPR_RULE])
+    assert {f.rule for f in r.findings} == {EXPR_RULE.name, "aws-sg-open-ssh"}
+
+
+def test_scan_plan_maps_to_source():
+    plan = FIXTURES.parent / "plans" / "aws-s3-public-access-block" / "fail_permissive_block.json"
+    src = FIXTURES / "aws-s3-public-access-block" / "fail_permissive_block"
+    r = tfscan.scan_plan(plan, source=src)
+    (f,) = r.findings
+    assert (f.address, f.severity) == ("aws_s3_bucket.data", "definite")
+    assert f.file.endswith("fail_permissive_block/main.tf") and f.line == 1
+    assert r.stats["roots"] == 1
+    assert len(r.resources) >= 2
+    with pytest.raises(ValueError, match="invalid JSON"):
+        tfscan.scan_plan(src / "main.tf")
+
+
+def test_rego_native_matches_builtin():
+    root = FIXTURES / "aws-rds-unencrypted"
+    rego = tfscan.scan(root, recursive=True, rego_native=True)
+    native = tfscan.scan(root, recursive=True)
+    key = lambda r: sorted((f.rule, f.address, f.severity, f.message) for f in r.findings)
+    assert key(rego) == key(native) and len(rego.findings) == 5
+
+
+def test_foreign_policy_and_rule_errors():
+    rego = FIXTURES.parent / "rego"
+    policy = rego / "foreign" / "conftest_hcl2_deny.rego"
+    r = tfscan.scan(rego / "foreign", builtin=False, policies=[policy], policy_shape="hcl")
+    assert {f.rule for f in r.findings} == {"rego:conftest_hcl2_deny"}
+    assert sorted(f.severity for f in r.findings) == ["conditional", "definite", "definite", "indeterminate"]
+    assert r.rule_errors == []
+    r = tfscan.scan(rego / "foreign_sprintf", builtin=False, policies=[policy], policy_shape="hcl")
+    (e,) = r.rule_errors
+    assert e["rule"] == "rego:conftest_hcl2_deny" and e["resource"] == "aws_security_group_rule.open"
+    assert "%q" in e["message"]
+    with pytest.raises(ValueError, match="cannot read policy"):
+        tfscan.scan(rego / "foreign", policies=[rego / "missing.rego"])

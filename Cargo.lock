@@ -1313,10 +1313,7 @@ version = "0.0.0"
 dependencies = [
  "serde_json",
  "tf_linter",
- "tf_plan",
- "tf_rego",
- "tf_rule_ir",
- "tf_semantic",
+ "tf_scan",
 ]
 
 [[package]]
@@ -1391,6 +1388,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "tf_scan"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "tf_linter",
+ "tf_plan",
+ "tf_rego",
+ "tf_rule_ir",
+ "tf_semantic",
+]
+
+[[package]]
 name = "tf_schema"
 version = "0.0.0"
 dependencies = [
@@ -1441,7 +1450,9 @@ dependencies = [
  "tf_eval",
  "tf_linter",
  "tf_parser",
+ "tf_rego",
  "tf_rule_ir",
+ "tf_scan",
  "tf_semantic",
  "tf_span",
 ]

@@ -6,13 +6,17 @@
 //! oxtf scan --plan PLAN.json [--source DIR] [options]
 //! oxtf rules
 //! ```
+//!
+//! Exit codes: 0 clean, 1 some rule failed on some resource (output is
+//! still printed; see `rule_errors`), 2 the scan could not run.
 
 use std::io::{IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use tf_linter::Linter;
 use tf_linter::render::{location, render_finding, result_json};
-use tf_linter::{Linter, ScanOptions, discover_roots, scan_with};
+use tf_scan::{Catalog, ScanInput, ScanRequest};
 
 const USAGE: &str = "usage:
   oxtf scan [PATH...] [options]   scan Terraform module directories (default: .)
@@ -26,7 +30,8 @@ scan options:
   -r, --recursive         every directory under PATH containing .tf files is a root module
   -f, --format FMT        text (default) or json
       --var-file FILE     extra .tfvars for the root module(s) (repeatable)
-      --rule ID           only run this rule (repeatable)
+      --rule ID           only run this rule (repeatable); ids come from the whole
+                          catalog: seed rules, --rule-file rules and Rego policies
       --rule-file FILE    also run rules from a JSON rule-IR file (repeatable; e.g. written
                           by the tfscan Python expression API)
       --rego-native       run the seed rules that have a bundled native-tier Rego
@@ -40,16 +45,9 @@ scan options:
       --no-diagnostics    do not print parse / strict-bool / module diagnostics
   -q, --quiet             text format: print only the summary";
 
+/// The command line, as parsed: a scan request plus output switches.
 struct Args {
-    paths: Vec<PathBuf>,
-    plan: Option<PathBuf>,
-    source: Option<PathBuf>,
-    rule_files: Vec<PathBuf>,
-    rego_native: bool,
-    policies: Vec<PathBuf>,
-    policy_shape: Option<tf_rego::Shape>,
-    policy_entry: Option<String>,
-    opts: ScanOptions,
+    request: ScanRequest,
     json: bool,
     color: bool,
     diagnostics: bool,
@@ -57,16 +55,16 @@ struct Args {
 }
 
 fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
+    let mut paths: Vec<PathBuf> = Vec::new();
+    let mut recursive = false;
+    let mut plan: Option<PathBuf> = None;
+    let mut source: Option<PathBuf> = None;
+    let mut catalog = Catalog::seed();
+    let mut selection: Option<Vec<String>> = None;
+    let mut var_files = Vec::new();
+    let mut threads = None;
     let mut a = Args {
-        paths: Vec::new(),
-        plan: None,
-        source: None,
-        rule_files: Vec::new(),
-        rego_native: false,
-        policies: Vec::new(),
-        policy_shape: None,
-        policy_entry: None,
-        opts: ScanOptions::default(),
+        request: ScanRequest::dirs(Vec::new(), false),
         json: false,
         color: std::io::stdout().is_terminal(),
         diagnostics: true,
@@ -74,38 +72,35 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
     };
     while let Some(arg) = it.next() {
         match arg.as_str() {
-            "-r" | "--recursive" => a.opts.recursive = true,
+            "-r" | "--recursive" => recursive = true,
             "-f" | "--format" => match it.next().as_deref() {
                 Some("json") => a.json = true,
                 Some("text") => a.json = false,
                 other => return Err(format!("unknown format {other:?}")),
             },
-            "--var-file" => a
-                .opts
-                .var_files
-                .push(it.next().ok_or("--var-file needs a value")?.into()),
-            "--rule" => a
-                .opts
-                .rules
+            "--var-file" => var_files.push(it.next().ok_or("--var-file needs a value")?.into()),
+            "--rule" => selection
                 .get_or_insert_with(Vec::new)
                 .push(it.next().ok_or("--rule needs a value")?),
-            "--rule-file" => a
+            "--rule-file" => catalog
                 .rule_files
                 .push(it.next().ok_or("--rule-file needs a value")?.into()),
-            "--rego-native" => a.rego_native = true,
-            "--policy" => a
+            "--rego-native" => catalog.policies.native = true,
+            "--policy" => catalog
                 .policies
+                .foreign
                 .push(it.next().ok_or("--policy needs a value")?.into()),
             "--policy-shape" => {
-                a.policy_shape = Some(it.next().ok_or("--policy-shape needs a value")?.parse()?)
+                catalog.policies.shape =
+                    Some(it.next().ok_or("--policy-shape needs a value")?.parse()?)
             }
             "--policy-entry" => {
-                a.policy_entry = Some(it.next().ok_or("--policy-entry needs a value")?)
+                catalog.policies.entry = Some(it.next().ok_or("--policy-entry needs a value")?)
             }
-            "--plan" => a.plan = Some(it.next().ok_or("--plan needs a value")?.into()),
-            "--source" => a.source = Some(it.next().ok_or("--source needs a value")?.into()),
+            "--plan" => plan = Some(it.next().ok_or("--plan needs a value")?.into()),
+            "--source" => source = Some(it.next().ok_or("--source needs a value")?.into()),
             "--threads" => {
-                a.opts.threads = Some(
+                threads = Some(
                     it.next()
                         .and_then(|n| n.parse().ok())
                         .ok_or("--threads needs a number")?,
@@ -116,19 +111,33 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
             "--no-diagnostics" => a.diagnostics = false,
             "-q" | "--quiet" => a.quiet = true,
             s if s.starts_with('-') => return Err(format!("unknown option {s}")),
-            p => a.paths.push(p.into()),
+            p => paths.push(p.into()),
         }
     }
-    if a.plan.is_some() {
-        if !a.paths.is_empty() || a.opts.recursive || !a.opts.var_files.is_empty() {
-            return Err("--plan takes no PATH, --recursive or --var-file".into());
+    let input = match plan {
+        Some(plan) => {
+            if !paths.is_empty() || recursive || !var_files.is_empty() {
+                return Err("--plan takes no PATH, --recursive or --var-file".into());
+            }
+            ScanInput::Plan { plan, source }
         }
-    } else if a.source.is_some() {
-        return Err("--source needs --plan".into());
-    }
-    if a.paths.is_empty() {
-        a.paths.push(".".into());
-    }
+        None => {
+            if source.is_some() {
+                return Err("--source needs --plan".into());
+            }
+            if paths.is_empty() {
+                paths.push(".".into());
+            }
+            ScanInput::Dirs { paths, recursive }
+        }
+    };
+    a.request = ScanRequest {
+        input,
+        catalog,
+        selection,
+        var_files,
+        threads,
+    };
     Ok(a)
 }
 
@@ -167,97 +176,60 @@ fn main() -> ExitCode {
     }
 }
 
+/// Exit codes: 0 clean run, 1 a rule failed on some resource (the output
+/// is still printed and carries the rule errors), 2 the scan could not run.
 fn scan(a: Args) -> ExitCode {
-    let mut rules = tf_linter::rules::all();
-    for f in &a.rule_files {
-        match tf_rule_ir::load_rules_file(f).and_then(|specs| {
-            specs
-                .into_iter()
-                .map(tf_rule_ir::compile)
-                .collect::<Result<Vec<_>, _>>()
-        }) {
-            Ok(rs) => rules.extend(rs.into_iter().map(|r| Box::new(r) as _)),
-            Err(e) => {
-                eprintln!("error: {e}");
-                return ExitCode::from(2);
-            }
-        }
-    }
-    let mut foreign = Vec::new();
-    for p in &a.policies {
-        match tf_rego::load_policy(p) {
-            Ok(f) => foreign.push(f),
-            Err(e) => {
-                eprintln!("error: {e}");
-                return ExitCode::from(2);
-            }
-        }
-    }
-    let policies = tf_rego::Policies {
-        native: a.rego_native,
-        foreign,
-        shape: a.policy_shape,
-        entry: a.policy_entry.clone(),
-    };
-    let result = tf_rego::with_policies(&policies, rules, |rules| scan_rules(&a, rules));
-    match result {
-        Ok(r) => print_result(&r, &a),
+    let Args {
+        request,
+        json,
+        color,
+        diagnostics,
+        quiet,
+    } = a;
+    let output = match tf_scan::scan(request) {
+        Ok(o) => o,
         Err(e) => {
             eprintln!("error: {e}");
-            ExitCode::from(2)
+            return ExitCode::from(2);
         }
-    }
-}
-
-fn scan_rules(
-    a: &Args,
-    rules: Vec<Box<dyn tf_linter::rule::DynRule>>,
-) -> Result<tf_linter::ScanResult, String> {
-    let linter = match &a.opts.rules {
-        Some(ids) => Linter::filtered(rules, ids).map_err(|e| e.to_string())?,
-        None => Linter::new(rules),
     };
-    if let Some(plan) = &a.plan {
-        tf_plan::scan_plan(
-            &linter,
-            plan,
-            &tf_plan::PlanOptions {
-                source: a.source.clone(),
-            },
-        )
-        .map_err(|e| e.to_string())
-    } else {
-        scan_dirs(&linter, a)
-    }
-}
-
-fn scan_dirs(linter: &Linter, a: &Args) -> Result<tf_linter::ScanResult, String> {
-    let mut roots = Vec::new();
-    for p in &a.paths {
-        if !p.is_dir() {
-            return Err(format!("{} is not a directory", p.display()));
+    let r = &output.result;
+    for e in &r.rule_errors {
+        match &e.resource {
+            Some(res) => eprintln!("rule error: {} on {res}: {}", e.rule, e.message),
+            None => eprintln!("rule error: {}: {}", e.rule, e.message),
         }
-        roots.extend(discover_roots(p, a.opts.recursive));
     }
-    Ok(scan_with(linter, &roots, &a.opts).0)
+    print_result(r, json, color, diagnostics, quiet);
+    if r.rule_errors.is_empty() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    }
 }
 
-fn print_result(r: &tf_linter::ScanResult, a: &Args) -> ExitCode {
+fn print_result(
+    r: &tf_linter::ScanResult,
+    json: bool,
+    color: bool,
+    diagnostics: bool,
+    quiet: bool,
+) {
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
-    if a.json {
+    if json {
         let _ = writeln!(
             out,
             "{}",
             serde_json::to_string_pretty(&result_json(r)).unwrap()
         );
-        return ExitCode::SUCCESS;
+        return;
     }
-    if !a.quiet {
+    if !quiet {
         for f in &r.findings {
-            let _ = writeln!(out, "{}", render_finding(&r.files, f, a.color));
+            let _ = writeln!(out, "{}", render_finding(&r.files, f, color));
         }
-        if a.diagnostics {
+        if diagnostics {
             for d in &r.diagnostics {
                 let at =
                     d.at.map(|x| format!("{}: ", location(&r.files, x)))
@@ -274,7 +246,7 @@ fn print_result(r: &tf_linter::ScanResult, a: &Args) -> ExitCode {
         .collect();
     let _ = writeln!(
         out,
-        "{} findings ({} definite, {} conditional, {} indeterminate) in {} root modules, {} module instances, {} files, {} resources; {} diagnostics; {:.1} ms{}",
+        "{} findings ({} definite, {} conditional, {} indeterminate) in {} root modules, {} module instances, {} files, {} resources; {} diagnostics; {} rule errors; {:.1} ms{}",
         s.findings,
         s.definite,
         s.conditional,
@@ -284,6 +256,7 @@ fn print_result(r: &tf_linter::ScanResult, a: &Args) -> ExitCode {
         s.files,
         s.resources,
         r.diagnostics.len(),
+        r.rule_errors.len(),
         s.elapsed.as_secs_f64() * 1000.0,
         if by_rule.is_empty() {
             String::new()
@@ -291,5 +264,4 @@ fn print_result(r: &tf_linter::ScanResult, a: &Args) -> ExitCode {
             format!("\n  by rule: {}", by_rule.join(", "))
         }
     );
-    ExitCode::SUCCESS
 }

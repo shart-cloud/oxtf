@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use tf_linter::{ScanOptions, scan_dir_with_model};
+use tf_linter::{Linter, ScanOptions, discover_roots, scan_with};
 
 const ATTRS: &[(&str, &[&str])] = &[
     ("aws_security_group", &["ingress"]),
@@ -60,14 +60,14 @@ fn main() {
         .nth(1)
         .unwrap_or_else(|| "corpus/repos".into());
     let verbose = std::env::args().any(|a| a == "-v");
-    let (r, analyses) = scan_dir_with_model(
-        dir.as_ref(),
+    let (r, analyses) = scan_with(
+        &Linter::with_seed_rules(),
+        &discover_roots(dir.as_ref(), true),
         &ScanOptions {
             recursive: true,
             ..Default::default()
         },
-    )
-    .expect("valid rule selection");
+    );
     let mut counts: BTreeMap<(String, String, String), usize> = BTreeMap::new();
     let mut instances: BTreeMap<String, usize> = BTreeMap::new();
     for a in &analyses {

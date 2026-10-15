@@ -1,9 +1,11 @@
-//! Stable native output before adding foreign rule engines.
-//! Regenerate explicitly with OXTF_UPDATE_BASELINE=1 cargo test -p tf_cli --test native_baseline.
+//! Stable native output: every fixture scanned in-process and compared to
+//! `fixtures/baseline/native.json`, the JSON the CLI prints verbatim.
+//! Regenerate explicitly with
+//! `OXTF_UPDATE_BASELINE=1 cargo test -p tf_scan --test native_baseline`.
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use serde_json::{Value, json};
+use tf_scan::{ScanRequest, scan};
 
 fn entries(dir: &Path) -> Vec<PathBuf> {
     let mut paths: Vec<_> = std::fs::read_dir(dir)
@@ -23,21 +25,13 @@ fn normalize(value: &mut Value, repo: &str) {
     }
 }
 
-fn scan(repo: &Path, args: &[String]) -> Value {
-    let output = Command::new(env!("CARGO_BIN_EXE_oxtf"))
-        .current_dir(repo)
-        .args(["scan", "--format", "json", "--threads", "1"])
-        .args(args)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{args:?}: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert!(output.stderr.is_empty(), "{args:?}: unexpected stderr");
-    let mut result: Value = serde_json::from_slice(&output.stdout).unwrap();
-    // Runtime and absolute checkout location are not semantic output.
+/// One request, as the CLI would build it for `--threads 1`, as JSON with
+/// the checkout location and timing removed.
+fn run(repo: &Path, mut req: ScanRequest) -> Value {
+    req.threads = Some(1);
+    let out = scan(req).unwrap();
+    assert!(out.result.rule_errors.is_empty());
+    let mut result = serde_json::to_value(out.record()).unwrap();
     result["stats"]
         .as_object_mut()
         .unwrap()
@@ -52,6 +46,17 @@ fn scan(repo: &Path, args: &[String]) -> Value {
             .sort_by_key(Value::to_string);
     }
     result
+}
+
+fn dirs(repo: &Path, path: &str) -> Value {
+    run(repo, ScanRequest::dirs(vec![repo.join(path)], false))
+}
+
+fn plan(repo: &Path, plan: &str, source: &str) -> Value {
+    run(
+        repo,
+        ScanRequest::plan(repo.join(plan), Some(repo.join(source))),
+    )
 }
 
 #[test]
@@ -71,7 +76,7 @@ fn native_findings_match_baseline() {
             }
             assert!(case.join("EXPECT").is_file());
             let path = case.strip_prefix(&repo).unwrap().to_str().unwrap();
-            cases.insert(format!("source:{path}"), scan(&repo, &[path.into()]));
+            cases.insert(format!("source:{path}"), dirs(&repo, path));
         }
     }
     assert_eq!(
@@ -84,12 +89,12 @@ fn native_findings_match_baseline() {
         if !rule.is_dir() {
             continue;
         }
-        for plan in entries(&rule) {
-            if plan.extension().is_none_or(|ext| ext != "json") {
+        for file in entries(&rule) {
+            if file.extension().is_none_or(|ext| ext != "json") {
                 continue;
             }
-            let path = plan.strip_prefix(&repo).unwrap().to_str().unwrap();
-            let stem = plan
+            let path = file.strip_prefix(&repo).unwrap().to_str().unwrap();
+            let stem = file
                 .file_stem()
                 .unwrap()
                 .to_str()
@@ -102,13 +107,7 @@ fn native_findings_match_baseline() {
                 rule.file_name().unwrap().to_str().unwrap()
             );
             assert!(repo.join(&source).is_dir());
-            cases.insert(
-                format!("plan:{path}"),
-                scan(
-                    &repo,
-                    &["--plan".into(), path.into(), "--source".into(), source],
-                ),
-            );
+            cases.insert(format!("plan:{path}"), plan(&repo, path, &source));
             plans += 1;
         }
     }
@@ -121,41 +120,29 @@ fn native_findings_match_baseline() {
             continue;
         }
         let path = case.strip_prefix(&repo).unwrap().to_str().unwrap();
-        let result = scan(&repo, &[path.into()]);
+        let result = dirs(&repo, path);
         let expected = if case.ends_with("transformed") {
             vec!["aws_s3_bucket.b[\"a\"]", "aws_s3_bucket.b[\"b\"]"]
         } else {
             vec!["aws_s3_bucket.b[\"b\"]"]
         };
-        let mut addresses: Vec<_> = result["findings"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|f| f["resource"]["address"].as_str().unwrap())
-            .collect();
-        addresses.sort();
-        assert_eq!(addresses, expected, "{path}");
+        let addresses = |result: &Value| {
+            let mut a: Vec<String> = result["findings"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|f| f["resource"]["address"].as_str().unwrap().to_string())
+                .collect();
+            a.sort();
+            a
+        };
+        assert_eq!(addresses(&result), expected, "{path}");
         assert_eq!(result["diagnostics"], json!([]));
         cases.insert(format!("source:{path}"), result);
         if case.join("plan.json").is_file() {
             let plan_path = format!("{path}/plan.json");
-            let result = scan(
-                &repo,
-                &[
-                    "--plan".into(),
-                    plan_path.clone(),
-                    "--source".into(),
-                    path.into(),
-                ],
-            );
-            let mut addresses: Vec<_> = result["findings"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|f| f["resource"]["address"].as_str().unwrap())
-                .collect();
-            addresses.sort();
-            assert_eq!(addresses, expected, "{plan_path}");
+            let result = plan(&repo, &plan_path, path);
+            assert_eq!(addresses(&result), expected, "{plan_path}");
             cases.insert(format!("plan:{plan_path}"), result);
         }
     }

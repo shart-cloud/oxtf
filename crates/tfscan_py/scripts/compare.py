@@ -19,7 +19,7 @@ ROOT = sys.argv[1] if len(sys.argv) > 1 else "."
 
 def run(path, recursive, which):
     if which == "builtin":
-        r = tfscan.scan(path, recursive=recursive, builtin=["aws-sg-open-ssh"])
+        r = tfscan.scan(path, recursive=recursive, select=["aws-sg-open-ssh"])
     elif which == "expr":
         r = tfscan.scan(path, recursive=recursive, builtin=False, rules=[EXPR_RULE])
     else:
