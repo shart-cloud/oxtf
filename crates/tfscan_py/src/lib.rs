@@ -1026,9 +1026,10 @@ fn scan_error(e: tf_scan::ScanError) -> PyErr {
 /// `callbacks`: `tfscan.CallbackRule` objects (attributes `name`,
 /// `resource_types`, `level`, `category`, `description`, `func`).
 /// `policies`: foreign Rego policy files; `rego_native` runs the bundled
-/// native-tier policies in place of their seed rules.
+/// native-tier policies in place of their seed rules. `overlay`: `(path,
+/// text)` pairs that shadow the disk for this scan.
 #[pyfunction]
-#[pyo3(signature = (paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], callbacks=vec![], rego_native=false, policies=vec![], policy_shape=None, policy_entry=None, threads=None, _release_gil=true))]
+#[pyo3(signature = (paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], callbacks=vec![], rego_native=false, policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, _release_gil=true))]
 #[allow(clippy::too_many_arguments)]
 fn scan(
     py: Python<'_>,
@@ -1045,6 +1046,7 @@ fn scan(
     policies: Vec<PathBuf>,
     policy_shape: Option<&str>,
     policy_entry: Option<String>,
+    overlay: Vec<(PathBuf, String)>,
     threads: Option<usize>,
     _release_gil: bool,
 ) -> PyResult<(ScanResult, u64)> {
@@ -1084,6 +1086,10 @@ fn scan(
         selection: select,
         var_files,
         threads,
+        overlay: overlay
+            .into_iter()
+            .map(|(p, t)| (p, Arc::from(t)))
+            .collect(),
     };
     let work = move || tf_scan::scan(request).map(|o| ScanData::new(o.result, o.analyses));
     let data = if _release_gil {

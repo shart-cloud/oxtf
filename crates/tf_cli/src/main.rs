@@ -10,7 +10,7 @@
 //! Exit codes: 0 clean, 1 some rule failed on some resource (output is
 //! still printed; see `rule_errors`), 2 the scan could not run.
 
-use std::io::{IsTerminal, Write};
+use std::io::{IsTerminal, Read, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -40,6 +40,9 @@ scan options:
                           (repeatable; Conftest / OPA style, unchanged)
       --policy-shape S    input document shape for --policy: plan (default) or hcl
       --policy-entry R    rule path read for violations (default: data.main.deny)
+      --overlay PATH=FILE scan FILE's contents as if it were at PATH (repeatable;
+                          FILE `-` reads stdin). PATH may be a file that does not exist,
+                          in a directory that does not exist. Unsaved buffers, patches.
       --threads N         worker threads (default: all CPUs)
       --color             force colored output
       --no-diagnostics    do not print parse / strict-bool / module diagnostics
@@ -63,6 +66,7 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut selection: Option<Vec<String>> = None;
     let mut var_files = Vec::new();
     let mut threads = None;
+    let mut overlay = Vec::new();
     let mut a = Args {
         request: ScanRequest::dirs(Vec::new(), false),
         json: false,
@@ -99,6 +103,23 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
             }
             "--plan" => plan = Some(it.next().ok_or("--plan needs a value")?.into()),
             "--source" => source = Some(it.next().ok_or("--source needs a value")?.into()),
+            "--overlay" => {
+                let spec = it.next().ok_or("--overlay needs PATH=FILE")?;
+                let (path, file) = spec
+                    .split_once('=')
+                    .ok_or_else(|| format!("--overlay {spec:?}: expected PATH=FILE"))?;
+                let text = if file == "-" {
+                    let mut s = String::new();
+                    std::io::stdin()
+                        .read_to_string(&mut s)
+                        .map_err(|e| format!("--overlay {path}: stdin: {e}"))?;
+                    s
+                } else {
+                    std::fs::read_to_string(file)
+                        .map_err(|e| format!("--overlay {path}: {file}: {e}"))?
+                };
+                overlay.push((PathBuf::from(path), std::sync::Arc::from(text)));
+            }
             "--threads" => {
                 threads = Some(
                     it.next()
@@ -137,6 +158,7 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
         selection,
         var_files,
         threads,
+        overlay,
     };
     Ok(a)
 }

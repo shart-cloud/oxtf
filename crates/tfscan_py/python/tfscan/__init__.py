@@ -17,7 +17,7 @@ GIL once per resource that passes their Rust-side type filter.
 from __future__ import annotations
 
 import os
-from typing import Any, Callable, Iterable, Iterator, NamedTuple, Optional, Sequence, Union, overload
+from typing import Any, Callable, Iterable, Iterator, Mapping, NamedTuple, Optional, Sequence, Union, overload
 
 from . import _tfscan
 from ._tfscan import (
@@ -251,6 +251,7 @@ def _run(
     policy_shape: Optional[str] = None,
     policy_entry: Optional[str] = None,
     rego_native: bool = False,
+    overlay: Mapping[PathLike, str] = {},
     threads: Optional[int] = None,
 ) -> ScanResult:
     ir, callbacks = _split_rules(rules)
@@ -268,6 +269,7 @@ def _run(
         policies=[os.fspath(p) for p in policies],
         policy_shape=policy_shape,
         policy_entry=policy_entry,
+        overlay=[(os.fspath(p), t) for p, t in overlay.items()],
         threads=threads,
     )
     return ScanResult(inner, calls)
@@ -285,6 +287,7 @@ def scan(
     policy_shape: Optional[str] = None,
     policy_entry: Optional[str] = None,
     rego_native: bool = False,
+    overlay: Mapping[PathLike, str] = {},
     threads: Optional[int] = None,
 ) -> ScanResult:
     """Scan Terraform root module directories.
@@ -298,7 +301,10 @@ def scan(
     whole catalog to the given rule ids, exactly as ``oxtf scan --rule``
     does: unknown ids raise ``ValueError`` and an empty list runs nothing.
     A rule that fails on a resource is reported in ``result.rule_errors``,
-    never dropped."""
+    never dropped. ``overlay`` maps paths to text that shadows the disk for
+    this scan (an unsaved buffer, a proposed patch); a path need not exist,
+    nor its directory. Overlay paths are matched as written, so spell them
+    the way ``path`` is spelled."""
     return _run(
         paths=_paths(path),
         recursive=recursive,
@@ -310,6 +316,7 @@ def scan(
         policy_shape=policy_shape,
         policy_entry=policy_entry,
         rego_native=rego_native,
+        overlay=overlay,
         threads=threads,
     )
 
@@ -325,6 +332,7 @@ def scan_plan(
     policy_shape: Optional[str] = None,
     policy_entry: Optional[str] = None,
     rego_native: bool = False,
+    overlay: Mapping[PathLike, str] = {},
     threads: Optional[int] = None,
 ) -> ScanResult:
     """Scan ``terraform show -json`` output. Findings are mapped back to
@@ -341,6 +349,7 @@ def scan_plan(
         policy_shape=policy_shape,
         policy_entry=policy_entry,
         rego_native=rego_native,
+        overlay=overlay,
         threads=threads,
     )
 
