@@ -1,7 +1,8 @@
+use tf_eval::Verdict;
 use tf_semantic::Resource;
 
 use super::not_true;
-use crate::rule::{Category, Level, Rule, RuleContext, RuleMeta};
+use crate::rule::{Category, Level, Rule, RuleMeta};
 
 /// `google_storage_bucket` without uniform bucket-level access:
 /// `uniform_bucket_level_access` false or absent (defaults overlay: false;
@@ -18,29 +19,20 @@ impl RuleMeta for GcpStorageUniformAccess {
 }
 
 impl Rule for GcpStorageUniformAccess {
-    fn run_on_resource(&self, r: &Resource, ctx: &mut RuleContext<'_>) {
-        let Some(v) = r.value_or_default("uniform_bucket_level_access") else {
-            return;
-        };
-        let verdict = not_true(&v);
-        Self::report(r, ctx, &verdict);
+    fn verdict(&self, r: &Resource) -> Option<Verdict> {
+        Some(not_true(&r.value_or_default("uniform_bucket_level_access")?))
     }
-}
 
-impl GcpStorageUniformAccess {
-    /// Shared finding presentation for native and Rego verdicts.
-    pub fn report(r: &Resource, ctx: &mut RuleContext<'_>, verdict: &tf_eval::Verdict) {
-        ctx.report(r, verdict, |w| {
-            if w.is_some_and(|w| !w.is_known()) {
-                "uniform_bucket_level_access may be false".to_string()
-            } else if r
-                .value("uniform_bucket_level_access")
-                .is_none_or(|x| x.is_null())
-            {
-                "uniform_bucket_level_access is not set (provider default: false)".to_string()
-            } else {
-                "uniform_bucket_level_access is false".to_string()
-            }
-        });
+    fn message(&self, r: &Resource, v: &Verdict) -> String {
+        if v.witness.as_ref().is_some_and(|w| !w.is_known()) {
+            "uniform_bucket_level_access may be false".to_string()
+        } else if r
+            .value("uniform_bucket_level_access")
+            .is_none_or(|x| x.is_null())
+        {
+            "uniform_bucket_level_access is not set (provider default: false)".to_string()
+        } else {
+            "uniform_bucket_level_access is false".to_string()
+        }
     }
 }

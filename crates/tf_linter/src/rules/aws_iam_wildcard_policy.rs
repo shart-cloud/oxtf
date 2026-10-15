@@ -4,7 +4,7 @@ use tf_eval::{Kind, Known, Value, Verdict};
 use tf_semantic::Resource;
 
 use super::{field, str_in};
-use crate::rule::{Category, Level, Rule, RuleContext, RuleMeta};
+use crate::rule::{Category, Level, Rule, RuleMeta};
 
 /// An IAM policy statement with `Effect = "Allow"`, `Action = "*"` and
 /// `Resource = "*"` (each as a string or inside a list).
@@ -61,18 +61,11 @@ fn policy(v: &Value) -> Verdict {
 }
 
 impl Rule for AwsIamWildcardPolicy {
-    fn run_on_resource(&self, r: &Resource, ctx: &mut RuleContext<'_>) {
-        let Some(p) = r.value("policy") else { return };
-        let v = policy(&p);
-        Self::report(r, ctx, &v);
+    fn verdict(&self, r: &Resource) -> Option<Verdict> {
+        Some(policy(&r.value("policy")?))
     }
-}
 
-impl AwsIamWildcardPolicy {
-    /// Shared native/Rego finding presentation.
-    pub fn report(r: &Resource, ctx: &mut RuleContext<'_>, v: &Verdict) {
-        ctx.report(r, v, |_| {
-            "policy statement allows Action \"*\" on Resource \"*\"".to_string()
-        });
+    fn message(&self, _r: &Resource, _v: &Verdict) -> String {
+        "policy statement allows Action \"*\" on Resource \"*\"".to_string()
     }
 }

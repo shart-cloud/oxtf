@@ -105,39 +105,10 @@ impl Evidence {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tf_eval::{Step, StepKind, truth};
+    use tf_eval::{Step, StepKind};
 
     fn mark(v: Value, label: &str) -> Value {
         v.push(Step::new(StepKind::Other, Default::default(), label))
-    }
-    fn field(v: &Value, name: &str) -> Value {
-        match &v.kind {
-            Kind::Known(Known::Object(m)) => m
-                .get(name)
-                .map(|a| a.child_of(v))
-                .unwrap_or_else(Value::null),
-            Kind::Known(Known::Null) => Value::null(),
-            _ => v.get_attr(name),
-        }
-    }
-    fn native_inline(v: &Value) -> Verdict {
-        truth::map(v, &|v| {
-            let test_str = |v: &Value, set: &[&str]| {
-                truth::test(v, &|v| v.to_str().is_some_and(|s| set.contains(&s.trim())))
-            };
-            let cidrs = |v: &Value| truth::exists(v, &|v| test_str(v, &["0.0.0.0/0", "::/0"]));
-            let p = field(v, "protocol");
-            let ports = test_str(&p, &["-1", "all"]).or(test_str(&p, &["tcp", "6", "TCP"])
-                .and(truth::test(&field(v, "from_port"), &|v| {
-                    v.as_number().is_some_and(|n| n <= 22.0)
-                }))
-                .and(truth::test(&field(v, "to_port"), &|v| {
-                    v.as_number().is_some_and(|n| n >= 22.0)
-                })));
-            cidrs(&field(v, "cidr_blocks"))
-                .or(cidrs(&field(v, "ipv6_cidr_blocks")))
-                .and(ports)
-        })
     }
     fn rule(cidr: Value, protocol: Value, from: Value, to: Value) -> Value {
         mark(
@@ -245,7 +216,7 @@ mod tests {
             let mut evidence = Evidence::default();
             let input = json!({"target":{"resource_type":"aws_security_group"}, "ingress":evidence.ssh_value(value.clone(), Shape::Ingress)});
             let actual = evaluate(&policy, &input, &evidence.0).unwrap();
-            let expected = truth::exists(&value, &native_inline);
+            let expected = AwsSgOpenSsh::ingress_verdict(&value);
             assert_eq!(actual.truth, expected.truth, "{value:?}");
             assert_eq!(
                 format!("{:?}", actual.witness),

@@ -2,7 +2,7 @@ use tf_eval::Verdict;
 use tf_semantic::Resource;
 
 use super::not_true;
-use crate::rule::{Category, Level, Rule, RuleContext, RuleMeta};
+use crate::rule::{Category, Level, Rule, RuleMeta};
 
 /// `aws_db_instance` with `storage_encrypted` false, or absent (the
 /// defaults overlay says the provider/API default is `false`).
@@ -20,27 +20,20 @@ impl RuleMeta for AwsRdsUnencrypted {
 }
 
 impl Rule for AwsRdsUnencrypted {
-    fn run_on_resource(&self, r: &Resource, ctx: &mut RuleContext<'_>) {
+    fn verdict(&self, r: &Resource) -> Option<Verdict> {
         if r.value("replicate_source_db").is_some_and(|v| !v.is_null()) {
-            return;
+            return None;
         }
-        let Some(v) = r.value_or_default("storage_encrypted") else {
-            return;
-        };
-        let verdict: Verdict = not_true(&v);
-        Self::report(r, ctx, &verdict);
+        Some(not_true(&r.value_or_default("storage_encrypted")?))
     }
-}
 
-impl AwsRdsUnencrypted {
-    /// Shared finding presentation for native and Rego verdicts.
-    pub fn report(r: &Resource, ctx: &mut RuleContext<'_>, verdict: &Verdict) {
-        ctx.report(r, verdict, |w| match w.and_then(|w| w.as_bool()) {
+    fn message(&self, r: &Resource, v: &Verdict) -> String {
+        match v.witness.as_ref().and_then(|w| w.as_bool()) {
             Some(false) if r.value("storage_encrypted").is_none_or(|x| x.is_null()) => {
                 "storage_encrypted is not set (provider default: false)".to_string()
             }
             Some(_) => "storage_encrypted is false".to_string(),
             None => "storage_encrypted may be false".to_string(),
-        });
+        }
     }
 }

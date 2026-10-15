@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use serde::Deserialize;
 use serde_json::{Value as Json, json};
 use tf_eval::{Kind, Truth, Value, Verdict};
-use tf_linter::rule::{DynRule, RuleContext, RuleInfo};
+use tf_linter::rule::{DynRule, Judgement, Rule, RuleInfo};
 use tf_linter::rules::{
     AwsIamWildcardPolicy, AwsRdsUnencrypted, AwsS3PublicAccessBlock, AwsSgOpenSsh,
     GcpStorageUniformAccess,
@@ -54,13 +54,14 @@ impl NativeRule {
             Self::GcpStorage => prepare(GCP_POLICY, "data.oxtf.gcp_storage.result"),
         }
     }
-    fn report(self, r: &Resource, ctx: &mut RuleContext<'_>, verdict: &Verdict) {
+    /// Native wording for a verdict, shared with the native rule.
+    fn message(self, r: &Resource, verdict: &Verdict) -> String {
         match self {
-            Self::Iam => AwsIamWildcardPolicy::report(r, ctx, verdict),
-            Self::S3 => AwsS3PublicAccessBlock::report(r, ctx, verdict),
-            Self::Ssh => AwsSgOpenSsh::report(r, ctx, verdict),
-            Self::Rds => AwsRdsUnencrypted::report(r, ctx, verdict),
-            Self::GcpStorage => GcpStorageUniformAccess::report(r, ctx, verdict),
+            Self::Iam => AwsIamWildcardPolicy.message(r, verdict),
+            Self::S3 => AwsS3PublicAccessBlock.message(r, verdict),
+            Self::Ssh => AwsSgOpenSsh.message(r, verdict),
+            Self::Rds => AwsRdsUnencrypted.message(r, verdict),
+            Self::GcpStorage => GcpStorageUniformAccess.message(r, verdict),
         }
     }
 }
@@ -246,16 +247,20 @@ impl DynRule for PolicyRule {
     fn info(&self) -> RuleInfo {
         self.kind.info()
     }
-    fn run_on_module(&self, module: &Module, ctx: &mut RuleContext<'_>) {
-        if matches!(self.kind, NativeRule::S3) {
-            for bucket in module.resources_of("aws_s3_bucket") {
+    fn judge_module<'m>(&self, module: &'m Module) -> Vec<(&'m Resource, Judgement)> {
+        if !matches!(self.kind, NativeRule::S3) {
+            return Vec::new();
+        }
+        module
+            .resources_of("aws_s3_bucket")
+            .filter_map(|bucket| {
                 let mut evidence = Evidence::default();
                 let input = evidence.s3_input(bucket, module);
-                self.evaluate_report(bucket, ctx, input, evidence);
-            }
-        }
+                self.judge(bucket, input, evidence).map(|j| (bucket, j))
+            })
+            .collect()
     }
-    fn run_on_resource(&self, r: &Resource, ctx: &mut RuleContext<'_>) {
+    fn judge_resource(&self, r: &Resource) -> Vec<Judgement> {
         let mut evidence = Evidence::default();
         let replica = match r.value("replicate_source_db") {
             None => "missing",
@@ -275,28 +280,28 @@ impl DynRule for PolicyRule {
                 "effective": evidence.tag(r.value_or_default(attribute)),
             })
         };
-        self.evaluate_report(r, ctx, input, evidence);
+        self.judge(r, input, evidence).into_iter().collect()
     }
 }
 impl PolicyRule {
-    fn evaluate_report(
-        &self,
-        r: &Resource,
-        ctx: &mut RuleContext<'_>,
-        input: Json,
-        evidence: Evidence,
-    ) {
+    /// Evaluate the policy; a failure is recorded and yields no judgement.
+    fn judge(&self, r: &Resource, input: Json, evidence: Evidence) -> Option<Judgement> {
         match evaluate(&self.policy, &input, &evidence.0) {
-            Ok(verdict) => self.kind.report(r, ctx, &verdict),
-            Err(error) => self
-                .errors
-                .lock()
-                .expect("Rego error lock poisoned")
-                .push(format!(
-                    "Rego {} on {}: {error}",
-                    self.info().name,
-                    r.address
-                )),
+            Ok(verdict) => {
+                let message = if verdict.holds() {
+                    self.kind.message(r, &verdict)
+                } else {
+                    String::new()
+                };
+                Some(Judgement { verdict, message })
+            }
+            Err(error) => {
+                self.errors
+                    .lock()
+                    .expect("Rego error lock poisoned")
+                    .push(format!("Rego {} on {}: {error}", self.info().name, r.address));
+                None
+            }
         }
     }
 }

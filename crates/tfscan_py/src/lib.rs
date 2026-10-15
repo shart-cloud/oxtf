@@ -23,7 +23,7 @@ use pyo3::exceptions::{PyKeyError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use tf_eval::{Kind, Known, Truth, Verdict};
-use tf_linter::{Category, DynRule, Level, Linter, RuleContext, RuleInfo, ScanOptions};
+use tf_linter::{Category, DynRule, Judgement, Level, Linter, RuleInfo, ScanOptions};
 use tf_semantic::{Analysis, FileTable, Mode, Module};
 use tf_span::FileSpan;
 
@@ -773,9 +773,9 @@ impl DynRule for CallbackRule {
     fn info(&self) -> RuleInfo {
         self.info.clone()
     }
-    fn run_on_resource(&self, r: &tf_semantic::Resource, ctx: &mut RuleContext<'_>) {
+    fn judge_resource(&self, r: &tf_semantic::Resource) -> Vec<Judgement> {
         if self.error.lock().unwrap().is_some() {
-            return;
+            return Vec::new();
         }
         self.calls
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -793,29 +793,32 @@ impl DynRule for CallbackRule {
             Ok(out)
         });
         match reports {
-            Ok(reports) => {
-                for rep in reports {
-                    let v = Verdict::new(
+            Ok(reports) => reports
+                .into_iter()
+                .map(|rep| Judgement {
+                    verdict: Verdict::new(
                         if rep.conditional {
                             Truth::Tainted
                         } else {
                             Truth::True
                         },
                         rep.witness,
-                    );
-                    let msg = rep.message;
-                    ctx.report(r, &v, |_| msg);
-                }
-            }
+                    ),
+                    message: rep.message,
+                })
+                .collect(),
             Err(e) => {
                 let mut g = self.error.lock().unwrap();
                 if g.is_none() {
                     *g = Some(e);
                 }
+                Vec::new()
             }
         }
     }
-    fn run_on_module(&self, _m: &Module, _ctx: &mut RuleContext<'_>) {}
+    fn judge_module<'m>(&self, _m: &'m Module) -> Vec<(&'m tf_semantic::Resource, Judgement)> {
+        Vec::new()
+    }
 }
 
 fn level_of(s: &str) -> PyResult<Level> {

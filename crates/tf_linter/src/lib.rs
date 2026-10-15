@@ -9,7 +9,7 @@
 //! ```
 //!
 //! - [`rule`]: the `Rule` / `RuleMeta` traits (oxc-linter shape), the
-//!   object-safe [`DynRule`], [`Finding`] and [`RuleContext`].
+//!   object-safe [`DynRule`], [`Finding`] and [`Finding::from_verdict`].
 //! - [`engine::Linter`]: dispatch table (resource type → rules) and module
 //!   rules, run per module instance.
 //! - [`scan`]: root discovery and the parallel (rayon) scan;
@@ -25,7 +25,7 @@ pub mod scan;
 
 pub use engine::{Linter, RuleSelectionError, select_rules};
 pub use rule::{
-    Category, DynRule, Finding, Level, Rule, RuleContext, RuleInfo, RuleMeta, Severity,
+    Category, DynRule, Finding, Judgement, Level, Rule, RuleInfo, RuleMeta, Severity,
 };
 pub use scan::{
     ScanOptions, ScanResult, ScanStats, discover_roots, scan_dir, scan_dir_with_model, scan_with,

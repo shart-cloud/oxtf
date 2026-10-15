@@ -2,13 +2,12 @@
 //! instance.
 
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::Arc;
 
 use tf_eval::Truth;
 use tf_semantic::Analysis;
 
-use crate::rule::{DynRule, Finding, RuleContext, RuleInfo};
+use crate::rule::{DynRule, Finding, RuleInfo};
 
 pub struct Linter {
     rules: Vec<Box<dyn DynRule>>,
@@ -56,13 +55,16 @@ impl Linter {
         &self.infos
     }
 
-    /// Run every rule over every module instance of `analysis`.
+    /// Run every rule over every module instance of `analysis`. This is
+    /// the only place findings are constructed.
     pub fn run(&self, analysis: &Analysis) -> Vec<Finding> {
+        let root = analysis.root_dir.as_path();
         let mut out = Vec::new();
         for m in &analysis.modules {
             for &i in &self.module_rules {
-                let mut ctx = self.ctx(i, &analysis.root_dir, m, &mut out);
-                self.rules[i].run_on_module(m, &mut ctx);
+                for (r, j) in self.rules[i].judge_module(m) {
+                    out.extend(Finding::from_verdict(&self.infos[i], r, &j.verdict, &j.message, root));
+                }
             }
             for r in &m.resources {
                 if r.existence == Truth::False || r.mode != tf_semantic::Mode::Managed {
@@ -70,29 +72,14 @@ impl Linter {
                 }
                 if let Some(rs) = self.by_type.get(&*r.ty) {
                     for &i in rs {
-                        let mut ctx = self.ctx(i, &analysis.root_dir, m, &mut out);
-                        self.rules[i].run_on_resource(r, &mut ctx);
+                        for j in self.rules[i].judge_resource(r) {
+                            out.extend(Finding::from_verdict(&self.infos[i], r, &j.verdict, &j.message, root));
+                        }
                     }
                 }
             }
         }
         out
-    }
-
-    fn ctx<'c>(
-        &self,
-        i: usize,
-        root: &'c Path,
-        module: &'c tf_semantic::Module,
-        out: &'c mut Vec<Finding>,
-    ) -> RuleContext<'c> {
-        RuleContext {
-            rule: self.infos[i].name.clone(),
-            level: self.infos[i].level,
-            root,
-            module,
-            out,
-        }
     }
 }
 
