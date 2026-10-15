@@ -27,7 +27,7 @@ use std::sync::{Arc, Mutex};
 use serde_json::{Value as Json, json};
 use tf_eval::value::to_json;
 use tf_eval::{Truth, Value, Verdict, truth};
-use tf_linter::rule::{DynRule, Judgement, Rule, RuleInfo};
+use tf_linter::rule::{DynRule, Hidden, Judgement, Rule, RuleInfo};
 use tf_linter::rules::{AwsRdsUnencrypted, GcpStorageUniformAccess};
 use tf_linter::{Category, Level, Severity};
 use tf_semantic::{Module, Resource};
@@ -369,12 +369,22 @@ impl ForeignPolicy {
             }
             _ => String::new(),
         };
+        let hidden: Vec<Hidden> = projection
+            .abstractions
+            .iter()
+            .map(|a| Hidden {
+                path: a.path.clone(),
+                truth: a.truth,
+            })
+            .collect();
         Ok(messages
             .into_iter()
             .map(|m| Judgement {
                 severity,
                 witness: witness.clone(),
                 message: format!("{m}{suffix}"),
+                hidden: hidden.clone(),
+                fix_hint: None,
             })
             .collect())
     }

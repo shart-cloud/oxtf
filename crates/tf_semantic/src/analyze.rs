@@ -829,7 +829,8 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                             FileSpan::new(decl.file, a.span),
                             format!("{base_str} {attr}"),
                         )
-                        .with_resource(base_str.clone().into()),
+                        .with_resource(base_str.clone().into())
+                        .with_attribute(attr),
                     );
                 }
                 let computed = || Value::unknown(instance.computed(attr));
@@ -1226,7 +1227,8 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                     FileSpan::new(ctx.file, a.span),
                     format!("{} {path}{name}", ctx.addr),
                 )
-                .with_resource(ctx.base.clone()),
+                .with_resource(ctx.base.clone())
+                .with_attribute(format!("{path}{name}")),
             );
             if ctx.strict_bool
                 && let Some(at) = schema.and_then(|s| s.attribute(name))

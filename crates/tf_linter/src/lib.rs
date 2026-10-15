@@ -25,7 +25,8 @@ pub mod scan;
 
 pub use engine::{Linter, RuleSelectionError, select_rules};
 pub use rule::{
-    Category, DynRule, Finding, Judgement, Level, Rule, RuleInfo, RuleMeta, Severity,
+    Category, DynRule, Finding, FixAction, FixHint, Hidden, Judgement, Level, Rule, RuleInfo,
+    RuleMeta, Severity,
 };
 pub use scan::{
     ScanOptions, ScanResult, ScanStats, discover_roots, scan_dir, scan_dir_with_model, scan_with,

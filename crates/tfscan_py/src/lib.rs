@@ -804,6 +804,8 @@ impl DynRule for CallbackRule {
                     },
                     witness: rep.witness,
                     message: rep.message,
+                    hidden: Vec::new(),
+                    fix_hint: None,
                 })
                 .collect(),
             Err(e) => {
