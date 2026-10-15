@@ -53,7 +53,7 @@ use std::time::Instant;
 
 use serde_json::Value as J;
 use tf_eval::{Origin, Prov, Step, StepKind, Truth, Value};
-use tf_linter::{Linter, ScanResult, ScanStats, Severity};
+use tf_linter::{Linter, ScanResult, ScanStats};
 use tf_semantic::model::{AnalysisStats, VariableInfo};
 use tf_semantic::{Address, InstanceKey};
 use tf_semantic::{
@@ -135,37 +135,38 @@ pub fn scan_plan(
     path: &Path,
     opts: &PlanOptions,
 ) -> Result<ScanResult, PlanError> {
+    scan_plan_with_model(linter, path, opts).map(|(r, _)| r)
+}
+
+/// [`scan_plan`], also returning the analysed model built from the plan.
+pub fn scan_plan_with_model(
+    linter: &Linter,
+    path: &Path,
+    opts: &PlanOptions,
+) -> Result<(ScanResult, Analysis), PlanError> {
     let start = Instant::now();
     let files = Arc::new(FileTable::new());
     let a = load_plan(path, opts, &files)?;
-    let findings = linter.run(&a);
-    let mut stats = ScanStats {
+    let out = linter.run(&a);
+    let stats = ScanStats {
         roots: 1,
         module_instances: a.modules.len(),
         resources: a.stats.resources,
-        findings: findings.len(),
-        ..ScanStats::default()
+        files: files.len(),
+        elapsed: start.elapsed(),
+        ..ScanStats::from_findings(&out.findings)
     };
-    for f in &findings {
-        *stats
-            .findings_by_rule
-            .entry(f.rule.to_string())
-            .or_default() += 1;
-        match f.severity {
-            Severity::Definite => stats.definite += 1,
-            Severity::Conditional => stats.conditional += 1,
-            Severity::Indeterminate => stats.indeterminate += 1,
-        }
-    }
-    stats.files = files.len();
-    stats.elapsed = start.elapsed();
-    Ok(ScanResult {
-        findings,
-        diagnostics: a.diagnostics,
-        stats,
-        rule_errors: Vec::new(),
-        files,
-    })
+    let diagnostics = a.diagnostics.clone();
+    Ok((
+        ScanResult {
+            findings: out.findings,
+            diagnostics,
+            stats,
+            rule_errors: out.rule_errors,
+            files,
+        },
+        a,
+    ))
 }
 
 fn has_tf_files(dir: &Path) -> bool {

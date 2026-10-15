@@ -112,7 +112,7 @@ meaning, bumps it. Adding an optional field does not.
 | `schema` | Record version. |
 | `findings` | One record per finding, below. |
 | `diagnostics` | Parse errors, warnings and notes: `severity` (`error`, `warning`, `info`), `code`, `message`, `location` or `null`. |
-| `rule_errors` | Rules that failed to run: `rule`, `resource` (or `null`), `message`. An empty list means every rule ran on every resource. A reader must never take silence from a rule listed here as a pass. |
+| `rule_errors` | Rules that failed to run: `rule`, `resource` (or `null`), `message`. An empty list means every rule ran on every resource. A reader must never take silence from a rule listed here as a pass. The CLI still prints the record and exits 1 when this list is non-empty (2 means the scan could not run at all). |
 | `stats` | Counts: `roots`, `module_instances`, `files`, `resources`, `findings`, `definite`, `conditional`, `indeterminate`, `findings_by_rule`, `elapsed_ms`. |
 
 ## Finding

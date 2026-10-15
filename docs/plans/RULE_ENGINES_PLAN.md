@@ -10,7 +10,7 @@ contract experiment, and all five native Rego seed rules are implemented.
 Next is stabilizing and documenting the native input/result contract before
 external policy loading; the general input schema is not yet frozen.
 
-`crates/tf_cli/tests/native_baseline.rs` checks native output against
+`crates/tf_scan/tests/native_baseline.rs` checks native output against
 [`fixtures/baseline/native.json`](../../fixtures/baseline/native.json):
 
 - 34 existing source cases and 34 existing plan cases, with explicit source mapping for plans.
@@ -28,13 +28,13 @@ baseline, not a claim of correctness or foreign-engine parity.
 Verify without changing the snapshot:
 
 ```sh
-cargo test -p tf_cli --test native_baseline
+cargo test -p tf_scan --test native_baseline
 ```
 
 After reviewing an intentional semantic or fixture change, regenerate and inspect the diff:
 
 ```sh
-OXTF_UPDATE_BASELINE=1 cargo test -p tf_cli --test native_baseline
+OXTF_UPDATE_BASELINE=1 cargo test -p tf_scan --test native_baseline
 git diff -- fixtures/baseline/native.json
 ```
 

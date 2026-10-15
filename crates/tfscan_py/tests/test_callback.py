@@ -29,7 +29,7 @@ def test_callback_reports():
         return None
 
     r = tfscan.scan(FIXTURES / "aws-rds-unencrypted", recursive=True, builtin=False, rules=[rds])
-    b = tfscan.scan(FIXTURES / "aws-rds-unencrypted", recursive=True, builtin=["aws-rds-unencrypted"])
+    b = tfscan.scan(FIXTURES / "aws-rds-unencrypted", recursive=True, select=["aws-rds-unencrypted"])
     assert {(f.address, f.root, f.severity) for f in r.findings} == {
         (f.address, f.root, f.severity) for f in b.findings}
     f = [x for x in r.findings if x.severity == "definite"][0]

@@ -37,6 +37,7 @@ __version__ = "0.0.1"
 
 __all__ = [
     "scan",
+    "scan_plan",
     "analyze",
     "parse",
     "ScanResult",
@@ -190,6 +191,13 @@ class ScanResult:
     def diagnostics(self) -> list[dict]:
         return self._inner.diagnostics
 
+    @property
+    def rule_errors(self) -> list[dict]:
+        """Rules that failed on some resource (``rule``, ``resource``,
+        ``message``). Never silent: a missing finding from such a rule is
+        not a pass."""
+        return self._inner.rule_errors
+
     def to_json(self) -> str:
         return self._inner.to_json()
 
@@ -212,22 +220,9 @@ def _paths(path: Union[PathLike, Iterable[PathLike]]) -> list[str]:
     return [os.fspath(p) for p in path]
 
 
-def scan(
-    path: Union[PathLike, Iterable[PathLike]],
-    *,
-    recursive: bool = False,
-    var_files: Sequence[PathLike] = (),
-    rules: Sequence[Union[Rule, CallbackRule, CompiledRule]] = (),
-    builtin: Union[bool, Sequence[str]] = True,
-    threads: Optional[int] = None,
-) -> ScanResult:
-    """Scan Terraform root module directories.
-
-    ``recursive``: every directory under ``path`` containing ``.tf`` files is
-    a root module. ``builtin``: ``True`` (all built-in rules), ``False``, or a
-    list of built-in rule ids. ``rules``: expression rules (``tfscan.rule``),
-    compiled IR rules, and callback rules. Unknown built-in rule IDs raise
-    ``ValueError``; an empty list intentionally disables built-in rules."""
+def _split_rules(
+    rules: Sequence[Union[Rule, CallbackRule, CompiledRule]],
+) -> tuple[list[str], list[CallbackRule]]:
     ir: list[str] = []
     callbacks: list[CallbackRule] = []
     for r in rules:
@@ -239,22 +234,115 @@ def scan(
             callbacks.append(r)
         else:
             raise TypeError(f"not a rule: {r!r}")
-    if builtin is True:
-        builtin_ids = None
-    elif builtin is False:
-        builtin_ids = []
-    else:
-        builtin_ids = list(builtin)
+    return ir, callbacks
+
+
+def _run(
+    *,
+    paths: list[str] = [],
+    recursive: bool = False,
+    plan: Optional[str] = None,
+    source: Optional[str] = None,
+    var_files: Sequence[PathLike] = (),
+    rules: Sequence[Union[Rule, CallbackRule, CompiledRule]] = (),
+    builtin: bool = True,
+    select: Optional[Sequence[str]] = None,
+    policies: Sequence[PathLike] = (),
+    policy_shape: Optional[str] = None,
+    policy_entry: Optional[str] = None,
+    rego_native: bool = False,
+    threads: Optional[int] = None,
+) -> ScanResult:
+    ir, callbacks = _split_rules(rules)
     inner, calls = _tfscan.scan(
-        _paths(path),
+        paths,
         recursive=recursive,
+        plan=plan,
+        source=source,
         var_files=[os.fspath(v) for v in var_files],
-        builtin=builtin_ids,
+        builtin=builtin,
+        select=None if select is None else list(select),
         ir_rules=ir,
         callbacks=callbacks,
+        rego_native=rego_native,
+        policies=[os.fspath(p) for p in policies],
+        policy_shape=policy_shape,
+        policy_entry=policy_entry,
         threads=threads,
     )
     return ScanResult(inner, calls)
+
+
+def scan(
+    path: Union[PathLike, Iterable[PathLike]],
+    *,
+    recursive: bool = False,
+    var_files: Sequence[PathLike] = (),
+    rules: Sequence[Union[Rule, CallbackRule, CompiledRule]] = (),
+    builtin: bool = True,
+    select: Optional[Sequence[str]] = None,
+    policies: Sequence[PathLike] = (),
+    policy_shape: Optional[str] = None,
+    policy_entry: Optional[str] = None,
+    rego_native: bool = False,
+    threads: Optional[int] = None,
+) -> ScanResult:
+    """Scan Terraform root module directories.
+
+    ``recursive``: every directory under ``path`` containing ``.tf`` files is
+    a root module. The rule catalog is the built-in rules (``builtin``),
+    plus ``rules``: expression rules (``tfscan.rule``), compiled IR rules
+    and callback rules, plus foreign Rego ``policies`` (Conftest / OPA
+    style, run unchanged; ``policy_shape`` is ``"plan"`` or ``"hcl"``,
+    ``policy_entry`` defaults to ``data.main.deny``). ``select`` narrows the
+    whole catalog to the given rule ids, exactly as ``oxtf scan --rule``
+    does: unknown ids raise ``ValueError`` and an empty list runs nothing.
+    A rule that fails on a resource is reported in ``result.rule_errors``,
+    never dropped."""
+    return _run(
+        paths=_paths(path),
+        recursive=recursive,
+        var_files=var_files,
+        rules=rules,
+        builtin=builtin,
+        select=select,
+        policies=policies,
+        policy_shape=policy_shape,
+        policy_entry=policy_entry,
+        rego_native=rego_native,
+        threads=threads,
+    )
+
+
+def scan_plan(
+    plan: PathLike,
+    *,
+    source: Optional[PathLike] = None,
+    rules: Sequence[Union[Rule, CallbackRule, CompiledRule]] = (),
+    builtin: bool = True,
+    select: Optional[Sequence[str]] = None,
+    policies: Sequence[PathLike] = (),
+    policy_shape: Optional[str] = None,
+    policy_entry: Optional[str] = None,
+    rego_native: bool = False,
+    threads: Optional[int] = None,
+) -> ScanResult:
+    """Scan ``terraform show -json`` output. Findings are mapped back to
+    ``.tf`` spans in ``source`` (default: the plan's directory when it has
+    ``.tf`` files, else locations point into the JSON). The rule catalog
+    and ``select`` work as in :func:`scan`."""
+    return _run(
+        plan=os.fspath(plan),
+        source=None if source is None else os.fspath(source),
+        rules=rules,
+        builtin=builtin,
+        select=select,
+        policies=policies,
+        policy_shape=policy_shape,
+        policy_entry=policy_entry,
+        rego_native=rego_native,
+        threads=threads,
+    )
 
 
 def analyze(

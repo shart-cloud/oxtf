@@ -1,4 +1,4 @@
-use tf_linter::{Linter, ScanOptions, scan_dir, scan_dir_with_model};
+use tf_linter::Linter;
 
 #[test]
 fn selection_validates_all_ids_and_preserves_empty_selection() {
@@ -20,18 +20,4 @@ fn selection_validates_all_ids_and_preserves_empty_selection() {
     )
     .unwrap();
     assert_eq!(selected.rules().len(), 1);
-}
-
-#[test]
-fn scan_entry_points_propagate_selection_errors_before_loading() {
-    let opts = ScanOptions {
-        rules: Some(vec!["typo".into()]),
-        ..Default::default()
-    };
-    let path = std::path::Path::new("/nonexistent/oxtf-selection-test");
-    assert_eq!(scan_dir(path, &opts).err().unwrap().unknown_ids, ["typo"]);
-    assert_eq!(
-        scan_dir_with_model(path, &opts).err().unwrap().unknown_ids,
-        ["typo"]
-    );
 }

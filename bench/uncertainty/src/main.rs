@@ -404,7 +404,7 @@ fn two_pass_probe() -> J {
         &files,
     );
     assert!(a.diagnostics.is_empty());
-    let findings = Linter::with_seed_rules().run(&a);
+    let findings = Linter::with_seed_rules().run(&a).findings;
     assert_eq!(findings.len(), 1);
     assert_eq!(findings[0].severity, tf_linter::Severity::Conditional);
     let mut rows = Vec::new();

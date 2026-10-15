@@ -2,7 +2,7 @@
 //!
 //! ```no_run
 //! use tf_linter::{scan_dir, ScanOptions};
-//! let r = scan_dir("fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local".as_ref(), &ScanOptions::default()).unwrap();
+//! let r = scan_dir("fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local".as_ref(), &ScanOptions::default());
 //! for f in &r.findings {
 //!     println!("{}", tf_linter::render::render_finding(&r.files, f, false));
 //! }
@@ -12,8 +12,9 @@
 //!   object-safe [`DynRule`], [`Finding`] and [`Finding::from_verdict`].
 //! - [`engine::Linter`]: dispatch table (resource type → rules) and module
 //!   rules, run per module instance.
-//! - [`scan`]: root discovery and the parallel (rayon) scan;
-//!   [`scan_dir`] / [`scan_dir_with_model`] / [`scan_with`].
+//! - [`scan`]: root discovery and the parallel (rayon) scan over roots
+//!   ([`scan_with`], [`scan_dir`]). Catalogs, selection, plan input and
+//!   foreign policies are orchestrated one level up, in `tf_scan`.
 //! - [`record`]: the resolved, versioned finding record every output is a
 //!   projection of (`docs/FINDING_SCHEMA.md`).
 //! - [`render`]: miette text rendering with provenance, JSON.
@@ -26,12 +27,10 @@ pub mod rule;
 pub mod rules;
 pub mod scan;
 
-pub use engine::{Linter, RuleSelectionError, select_rules};
+pub use engine::{ANY_TYPE, Linter, RuleSelectionError, RunOutput, select_rules};
 pub use record::{FindingRecord, RuleError, ScanRecord};
 pub use rule::{
-    Category, DynRule, Finding, FixAction, FixHint, Hidden, Judgement, Level, Rule, RuleInfo,
-    RuleMeta, Severity,
+    Category, DynRule, Finding, FixAction, FixHint, Hidden, Judgement, Level, Rule, RuleFailure,
+    RuleInfo, RuleMeta, Severity,
 };
-pub use scan::{
-    ScanOptions, ScanResult, ScanStats, discover_roots, scan_dir, scan_dir_with_model, scan_with,
-};
+pub use scan::{ScanOptions, ScanResult, ScanStats, discover_roots, scan_dir, scan_with};

@@ -23,7 +23,8 @@ use pyo3::exceptions::{PyKeyError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use tf_eval::{Kind, Known, Truth};
-use tf_linter::{Category, DynRule, Judgement, Level, Linter, RuleInfo, ScanOptions};
+use tf_linter::{Category, DynRule, Judgement, Level, Linter, RuleFailure, RuleInfo};
+use tf_scan::{Catalog, ScanInput, ScanRequest};
 use tf_semantic::{Analysis, FileTable, Mode, Module};
 use tf_span::FileSpan;
 
@@ -707,6 +708,20 @@ impl ScanResult {
         )?;
         Ok(d)
     }
+    /// Rules that failed on some resource: dicts with `rule`, `resource`
+    /// (or None) and `message`. Never silent; see `docs/FINDING_SCHEMA.md`.
+    #[getter]
+    fn rule_errors<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let out = PyList::empty(py);
+        for e in &self.data.result.rule_errors {
+            let d = PyDict::new(py);
+            d.set_item("rule", &e.rule)?;
+            d.set_item("resource", e.resource.as_deref())?;
+            d.set_item("message", &e.message)?;
+            out.append(d)?;
+        }
+        Ok(out)
+    }
     #[getter]
     fn diagnostics<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
         let out = PyList::empty(py);
@@ -860,9 +875,9 @@ impl DynRule for CallbackRule {
     fn info(&self) -> RuleInfo {
         self.info.clone()
     }
-    fn judge_resource(&self, r: &tf_semantic::Resource) -> Vec<Judgement> {
+    fn judge_resource(&self, r: &tf_semantic::Resource) -> Result<Vec<Judgement>, RuleFailure> {
         if self.error.lock().unwrap().is_some() {
-            return Vec::new();
+            return Err("skipped after an earlier exception".into());
         }
         self.calls
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -880,7 +895,7 @@ impl DynRule for CallbackRule {
             Ok(out)
         });
         match reports {
-            Ok(reports) => reports
+            Ok(reports) => Ok(reports
                 .into_iter()
                 .map(|rep| Judgement {
                     severity: if rep.conditional {
@@ -893,18 +908,24 @@ impl DynRule for CallbackRule {
                     hidden: Vec::new(),
                     fix_hint: None,
                 })
-                .collect(),
+                .collect()),
             Err(e) => {
+                // The exception itself is re-raised by `scan` once the pool
+                // drains; the engine's rule error carries its text.
+                let message = e.to_string();
                 let mut g = self.error.lock().unwrap();
                 if g.is_none() {
                     *g = Some(e);
                 }
-                Vec::new()
+                Err(message)
             }
         }
     }
-    fn judge_module<'m>(&self, _m: &'m Module) -> Vec<(&'m tf_semantic::Resource, Judgement)> {
-        Vec::new()
+    fn judge_module<'m>(
+        &self,
+        _m: &'m Module,
+    ) -> Result<Vec<(&'m tf_semantic::Resource, Judgement)>, RuleFailure> {
+        Ok(Vec::new())
     }
 }
 
@@ -935,29 +956,45 @@ fn category_of(s: &str) -> PyResult<Category> {
 
 type CallbackError = Arc<Mutex<Option<PyErr>>>;
 type CallCount = Arc<std::sync::atomic::AtomicU64>;
-type Rules = Vec<Box<dyn DynRule>>;
 
-/// Built-in (all, or the listed ids), IR and callback rules.
-fn build_rules(
-    builtin: Option<Vec<String>>,
+/// The catalog a Python call describes: seed rules (or not), rule-IR
+/// documents, callback rules and Rego policies.
+struct PyCatalog {
+    catalog: Catalog,
+    error: CallbackError,
+    calls: CallCount,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_catalog(
+    builtin: bool,
     ir_rules: Vec<String>,
     callbacks: Vec<Bound<'_, PyAny>>,
-) -> PyResult<(Rules, CallbackError, CallCount)> {
-    let mut rules: Vec<Box<dyn DynRule>> = match &builtin {
-        None => tf_linter::rules::all(),
-        Some(ids) => tf_linter::select_rules(tf_linter::rules::all(), ids)
-            .map_err(|e| PyValueError::new_err(e.to_string()))?,
+    rego_native: bool,
+    policies: Vec<PathBuf>,
+    policy_shape: Option<&str>,
+    policy_entry: Option<String>,
+) -> PyResult<PyCatalog> {
+    let shape = policy_shape
+        .map(|s| s.parse::<tf_scan::Shape>().map_err(PyValueError::new_err))
+        .transpose()?;
+    let mut catalog = Catalog {
+        builtin,
+        rule_files: Vec::new(),
+        rule_json: ir_rules,
+        runtime: Vec::new(),
+        policies: tf_rego::Policies {
+            native: rego_native,
+            foreign: policies,
+            shape,
+            entry: policy_entry,
+        },
     };
-    for j in &ir_rules {
-        for r in tf_rule_ir::compile_json(j).map_err(PyValueError::new_err)? {
-            rules.push(Box::new(r));
-        }
-    }
     let error = Arc::new(Mutex::new(None));
     let calls = Arc::new(std::sync::atomic::AtomicU64::new(0));
     for cb in &callbacks {
         let types: Vec<String> = cb.getattr("resource_types")?.extract()?;
-        rules.push(Box::new(CallbackRule {
+        catalog.runtime.push(Box::new(CallbackRule {
             info: RuleInfo {
                 name: Arc::from(cb.getattr("name")?.extract::<String>()?.as_str()),
                 category: category_of(&cb.getattr("category")?.extract::<String>()?)?,
@@ -971,24 +1008,43 @@ fn build_rules(
             calls: calls.clone(),
         }));
     }
-    Ok((rules, error, calls))
+    Ok(PyCatalog {
+        catalog,
+        error,
+        calls,
+    })
 }
 
-/// Scan module directories. `builtin`: `None` = all built-in rules, a list
-/// = only those ids. `ir_rules`: rule IR JSON documents. `callbacks`:
-/// `tfscan.CallbackRule` objects (attributes `name`, `resource_types`,
-/// `level`, `category`, `description`, `func`).
+fn scan_error(e: tf_scan::ScanError) -> PyErr {
+    PyValueError::new_err(e.to_string())
+}
+
+/// Run one scan request. `paths` are root module directories, or `plan`
+/// is a `terraform show -json` file (with `source` as its module
+/// directory). `builtin`: run the seed rules. `select`: rule ids from the
+/// whole catalog, or `None` for all. `ir_rules`: rule IR JSON documents.
+/// `callbacks`: `tfscan.CallbackRule` objects (attributes `name`,
+/// `resource_types`, `level`, `category`, `description`, `func`).
+/// `policies`: foreign Rego policy files; `rego_native` runs the bundled
+/// native-tier policies in place of their seed rules.
 #[pyfunction]
-#[pyo3(signature = (paths, recursive=false, var_files=vec![], builtin=None, ir_rules=vec![], callbacks=vec![], threads=None, _release_gil=true))]
+#[pyo3(signature = (paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], callbacks=vec![], rego_native=false, policies=vec![], policy_shape=None, policy_entry=None, threads=None, _release_gil=true))]
 #[allow(clippy::too_many_arguments)]
 fn scan(
     py: Python<'_>,
     paths: Vec<PathBuf>,
     recursive: bool,
+    plan: Option<PathBuf>,
+    source: Option<PathBuf>,
     var_files: Vec<PathBuf>,
-    builtin: Option<Vec<String>>,
+    builtin: bool,
+    select: Option<Vec<String>>,
     ir_rules: Vec<String>,
     callbacks: Vec<Bound<'_, PyAny>>,
+    rego_native: bool,
+    policies: Vec<PathBuf>,
+    policy_shape: Option<&str>,
+    policy_entry: Option<String>,
     threads: Option<usize>,
     _release_gil: bool,
 ) -> PyResult<(ScanResult, u64)> {
@@ -998,30 +1054,38 @@ fn scan(
             "_release_gil=False (test control) cannot run callback rules",
         ));
     }
-    let (rules, error, calls) = build_rules(builtin, ir_rules, callbacks)?;
-    for p in &paths {
-        if !p.is_dir() {
-            return Err(PyValueError::new_err(format!(
-                "{} is not a directory",
-                p.display()
-            )));
+    let PyCatalog {
+        catalog,
+        error,
+        calls,
+    } = build_catalog(
+        builtin,
+        ir_rules,
+        callbacks,
+        rego_native,
+        policies,
+        policy_shape,
+        policy_entry,
+    )?;
+    let input = match plan {
+        Some(plan) => {
+            if !paths.is_empty() || recursive {
+                return Err(PyValueError::new_err(
+                    "a plan scan takes no paths and is not recursive",
+                ));
+            }
+            ScanInput::Plan { plan, source }
         }
-    }
-    let opts = ScanOptions {
-        recursive,
+        None => ScanInput::Dirs { paths, recursive },
+    };
+    let request = ScanRequest {
+        input,
+        catalog,
+        selection: select,
         var_files,
-        rules: None,
         threads,
     };
-    let work = move || {
-        let linter = Linter::new(rules);
-        let roots: Vec<PathBuf> = paths
-            .iter()
-            .flat_map(|p| tf_linter::discover_roots(p, recursive))
-            .collect();
-        let (r, analyses) = tf_linter::scan_with(&linter, &roots, &opts);
-        ScanData::new(r, analyses)
-    };
+    let work = move || tf_scan::scan(request).map(|o| ScanData::new(o.result, o.analyses));
     let data = if _release_gil {
         py.detach(work)
     } else {
@@ -1032,7 +1096,7 @@ fn scan(
     }
     Ok((
         ScanResult {
-            data: Arc::new(data),
+            data: Arc::new(data.map_err(scan_error)?),
         },
         calls.load(std::sync::atomic::Ordering::Relaxed),
     ))
@@ -1043,40 +1107,46 @@ fn scan(
 /// the GIL released (callbacks re-acquire it). Returns
 /// (seconds per run, findings per run, callback calls in total).
 #[pyfunction]
-#[pyo3(signature = (paths, recursive=false, builtin=None, ir_rules=vec![], callbacks=vec![], repeat=3))]
+#[pyo3(signature = (paths, recursive=false, builtin=true, select=None, ir_rules=vec![], callbacks=vec![], repeat=3))]
+#[allow(clippy::too_many_arguments)]
 fn _rule_time(
     py: Python<'_>,
     paths: Vec<PathBuf>,
     recursive: bool,
-    builtin: Option<Vec<String>>,
+    builtin: bool,
+    select: Option<Vec<String>>,
     ir_rules: Vec<String>,
     callbacks: Vec<Bound<'_, PyAny>>,
     repeat: usize,
 ) -> PyResult<(Vec<f64>, usize, u64)> {
-    let (rules, error, calls) = build_rules(builtin, ir_rules, callbacks)?;
-    let (times, n) = py.detach(move || {
-        let roots: Vec<PathBuf> = paths
-            .iter()
-            .flat_map(|p| tf_linter::discover_roots(p, recursive))
-            .collect();
-        let opts = ScanOptions {
-            recursive,
-            ..ScanOptions::default()
+    let PyCatalog {
+        catalog,
+        error,
+        calls,
+    } = build_catalog(builtin, ir_rules, callbacks, false, vec![], None, None)?;
+    let result = py.detach(move || -> Result<_, tf_scan::ScanError> {
+        // Analyse once with no rules, then time the rules alone.
+        let mut analyse = ScanRequest::dirs(paths, recursive);
+        analyse.catalog = Catalog::default();
+        let analyses = tf_scan::scan(analyse)?.analyses;
+        let rules = catalog.resolve()?;
+        let linter = match &select {
+            Some(ids) => Linter::filtered(rules, ids)?,
+            None => Linter::new(rules),
         };
-        let (_, analyses) = tf_linter::scan_with(&Linter::new(vec![]), &roots, &opts);
-        let linter = Linter::new(rules);
         let mut times = Vec::new();
         let mut n = 0;
         for _ in 0..repeat {
             let t = std::time::Instant::now();
-            n = analyses.iter().map(|a| linter.run(a).len()).sum::<usize>();
+            n = analyses.iter().map(|a| linter.run(a).findings.len()).sum::<usize>();
             times.push(t.elapsed().as_secs_f64());
         }
-        (times, n)
+        Ok((times, n))
     });
     if let Some(e) = error.lock().unwrap().take() {
         return Err(e);
     }
+    let (times, n) = result.map_err(scan_error)?;
     Ok((times, n, calls.load(std::sync::atomic::Ordering::Relaxed)))
 }
 

@@ -34,7 +34,7 @@ print(f"load before: {os.getloadavg()}")
 # -- A: full scans -------------------------------------------------------------
 configs = [
     ("analysis only (no rules)", dict(builtin=False)),
-    ("built-in aws-sg-open-ssh (Rust)", dict(builtin=["aws-sg-open-ssh"])),
+    ("built-in aws-sg-open-ssh (Rust)", dict(select=["aws-sg-open-ssh"])),
     ("expression rule (IR, Rust, no GIL)", dict(builtin=False, rules=[EXPR_RULE])),
     ("callback rule (Python, GIL per call)", dict(builtin=False, rules=[CALLBACK_RULE])),
     ("all 5 built-in rules", dict(builtin=True)),
@@ -58,10 +58,10 @@ for label, path in [("corpus/repos", CORPUS), ("generated", GEN)]:
     print("| rule path | time | findings | candidate resources (callback calls / run) | per candidate (µs, min) |")
     print("|---|---|---|---|---|")
     rows = [
-        ("built-in aws-sg-open-ssh (Rust)", dict(builtin=["aws-sg-open-ssh"])),
-        ("expression rule (IR)", dict(builtin=[], ir_rules=[IR])),
-        ("callback rule (Python)", dict(builtin=[], callbacks=[CALLBACK_RULE])),
-        ("callback rule returning None immediately", dict(builtin=[], callbacks=[
+        ("built-in aws-sg-open-ssh (Rust)", dict(select=["aws-sg-open-ssh"])),
+        ("expression rule (IR)", dict(builtin=False, ir_rules=[IR])),
+        ("callback rule (Python)", dict(builtin=False, callbacks=[CALLBACK_RULE])),
+        ("callback rule returning None immediately", dict(builtin=False, callbacks=[
             tfscan.CallbackRule(lambda r: None, "noop", CALLBACK_RULE.resource_types)])),
     ]
     cand = None

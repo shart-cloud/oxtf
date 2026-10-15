@@ -48,7 +48,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tf_eval::truth::{self, Truth};
 use tf_eval::{Kind, Known, Prov, Value, Verdict};
-use tf_linter::{Category, DynRule, Judgement, Level, RuleInfo};
+use tf_linter::{Category, DynRule, Judgement, Level, RuleFailure, RuleInfo};
 use tf_semantic::{Module, Resource};
 
 /// Current IR version. Readers reject other versions.
@@ -684,14 +684,18 @@ impl DynRule for CompiledRule {
     fn info(&self) -> RuleInfo {
         self.info.clone()
     }
-    fn judge_resource(&self, r: &Resource) -> Vec<Judgement> {
-        self.verdict(r)
+    fn judge_resource(&self, r: &Resource) -> Result<Vec<Judgement>, RuleFailure> {
+        Ok(self
+            .verdict(r)
             .and_then(|v| Judgement::from_verdict(v, |v| self.render(r, v.witness.as_ref())))
             .into_iter()
-            .collect()
+            .collect())
     }
-    fn judge_module<'m>(&self, _m: &'m Module) -> Vec<(&'m Resource, Judgement)> {
-        Vec::new()
+    fn judge_module<'m>(
+        &self,
+        _m: &'m Module,
+    ) -> Result<Vec<(&'m Resource, Judgement)>, RuleFailure> {
+        Ok(Vec::new())
     }
 }
 

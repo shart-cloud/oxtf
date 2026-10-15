@@ -30,7 +30,7 @@ print("|---|---|---|---|---|")
 for builtin, expr in [("aws-rds-unencrypted", rds), ("gcp-storage-uniform-access", gcp)]:
     for label, path in [("fixtures/rules (recursive)", "fixtures/rules"), ("corpus/repos (recursive)", "corpus/repos")]:
         p = os.path.join(REPO, path)
-        b = tfscan.scan(p, recursive=True, builtin=[builtin])
+        b = tfscan.scan(p, recursive=True, select=[builtin])
         e = tfscan.scan(p, recursive=True, builtin=False, rules=[expr])
         kb = {(f.address, f.root, f.severity) for f in b.findings}
         ke = {(f.address, f.root, f.severity) for f in e.findings}

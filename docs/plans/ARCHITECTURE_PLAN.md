@@ -384,6 +384,25 @@ parsing, exit codes and one smoke scan.
 **Exit.** `grep -rn "discover_roots" crates/tf_cli crates/tfscan_py` returns nothing; Python test
 scans a plan; suite wall time drops (record before and after).
 
+**Done 2026-10-15** (branch `phase5-scan-request`). The request lives in a new crate,
+`tf_scan`, not in `tf_linter`: `tf_plan` and `tf_rego` depend on `tf_linter`, so the module
+that calls both has to sit above them. `tf_linter` keeps the per-root loop (`scan_with`) and
+`scan_dir` as a seed-rules convenience for tests; everything else (catalog, selection,
+root discovery, the `is_dir` check, plan input, policies) is in `tf_scan::scan`. Findings
+that changed the sketch: a catalog is an ordered list of sources where a later rule shadows
+an earlier one by name, which is all the native Rego tier needs to replace its seed rules.
+Foreign policies became per-resource rules with the wildcard resource type `*`, so a rule
+error names the resource it failed on. `DynRule` hooks return `Result`; the engine turns an
+`Err` into a `RuleError` and keeps going; the mutex channel and `with_policies` are gone.
+A scan with rule errors is still printed: the CLI exits 1 (2 is "could not run"), Python
+exposes `result.rule_errors`. Python's `builtin=[ids]` became `select=` over the whole
+catalog; `tfscan.scan_plan` and `policies=` / `rego_native=` arrived with it. Baseline
+byte-identical, now checked in-process. Test time: baseline 0.49 s to 0.08 s, Rego parity
+1.41 s to 0.29 s. Corpus scan before 0.222 s, after 0.221 s (min of 5, interleaved; the
+machine was slower than in earlier phases for both). The per-resource `engine.clone()` in
+`tf_rego` measured: `--rego-native` over the corpus costs nothing measurable over native
+(0.22 s both), so it stays.
+
 ### Phase 6 — in-memory analysis (optional)
 
 Only if stdin scanning or editor integration becomes a goal. `FileTable` becomes the seam with a

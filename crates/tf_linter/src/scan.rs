@@ -9,7 +9,8 @@ use std::time::{Duration, Instant};
 use rayon::prelude::*;
 use tf_semantic::{Analysis, AnalyzeOptions, Diagnostic, FileTable, analyze_module};
 
-use crate::engine::{Linter, RuleSelectionError};
+use crate::engine::Linter;
+use crate::record::RuleError;
 use crate::rule::{Finding, Severity};
 
 #[derive(Clone, Debug, Default)]
@@ -20,9 +21,6 @@ pub struct ScanOptions {
     pub recursive: bool,
     /// Extra `-var-file`s for the root module(s).
     pub var_files: Vec<PathBuf>,
-    /// Only run these rule ids (all seed rules when `None`).
-    /// Used by `scan_dir` and `scan_dir_with_model`; `scan_with` uses its explicit linter.
-    pub rules: Option<Vec<String>>,
     /// Worker threads (rayon); `None` = number of CPUs.
     pub threads: Option<usize>,
 }
@@ -42,13 +40,36 @@ pub struct ScanStats {
     pub elapsed: Duration,
 }
 
+impl ScanStats {
+    /// The one fold from findings to counts. Callers fill in `roots`,
+    /// `module_instances`, `resources`, `files` and `elapsed`.
+    pub fn from_findings(findings: &[Finding]) -> ScanStats {
+        let mut stats = ScanStats {
+            findings: findings.len(),
+            ..ScanStats::default()
+        };
+        for f in findings {
+            *stats
+                .findings_by_rule
+                .entry(f.rule.to_string())
+                .or_default() += 1;
+            match f.severity {
+                Severity::Definite => stats.definite += 1,
+                Severity::Conditional => stats.conditional += 1,
+                Severity::Indeterminate => stats.indeterminate += 1,
+            }
+        }
+        stats
+    }
+}
+
 pub struct ScanResult {
     pub findings: Vec<Finding>,
     /// Parse errors, strict-bool warnings, missing local modules, ...
     pub diagnostics: Vec<Diagnostic>,
     pub stats: ScanStats,
     /// Rules that failed to run; never silent (see `record::RuleError`).
-    pub rule_errors: Vec<crate::record::RuleError>,
+    pub rule_errors: Vec<RuleError>,
     /// Resolves the `FileId`s in findings, provenance and diagnostics.
     pub files: Arc<FileTable>,
 }
@@ -90,31 +111,19 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// Scan `path` and return findings only.
-pub fn scan_dir(path: &Path, opts: &ScanOptions) -> Result<ScanResult, RuleSelectionError> {
-    scan_dir_with_model(path, opts).map(|(result, _)| result)
-}
-
-/// Scan `path` and also return the analysed model of every root module
-/// (resources with evaluated attributes, variables, outputs, symbols).
-pub fn scan_dir_with_model(
-    path: &Path,
-    opts: &ScanOptions,
-) -> Result<(ScanResult, Vec<Analysis>), RuleSelectionError> {
-    let rules = crate::rules::all();
-    let linter = match &opts.rules {
-        Some(ids) => Linter::filtered(rules, ids)?,
-        None => Linter::new(rules),
-    };
-    Ok(scan_with(
-        &linter,
+/// Scan `path` with the seed rules. A convenience for tests and examples;
+/// scans with a catalog, selection or plan input go through `tf_scan`.
+pub fn scan_dir(path: &Path, opts: &ScanOptions) -> ScanResult {
+    scan_with(
+        &Linter::with_seed_rules(),
         &discover_roots(path, opts.recursive),
         opts,
-    ))
+    )
+    .0
 }
 
-/// Scan explicit root module directories with a given linter (custom or
-/// runtime-built rules).
+/// Scan explicit root module directories with a given linter: the one
+/// parallel loop over roots, shared by every front door.
 pub fn scan_with(
     linter: &Linter,
     roots: &[PathBuf],
@@ -126,13 +135,13 @@ pub fn scan_with(
         var_files: opts.var_files.clone(),
         ..AnalyzeOptions::default()
     };
-    let work = || -> Vec<(Analysis, Vec<Finding>)> {
+    let work = || -> Vec<(Analysis, crate::engine::RunOutput)> {
         roots
             .par_iter()
             .map(|r| {
                 let a = analyze_module(r, &aopts, &files);
-                let f = linter.run(&a);
-                (a, f)
+                let out = linter.run(&a);
+                (a, out)
             })
             .collect()
     };
@@ -144,39 +153,33 @@ pub fn scan_with(
         .expect("thread pool");
     let results = pool.install(work);
     let mut findings = Vec::new();
+    let mut rule_errors = Vec::new();
     let mut diagnostics = Vec::new();
     let mut analyses = Vec::new();
-    let mut stats = ScanStats {
-        roots: roots.len(),
-        ..ScanStats::default()
-    };
-    for (a, f) in results {
-        stats.module_instances += a.modules.len();
-        stats.resources += a.stats.resources;
+    let mut module_instances = 0;
+    let mut resources = 0;
+    for (a, out) in results {
+        module_instances += a.modules.len();
+        resources += a.stats.resources;
         diagnostics.extend(a.diagnostics.iter().cloned());
-        findings.extend(f);
+        findings.extend(out.findings);
+        rule_errors.extend(out.rule_errors);
         analyses.push(a);
     }
-    for f in &findings {
-        *stats
-            .findings_by_rule
-            .entry(f.rule.to_string())
-            .or_default() += 1;
-        match f.severity {
-            Severity::Definite => stats.definite += 1,
-            Severity::Conditional => stats.conditional += 1,
-            Severity::Indeterminate => stats.indeterminate += 1,
-        }
-    }
-    stats.findings = findings.len();
-    stats.files = files.len();
-    stats.elapsed = start.elapsed();
+    let stats = ScanStats {
+        roots: roots.len(),
+        module_instances,
+        resources,
+        files: files.len(),
+        elapsed: start.elapsed(),
+        ..ScanStats::from_findings(&findings)
+    };
     (
         ScanResult {
             findings,
             diagnostics,
             stats,
-            rule_errors: Vec::new(),
+            rule_errors,
             files,
         },
         analyses,

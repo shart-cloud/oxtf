@@ -231,15 +231,26 @@ pub struct RuleInfo {
     pub runs_on_module: bool,
 }
 
+/// Why a rule could not judge. The engine records it as a
+/// [`crate::record::RuleError`] on the scan; it is never a pass.
+pub type RuleFailure = String;
+
 /// Object-safe rule interface used by the engine. Backends that build
 /// rules at runtime implement this directly; `T: Rule` gets it for free.
+///
+/// A hook that fails (a policy runtime error, a callback that raised)
+/// returns `Err`; the engine keeps scanning and reports the failure on
+/// the result, so a reader never mistakes it for "no finding".
 pub trait DynRule: Send + Sync {
     fn info(&self) -> RuleInfo;
     /// Judgements on one resource instance (usually zero or one); only
     /// judgements that can become findings are returned.
-    fn judge_resource(&self, resource: &Resource) -> Vec<Judgement>;
+    fn judge_resource(&self, resource: &Resource) -> Result<Vec<Judgement>, RuleFailure>;
     /// Judgements of a cross-resource rule over one module instance.
-    fn judge_module<'m>(&self, module: &'m Module) -> Vec<(&'m Resource, Judgement)>;
+    fn judge_module<'m>(
+        &self,
+        module: &'m Module,
+    ) -> Result<Vec<(&'m Resource, Judgement)>, RuleFailure>;
 }
 
 impl<T: Rule> DynRule for T {
@@ -253,17 +264,22 @@ impl<T: Rule> DynRule for T {
             runs_on_module: T::RUNS_ON_MODULE,
         }
     }
-    fn judge_resource(&self, resource: &Resource) -> Vec<Judgement> {
-        self.verdict(resource)
+    fn judge_resource(&self, resource: &Resource) -> Result<Vec<Judgement>, RuleFailure> {
+        Ok(self
+            .verdict(resource)
             .and_then(|v| self.judge(resource, v))
             .into_iter()
-            .collect()
+            .collect())
     }
-    fn judge_module<'m>(&self, module: &'m Module) -> Vec<(&'m Resource, Judgement)> {
-        self.module_verdicts(module)
+    fn judge_module<'m>(
+        &self,
+        module: &'m Module,
+    ) -> Result<Vec<(&'m Resource, Judgement)>, RuleFailure> {
+        Ok(self
+            .module_verdicts(module)
             .into_iter()
             .filter_map(|(r, v)| self.judge(r, v).map(|j| (r, j)))
-            .collect()
+            .collect())
     }
 }
 

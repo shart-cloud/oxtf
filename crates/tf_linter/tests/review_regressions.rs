@@ -36,7 +36,7 @@ resource "aws_db_instance" "always" {
 "#,
     )
     .unwrap();
-    let res = scan_dir(&d, &ScanOptions::default()).unwrap();
+    let res = scan_dir(&d, &ScanOptions::default());
     let addrs: Vec<_> = res.findings.iter().map(|f| f.address.to_string()).collect();
     assert_eq!(addrs, ["aws_db_instance.always"], "{addrs:?}");
     std::fs::remove_dir_all(&d).unwrap();
@@ -96,7 +96,7 @@ resource "aws_s3_bucket_public_access_block" "p" {{
             ),
         )
         .unwrap();
-        let r = scan_dir(&d, &ScanOptions::default()).unwrap();
+        let r = scan_dir(&d, &ScanOptions::default());
         assert!(r.diagnostics.is_empty(), "{case}: {:?}", r.diagnostics);
         let got: Vec<_> = r.findings.iter().map(|f| f.address.as_ref()).collect();
         assert_eq!(got, expected, "{case}");
