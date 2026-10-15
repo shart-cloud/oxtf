@@ -38,7 +38,17 @@ fn resource(existence: Truth) -> Resource {
 }
 
 fn step(kind: StepKind, at: u32, resource: Option<&str>) -> Step {
-    let s = Step::new(kind, FileSpan::new(FileId(2), Span { start: at, end: at + 1 }), "step");
+    let s = Step::new(
+        kind,
+        FileSpan::new(
+            FileId(2),
+            Span {
+                start: at,
+                end: at + 1,
+            },
+        ),
+        "step",
+    );
     match resource {
         Some(r) => s.with_resource(Arc::from(r)),
         None => s,
@@ -46,7 +56,13 @@ fn step(kind: StepKind, at: u32, resource: Option<&str>) -> Step {
 }
 
 fn build(existence: Truth, verdict: &Verdict) -> Option<Finding> {
-    Finding::from_verdict(&info(), &resource(existence), verdict, "msg", Path::new("/root"))
+    Finding::from_verdict(
+        &info(),
+        &resource(existence),
+        verdict,
+        "msg",
+        Path::new("/root"),
+    )
 }
 
 #[test]
@@ -105,12 +121,28 @@ fn primary_is_newest_step_on_this_resource_else_header() {
     // Steps on another resource do not count; the newest step on this one wins.
     let w = Value::bool(false)
         .with_prov(Prov::single(step(StepKind::Tfvars, 1, None)))
-        .push(step(StepKind::Attribute, 2, Some("module.m.aws_s3_bucket.b")))
-        .push(step(StepKind::Attribute, 3, Some("module.m.aws_s3_bucket.b")))
-        .push(step(StepKind::Attribute, 4, Some("module.m.aws_s3_bucket.other")));
+        .push(step(
+            StepKind::Attribute,
+            2,
+            Some("module.m.aws_s3_bucket.b"),
+        ))
+        .push(step(
+            StepKind::Attribute,
+            3,
+            Some("module.m.aws_s3_bucket.b"),
+        ))
+        .push(step(
+            StepKind::Attribute,
+            4,
+            Some("module.m.aws_s3_bucket.other"),
+        ));
     let f = build(Truth::True, &Verdict::new(Truth::True, Some(w))).unwrap();
     assert_eq!(f.primary.span.start, 3);
-    assert_eq!(f.provenance.len(), 4, "provenance is origin-first and complete");
+    assert_eq!(
+        f.provenance.len(),
+        4,
+        "provenance is origin-first and complete"
+    );
 }
 
 #[test]
@@ -118,7 +150,10 @@ fn conditional_suffix_names_the_variable_when_known() {
     let w = Value::tainted("admin_cidr");
     let f = build(Truth::True, &Verdict::new(Truth::Tainted, Some(w))).unwrap();
     assert_eq!(f.severity, Severity::Conditional);
-    assert_eq!(f.message, "msg (depends on unconstrained variable var.admin_cidr)");
+    assert_eq!(
+        f.message,
+        "msg (depends on unconstrained variable var.admin_cidr)"
+    );
 
     // Synthetic taint labels (parenthesised) are not variable names.
     let w = Value::tainted("(expression)");
@@ -126,13 +161,21 @@ fn conditional_suffix_names_the_variable_when_known() {
     assert_eq!(f.message, "msg (depends on an unconstrained variable)");
 
     // Tainted verdict with a non-tainted witness (a OneOf decided it).
-    let f = build(Truth::True, &Verdict::new(Truth::Tainted, Some(Value::bool(false)))).unwrap();
+    let f = build(
+        Truth::True,
+        &Verdict::new(Truth::Tainted, Some(Value::bool(false))),
+    )
+    .unwrap();
     assert_eq!(f.message, "msg (depends on an unconstrained variable)");
 }
 
 #[test]
 fn tainted_existence_downgrades_and_says_so() {
-    let f = build(Truth::Tainted, &Verdict::new(Truth::True, Some(Value::bool(false)))).unwrap();
+    let f = build(
+        Truth::Tainted,
+        &Verdict::new(Truth::True, Some(Value::bool(false))),
+    )
+    .unwrap();
     assert_eq!(f.severity, Severity::Conditional);
     assert_eq!(
         f.message,
@@ -148,19 +191,32 @@ fn tainted_existence_downgrades_and_says_so() {
 #[test]
 fn caller_decided_severity_is_gated_and_downgraded_the_same_way() {
     let build = |existence, severity| {
-        Finding::with_severity(&info(), &resource(existence), severity, None, "msg", Path::new("/r"))
+        Finding::with_severity(
+            &info(),
+            &resource(existence),
+            severity,
+            None,
+            "msg",
+            Path::new("/r"),
+        )
     };
     assert_eq!(
-        build(Truth::True, Severity::Indeterminate).unwrap().severity,
+        build(Truth::True, Severity::Indeterminate)
+            .unwrap()
+            .severity,
         Severity::Indeterminate
     );
     // Tainted existence never makes a finding more certain.
     assert_eq!(
-        build(Truth::Tainted, Severity::Indeterminate).unwrap().severity,
+        build(Truth::Tainted, Severity::Indeterminate)
+            .unwrap()
+            .severity,
         Severity::Indeterminate
     );
     assert_eq!(
-        build(Truth::Tainted, Severity::Conditional).unwrap().message,
+        build(Truth::Tainted, Severity::Conditional)
+            .unwrap()
+            .message,
         "msg (depends on an unconstrained variable)"
     );
     assert_eq!(
@@ -170,12 +226,19 @@ fn caller_decided_severity_is_gated_and_downgraded_the_same_way() {
     assert!(build(Truth::Unknown, Severity::Indeterminate).is_none());
     assert!(build(Truth::False, Severity::Definite).is_none());
     // Indeterminate wording is the adapter's; no suffix is added.
-    assert_eq!(build(Truth::True, Severity::Indeterminate).unwrap().message, "msg");
+    assert_eq!(
+        build(Truth::True, Severity::Indeterminate).unwrap().message,
+        "msg"
+    );
 }
 
 #[test]
 fn definite_message_is_untouched() {
-    let f = build(Truth::True, &Verdict::new(Truth::True, Some(Value::bool(false)))).unwrap();
+    let f = build(
+        Truth::True,
+        &Verdict::new(Truth::True, Some(Value::bool(false))),
+    )
+    .unwrap();
     assert_eq!(f.severity, Severity::Definite);
     assert_eq!(f.message, "msg");
 }

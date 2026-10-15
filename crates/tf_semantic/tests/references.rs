@@ -13,7 +13,10 @@ fn ambiguous_references_do_not_claim_exact_instance_identity() {
         .next()
         .unwrap();
     let bucket = Resource::new(
-        found.id.clone().with_key(Some(InstanceKey::Key("a".into()))),
+        found
+            .id
+            .clone()
+            .with_key(Some(InstanceKey::Key("a".into()))),
         found.span,
         found.body.clone(),
         found.existence,

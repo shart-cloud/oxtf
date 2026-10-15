@@ -26,7 +26,7 @@ pub struct Scope<'s> {
 
 pub struct Frame<'s> {
     name: &'s str,
-    value: Value,
+    value: &'s Value,
     parent: Option<&'s Frame<'s>>,
 }
 
@@ -37,7 +37,7 @@ impl<'s> Scope<'s> {
         let mut f = self.frame;
         while let Some(fr) = f {
             if fr.name == name {
-                return Some(&fr.value);
+                return Some(fr.value);
             }
             f = fr.parent;
         }
@@ -45,7 +45,9 @@ impl<'s> Scope<'s> {
     }
 
     /// Run `k` with `name = value` bound on top of this scope.
-    pub fn with<R>(&self, name: &str, value: Value, k: impl FnOnce(Scope<'_>) -> R) -> R {
+    /// The binding borrows `value`: a frame is a name and a pointer, so
+    /// binding costs no clone of the value.
+    pub fn with<R>(&self, name: &str, value: &Value, k: impl FnOnce(Scope<'_>) -> R) -> R {
         let frame = Frame {
             name,
             value,
@@ -60,7 +62,7 @@ impl<'s> Scope<'s> {
     pub fn with_all<R>(&self, binds: &[(&str, Value)], k: impl FnOnce(Scope<'_>) -> R) -> R {
         match binds.split_first() {
             None => k(*self),
-            Some(((n, v), rest)) => self.with(n, v.clone(), |s| s.with_all(rest, k)),
+            Some(((n, v), rest)) => self.with(n, v, |s| s.with_all(rest, k)),
         }
     }
 }

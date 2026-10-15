@@ -107,7 +107,9 @@ impl Address {
             Some(r) => (Mode::Data, r),
             None => (Mode::Managed, rest),
         };
-        let (ty, rest) = rest.split_once('.').ok_or_else(|| err("missing resource name"))?;
+        let (ty, rest) = rest
+            .split_once('.')
+            .ok_or_else(|| err("missing resource name"))?;
         let (name, key) = match rest.find('[') {
             Some(i) => (&rest[..i], Some(parse_key(&rest[i..]).map_err(&err)?)),
             None => (rest, None),
@@ -340,7 +342,14 @@ mod tests {
 
     #[test]
     fn rejects_malformed() {
-        for s in ["", "aws_s3_bucket", "module.m", "aws_s3_bucket.b[", "aws_s3_bucket.b[x]", "a.b.c"] {
+        for s in [
+            "",
+            "aws_s3_bucket",
+            "module.m",
+            "aws_s3_bucket.b[",
+            "aws_s3_bucket.b[x]",
+            "a.b.c",
+        ] {
             assert!(Address::parse(s).is_err(), "{s}");
         }
     }

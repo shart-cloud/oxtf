@@ -28,7 +28,11 @@ pub fn all() -> Vec<Box<dyn DynRule>> {
 
 /// A fix that sets top-level `attribute` of `r` to `value`: at the attribute
 /// when it is written, else by insertion into the block.
-pub(crate) fn set_attribute(r: &tf_semantic::Resource, attribute: &str, value: serde_json::Value) -> FixHint {
+pub(crate) fn set_attribute(
+    r: &tf_semantic::Resource,
+    attribute: &str,
+    value: serde_json::Value,
+) -> FixHint {
     FixHint {
         resource: r.id.clone(),
         attribute: attribute.to_string(),

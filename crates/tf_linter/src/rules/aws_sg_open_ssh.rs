@@ -52,7 +52,8 @@ fn reaches_22(protocol: &Value, from: &Value, to: &Value) -> Verdict {
 
 fn inline_rule(rule: &Value) -> Verdict {
     truth::map(rule, &|r| {
-        let open = open_list(&r.field_or_null("cidr_blocks")).or(open_list(&r.field_or_null("ipv6_cidr_blocks")));
+        let open = open_list(&r.field_or_null("cidr_blocks"))
+            .or(open_list(&r.field_or_null("ipv6_cidr_blocks")));
         open.and(reaches_22(
             &r.field_or_null("protocol"),
             &r.field_or_null("from_port"),

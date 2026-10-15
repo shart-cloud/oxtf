@@ -28,10 +28,16 @@ fn escaped_for_each_keys_are_spelled_like_terraform() {
         .iter()
         .find(|r| r.key.as_deref() == Some("quote\"back\\slash"))
         .unwrap();
-    assert_eq!(escaped.id.key, Some(InstanceKey::Key("quote\"back\\slash".into())));
+    assert_eq!(
+        escaped.id.key,
+        Some(InstanceKey::Key("quote\"back\\slash".into()))
+    );
     assert_eq!(&*escaped.base_address, "aws_s3_bucket.b");
     assert_eq!(escaped.id.base_string(), "aws_s3_bucket.b");
     // The string form round-trips through the parser, so the plan front end
     // (which parses Terraform's own spelling) lands on the same identity.
-    assert_eq!(tf_semantic::Address::parse(&escaped.address).unwrap(), escaped.id);
+    assert_eq!(
+        tf_semantic::Address::parse(&escaped.address).unwrap(),
+        escaped.id
+    );
 }

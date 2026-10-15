@@ -18,10 +18,14 @@ pub mod model;
 pub mod module;
 pub mod references;
 pub mod source;
+pub mod store;
 
 pub use address::{Address, AddressError, InstanceKey};
-pub use analyze::{AnalyzeOptions, ObservedAttr, analyze_module, analyze_module_observed};
+pub use analyze::{
+    AnalyzeOptions, ObservedAttr, analyze_module, analyze_module_observed, analyze_module_shared,
+};
 pub use model::{
     Analysis, Attr, Block, Body, DiagSeverity, Diagnostic, Mode, Module, Resource, SymbolRef,
 };
 pub use source::{FileTable, SourceFile};
+pub use store::ModuleStore;

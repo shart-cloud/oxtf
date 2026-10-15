@@ -44,6 +44,11 @@ pub struct FileTable {
     inner: RwLock<Inner>,
     /// Normalised overlay paths, sorted.
     overlay: Vec<PathBuf>,
+    /// Directory listings already taken this scan (`read_dir`), by
+    /// normalised directory. A recursive scan lists each module directory
+    /// once per root that reaches it; the disk does not change during a
+    /// scan, so the second listing is the first one.
+    listings: RwLock<HashMap<PathBuf, Arc<Vec<PathBuf>>>>,
 }
 
 #[derive(Default, Debug)]
@@ -73,9 +78,18 @@ impl FileTable {
         FileTable { overlay, ..table }
     }
 
-    /// Whether `path` names a file: in the overlay, else on disk.
+    /// Whether `path` names a file: in the overlay, else on disk. Answered
+    /// from the (cached) listing of its directory, so asking about
+    /// `terraform.tfvars` in every module costs no `stat`.
     pub fn is_file(&self, path: &Path) -> bool {
-        self.overlay.binary_search(&normalize(path)).is_ok() || path.is_file()
+        let path = normalize(path);
+        if self.overlay.binary_search(&path).is_ok() {
+            return true;
+        }
+        match path.parent() {
+            Some(dir) => self.read_dir(dir).binary_search(&path).is_ok(),
+            None => path.is_file(),
+        }
     }
 
     /// Whether `dir` is a directory: on disk, or implied by an overlay file
@@ -86,13 +100,24 @@ impl FileTable {
 
     /// The files directly in `dir` (not subdirectories), overlay and disk
     /// united, sorted by path.
-    pub fn read_dir(&self, dir: &Path) -> Vec<PathBuf> {
+    pub fn read_dir(&self, dir: &Path) -> Arc<Vec<PathBuf>> {
         let dir = normalize(dir);
+        if let Some(v) = self.listings.read().unwrap().get(&dir) {
+            return v.clone();
+        }
         let mut v: Vec<PathBuf> = match std::fs::read_dir(&dir) {
             Ok(rd) => rd
                 .filter_map(|e| e.ok())
+                .filter(|e| {
+                    // The entry's own type is free with the listing; only
+                    // a symlink needs a stat to see what it points at.
+                    match e.file_type() {
+                        Ok(t) if t.is_symlink() => e.path().is_file(),
+                        Ok(t) => t.is_file(),
+                        Err(_) => false,
+                    }
+                })
                 .map(|e| e.path())
-                .filter(|p| p.is_file())
                 .collect(),
             Err(_) => Vec::new(),
         };
@@ -104,6 +129,8 @@ impl FileTable {
         );
         v.sort();
         v.dedup();
+        let v = Arc::new(v);
+        self.listings.write().unwrap().insert(dir, v.clone());
         v
     }
 

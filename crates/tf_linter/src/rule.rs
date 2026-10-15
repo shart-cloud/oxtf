@@ -167,7 +167,10 @@ pub struct Judgement {
 impl Judgement {
     /// `None` when the verdict yields no finding (`False` / `Unknown`), so
     /// `message` is only rendered for verdicts that hold.
-    pub fn from_verdict(verdict: Verdict, message: impl FnOnce(&Verdict) -> String) -> Option<Self> {
+    pub fn from_verdict(
+        verdict: Verdict,
+        message: impl FnOnce(&Verdict) -> String,
+    ) -> Option<Self> {
         let severity = Severity::from_truth(verdict.truth)?;
         let message = message(&verdict);
         Some(Judgement {
@@ -346,7 +349,14 @@ impl Finding {
         root: &Path,
     ) -> Option<Finding> {
         let severity = Severity::from_truth(verdict.truth)?;
-        Self::with_severity(info, resource, severity, verdict.witness.as_ref(), message, root)
+        Self::with_severity(
+            info,
+            resource,
+            severity,
+            verdict.witness.as_ref(),
+            message,
+            root,
+        )
     }
 
     /// Build a finding whose certainty the caller has already decided
@@ -361,7 +371,16 @@ impl Finding {
         message: &str,
         root: &Path,
     ) -> Option<Finding> {
-        Self::build(info, resource, severity, witness, message, root, Vec::new(), None)
+        Self::build(
+            info,
+            resource,
+            severity,
+            witness,
+            message,
+            root,
+            Vec::new(),
+            None,
+        )
     }
 
     /// [`Finding::with_severity`] plus the hidden inputs and fix hint a

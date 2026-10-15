@@ -6,7 +6,7 @@
 //! their expressions (lexical names bound by `for`, `dynamic` iterators,
 //! `each`, `count`, `self` are recorded as implicit references).
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -121,7 +121,8 @@ pub struct ModuleDef<'a> {
     pub resources: Vec<ResourceDecl<'a>>,
     pub module_calls: Vec<ModuleCall<'a>>,
     pub outputs: Vec<OutputDecl<'a>>,
-    pub references: Vec<Reference>,
+    /// Shared with every module instance built from this definition.
+    pub references: Arc<Vec<Reference>>,
     pub parse_errors: Vec<(FileSpan, String)>,
     var_index: HashMap<&'a str, usize>,
     local_index: HashMap<&'a str, usize>,
@@ -157,8 +158,9 @@ impl<'a> ModuleDef<'a> {
 pub fn module_files(files: &FileTable, dir: &Path) -> Vec<PathBuf> {
     files
         .read_dir(dir)
-        .into_iter()
+        .iter()
         .filter(|p| p.extension().is_some_and(|x| x == "tf"))
+        .cloned()
         .collect()
 }
 
@@ -170,11 +172,17 @@ pub fn auto_tfvars(files: &FileTable, dir: &Path) -> Vec<PathBuf> {
     if files.is_file(&t) {
         v.push(t);
     }
-    v.extend(files.read_dir(dir).into_iter().filter(|p| {
-        p.file_name()
-            .and_then(|n| n.to_str())
-            .is_some_and(|n| n.ends_with(".auto.tfvars"))
-    }));
+    v.extend(
+        files
+            .read_dir(dir)
+            .iter()
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.ends_with(".auto.tfvars"))
+            })
+            .cloned(),
+    );
     v
 }
 
@@ -203,13 +211,13 @@ pub fn load_module<'a>(alloc: &'a Allocator, files: &FileTable, dir: &Path) -> M
         resources: Vec::new(),
         module_calls: Vec::new(),
         outputs: Vec::new(),
-        references: Vec::new(),
+        references: Arc::new(Vec::new()),
         parse_errors: Vec::new(),
-        var_index: HashMap::new(),
-        local_index: HashMap::new(),
-        res_index: HashMap::new(),
-        call_index: HashMap::new(),
-        output_index: HashMap::new(),
+        var_index: HashMap::default(),
+        local_index: HashMap::default(),
+        res_index: HashMap::default(),
+        call_index: HashMap::default(),
+        output_index: HashMap::default(),
     };
     for p in module_files(files, &dir) {
         let Ok(sf) = files.load(&p) else { continue };
@@ -545,5 +553,5 @@ fn collect_references<'a>(def: &mut ModuleDef<'a>) {
         }
         out.append(&mut c.out);
     }
-    def.references = out;
+    def.references = Arc::new(out);
 }

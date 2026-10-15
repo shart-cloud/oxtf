@@ -1,13 +1,12 @@
 //! Module-instance tree, reference resolution and schema-aware evaluation of
 //! resource bodies into the owned [`crate::model`].
 
+use rustc_hash::FxHashMap as HashMap;
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use tf_allocator::Allocator;
 use tf_ast::{Attribute, Body, Expression, TraversalOperator};
 use tf_eval::{
     Evaluator, Kind, Known, Map, NoResolver, Origin, Resolver, Scope, Step, StepKind, Truth, Value,
@@ -18,10 +17,10 @@ use tf_span::{FileId, FileSpan, Span};
 use crate::address::{Address, InstanceKey};
 use crate::model::{self, AnalysisStats, Attr, DiagSeverity, Diagnostic};
 use crate::module::{
-    Mode, ModuleDef, ModuleSource, ResourceDecl, SymbolRef, auto_tfvars, load_module, module_files,
-    parse_file,
+    Mode, ModuleDef, ModuleSource, ResourceDecl, SymbolRef, auto_tfvars, module_files,
 };
 use crate::source::{FileTable, SourceFile, normalize};
+use crate::store::ModuleStore;
 
 /// Options for [`analyze_module`].
 #[derive(Clone, Debug)]
@@ -74,9 +73,20 @@ pub fn analyze_module_observed(
     files: &FileTable,
     observer: Option<Observer<'_>>,
 ) -> model::Analysis {
-    let alloc = Allocator::new();
-    let an = Analyzer::new(&alloc, files, opts, observer, dir);
+    let store = ModuleStore::new();
+    let an = Analyzer::new(&store, files, opts, observer, dir);
     an.run()
+}
+
+/// Analyse `dir` with parsed modules taken from (and added to) `store`, so
+/// a scan of many roots parses each module directory once.
+pub fn analyze_module_shared(
+    dir: &Path,
+    opts: &AnalyzeOptions,
+    files: &FileTable,
+    store: &ModuleStore,
+) -> model::Analysis {
+    Analyzer::new(store, files, opts, None, dir).run()
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +113,7 @@ type ResAttrKey = (usize, Option<Arc<str>>, String);
 type Expansion = (Vec<InstBind>, Option<Value>, Option<Value>);
 
 struct Instance<'a> {
-    def: Rc<ModuleDef<'a>>,
+    def: &'a ModuleDef<'a>,
     address: Arc<str>,
     parent: Option<(usize, usize)>,
     binds: Vec<(&'static str, Value)>,
@@ -134,11 +144,13 @@ struct TfvarsBinding<'a> {
 }
 
 struct Analyzer<'a, 'o> {
-    alloc: &'a Allocator,
+    store: &'a ModuleStore,
     files: &'a FileTable,
     opts: &'a AnalyzeOptions,
     root_dir: PathBuf,
-    defs: RefCell<HashMap<PathBuf, Rc<ModuleDef<'a>>>>,
+    /// Definitions this root has taken from the store, by directory; the
+    /// store's lookup is a lock and a hash, this one is a hash.
+    defs: RefCell<HashMap<PathBuf, &'a ModuleDef<'a>>>,
     insts: RefCell<Vec<Rc<Instance<'a>>>>,
     tfvars: Vec<TfvarsBinding<'a>>,
     diags: RefCell<Vec<Diagnostic>>,
@@ -172,7 +184,7 @@ fn snippet(text: &str, span: Span, max: usize) -> String {
 
 impl<'a, 'o> Analyzer<'a, 'o> {
     fn new(
-        alloc: &'a Allocator,
+        store: &'a ModuleStore,
         files: &'a FileTable,
         opts: &'a AnalyzeOptions,
         observer: Option<Observer<'o>>,
@@ -186,17 +198,16 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         for p in var_files {
             match files.load(&p) {
                 Ok(sf) => {
-                    let mut errs = Vec::new();
-                    let f = parse_file(alloc, &sf, &mut errs);
-                    for (at, m) in errs {
+                    let parsed = store.file(&sf);
+                    for (at, m) in &parsed.errors {
                         diags.push(Diagnostic {
                             severity: DiagSeverity::Error,
                             code: "parse-error",
-                            message: m,
-                            at: Some(at),
+                            message: m.clone(),
+                            at: Some(*at),
                         });
                     }
-                    for a in f.body.attributes() {
+                    for a in parsed.file.body.attributes() {
                         tfvars.push(TfvarsBinding {
                             name: a.key.name.as_str(),
                             attr: a,
@@ -213,11 +224,11 @@ impl<'a, 'o> Analyzer<'a, 'o> {
             }
         }
         Analyzer {
-            alloc,
+            store,
             files,
             opts,
             root_dir,
-            defs: RefCell::new(HashMap::new()),
+            defs: RefCell::new(HashMap::default()),
             insts: RefCell::new(Vec::new()),
             tfvars,
             diags: RefCell::new(diags),
@@ -242,15 +253,15 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         });
     }
 
-    fn load_def(&self, dir: &Path) -> Rc<ModuleDef<'a>> {
+    fn load_def(&self, dir: &Path) -> &'a ModuleDef<'a> {
         if let Some(d) = self.defs.borrow().get(dir) {
-            return d.clone();
+            return d;
         }
-        let d = Rc::new(load_module(self.alloc, self.files, dir));
+        let d = self.store.module(self.files, dir);
         for (at, m) in &d.parse_errors {
             self.diag(DiagSeverity::Error, "parse-error", m.clone(), Some(*at));
         }
-        self.defs.borrow_mut().insert(dir.to_path_buf(), d.clone());
+        self.defs.borrow_mut().insert(dir.to_path_buf(), d);
         d
     }
 
@@ -260,7 +271,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
 
     fn new_instance(
         &self,
-        def: Rc<ModuleDef<'a>>,
+        def: &'a ModuleDef<'a>,
         address: Arc<str>,
         parent: Option<(usize, usize)>,
         bind: InstBind,
@@ -273,12 +284,12 @@ impl<'a, 'o> Analyzer<'a, 'o> {
             binds: bind.binds,
             existence: bind.existence,
             ancestors,
-            children: RefCell::new(HashMap::new()),
-            vars: RefCell::new(HashMap::new()),
-            locals: RefCell::new(HashMap::new()),
-            outputs: RefCell::new(HashMap::new()),
-            res_attrs: RefCell::new(HashMap::new()),
-            res_insts: RefCell::new(HashMap::new()),
+            children: RefCell::new(HashMap::default()),
+            vars: RefCell::new(HashMap::default()),
+            locals: RefCell::new(HashMap::default()),
+            outputs: RefCell::new(HashMap::default()),
+            res_attrs: RefCell::new(HashMap::default()),
+            res_insts: RefCell::new(HashMap::default()),
         };
         let mut v = self.insts.borrow_mut();
         v.push(Rc::new(inst));
@@ -340,14 +351,22 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         Evaluator::new(&NoResolver, file).eval(e, Scope::EMPTY)
     }
 
-    fn memo<K: std::hash::Hash + Eq + Clone>(
+    /// Memoised evaluation. The lookup is by the borrowed form `k`; the
+    /// owned key is only built (`key`) on a miss, so a hit allocates
+    /// nothing.
+    fn memo<K, Q>(
         &self,
         map: &RefCell<HashMap<K, Slot>>,
-        k: K,
+        k: &Q,
+        key: impl FnOnce() -> K,
         what: impl FnOnce() -> String,
         compute: impl FnOnce() -> Value,
-    ) -> Value {
-        if let Some(s) = map.borrow().get(&k) {
+    ) -> Value
+    where
+        K: std::hash::Hash + Eq + std::borrow::Borrow<Q>,
+        Q: std::hash::Hash + Eq + ?Sized,
+    {
+        if let Some(s) = map.borrow().get(k) {
             return match s {
                 Slot::Busy => Value::error(format!("cycle while evaluating {}", what())),
                 Slot::Done(v) => v.clone(),
@@ -356,11 +375,13 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         if self.depth.get() > MAX_DEPTH {
             return Value::error(format!("evaluation too deep at {}", what()));
         }
-        map.borrow_mut().insert(k.clone(), Slot::Busy);
+        map.borrow_mut().insert(key(), Slot::Busy);
         self.depth.set(self.depth.get() + 1);
         let v = compute();
         self.depth.set(self.depth.get() - 1);
-        map.borrow_mut().insert(k, Slot::Done(v.clone()));
+        if let Some(slot) = map.borrow_mut().get_mut(k) {
+            *slot = Slot::Done(v.clone());
+        }
         v
     }
 
@@ -370,7 +391,8 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         let inst = self.inst(inst_id);
         self.memo(
             &inst.vars,
-            name.to_string(),
+            name,
+            || name.to_string(),
             || format!("var.{name}"),
             || {
                 let Some(decl) = inst.def.variable(name) else {
@@ -456,7 +478,8 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         let inst = self.inst(inst_id);
         self.memo(
             &inst.locals,
-            name.to_string(),
+            name,
+            || name.to_string(),
             || format!("local.{name}"),
             || {
                 let Some(decl) = inst.def.local(name) else {
@@ -476,7 +499,8 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         let inst = self.inst(inst_id);
         self.memo(
             &inst.outputs,
-            name.to_string(),
+            name,
+            || name.to_string(),
             || format!("output {name}"),
             || {
                 let Some(decl) = inst.def.output(name) else {
@@ -693,13 +717,8 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                         existence: b.existence.min(inst.existence),
                         ..b
                     };
-                    let id = self.new_instance(
-                        def.clone(),
-                        addr.into(),
-                        Some((inst_id, ci)),
-                        b,
-                        anc.clone(),
-                    );
+                    let id =
+                        self.new_instance(def, addr.into(), Some((inst_id, ci)), b, anc.clone());
                     out.push((key, id));
                 }
             }
@@ -776,7 +795,8 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         let base_str = base.base_string();
         self.memo(
             &inst.res_attrs,
-            k,
+            &k,
+            || k.clone(),
             || format!("{base}.{attr}"),
             || {
                 let decl: &ResourceDecl<'a> = &inst.def.resources[ri];
@@ -1078,14 +1098,16 @@ impl<'a, 'o> Analyzer<'a, 'o> {
 
     fn build_module(&self, inst_id: usize) -> model::Module {
         let inst = self.inst(inst_id);
-        let def = inst.def.clone();
+        let def = inst.def;
         let mut resources = Vec::new();
         for (ri, decl) in def.resources.iter().enumerate() {
             let insts = self.res_instances(inst_id, ri);
             let decl_id = Address::new(inst.address.clone(), decl.mode, decl.ty, decl.name, None);
             let base: Arc<str> = decl_id.base_string().into();
             for b in insts.0.iter() {
-                let id = decl_id.clone().with_key(b.key.clone().map(InstanceKey::Key));
+                let id = decl_id
+                    .clone()
+                    .with_key(b.key.clone().map(InstanceKey::Key));
                 let address: Arc<str> = id.to_string().into();
                 let ctx = BodyCtx {
                     inst: inst_id,
@@ -1284,7 +1306,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                     Some(items) if items.len() <= self.opts.max_expand => {
                         for (k, v) in items {
                             let it = obj2(k, v);
-                            let bd = sc.with(it_name, it, |s| {
+                            let bd = sc.with(it_name, &it, |s| {
                                 self.eval_body(ctx, &content.body, nested, s, &sub, false)
                             });
                             raw.push((label, bd, true, Truth::True, b.span, as_attr));
@@ -1311,7 +1333,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                             ),
                         };
                         let it = obj2(it.clone(), it);
-                        let bd = sc.with(it_name, it, |s| {
+                        let bd = sc.with(it_name, &it, |s| {
                             self.eval_body(ctx, &content.body, nested, s, &sub, false)
                         });
                         raw.push((label, bd, true, ex, b.span, as_attr));

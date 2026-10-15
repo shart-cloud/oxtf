@@ -7,13 +7,15 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use rayon::prelude::*;
-use tf_semantic::{Analysis, AnalyzeOptions, Diagnostic, FileTable, analyze_module};
+use tf_semantic::{
+    Analysis, AnalyzeOptions, Diagnostic, FileTable, ModuleStore, analyze_module_shared,
+};
 
 use crate::engine::Linter;
 use crate::record::RuleError;
 use crate::rule::{Finding, Severity};
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct ScanOptions {
     /// Treat every directory under the path that contains `.tf` files as a
     /// root module (hidden directories and `.terraform` are skipped).
@@ -26,6 +28,23 @@ pub struct ScanOptions {
     /// In-memory files that shadow the disk (`FileTable::with_overlay`):
     /// unsaved editor buffers, stdin, a proposed patch.
     pub overlay: Vec<(PathBuf, Arc<str>)>,
+    /// Return the analysed model of every root in `scan_with`'s second
+    /// value. Callers that only want findings (the CLI) set this off and
+    /// each root's model is dropped as soon as its rules have run, which
+    /// bounds memory by the largest root instead of the whole corpus.
+    pub keep_models: bool,
+}
+
+impl Default for ScanOptions {
+    fn default() -> Self {
+        ScanOptions {
+            recursive: false,
+            var_files: Vec::new(),
+            threads: None,
+            overlay: Vec::new(),
+            keep_models: true,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -91,24 +110,25 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(rd) = std::fs::read_dir(dir) else {
         return;
     };
-    let mut entries: Vec<PathBuf> = rd.filter_map(|e| e.ok()).map(|e| e.path()).collect();
-    entries.sort();
-    if entries
-        .iter()
-        .any(|p| p.is_file() && p.extension().is_some_and(|x| x == "tf"))
-    {
+    // The entry type comes with the listing; a stat per entry would triple
+    // the syscalls of a recursive scan. A symlink is never followed into
+    // (one pointing at an ancestor would recurse until the path length
+    // limit) but one pointing at a `.tf` file still makes a root.
+    let mut entries: Vec<(PathBuf, std::fs::FileType)> = rd
+        .filter_map(|e| e.ok())
+        .filter_map(|e| Some((e.path(), e.file_type().ok()?)))
+        .collect();
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    if entries.iter().any(|(p, t)| {
+        p.extension().is_some_and(|x| x == "tf") && (t.is_file() || (t.is_symlink() && p.is_file()))
+    }) {
         out.push(dir.to_path_buf());
     }
-    for p in entries {
+    for (p, t) in entries {
         let hidden = p
             .file_name()
             .is_some_and(|n| n.to_string_lossy().starts_with('.'));
-        // Don't follow directory symlinks: one pointing at an ancestor
-        // would recurse until the path length limit.
-        let is_link = p
-            .symlink_metadata()
-            .is_ok_and(|m| m.file_type().is_symlink());
-        if p.is_dir() && !hidden && !is_link {
+        if t.is_dir() && !hidden {
             walk(&p, out);
         }
     }
@@ -134,24 +154,53 @@ pub fn scan_with(
 ) -> (ScanResult, Vec<Analysis>) {
     let start = Instant::now();
     let files = Arc::new(FileTable::with_overlay(opts.overlay.iter().cloned()));
+    // Parsed modules shared by every root: a recursive scan reaches most
+    // module directories from several roots.
+    let store = ModuleStore::new();
     let aopts = AnalyzeOptions {
         var_files: opts.var_files.clone(),
         ..AnalyzeOptions::default()
     };
-    let work = || -> Vec<(Analysis, crate::engine::RunOutput)> {
+    // What survives a root once its rules have run.
+    struct RootResult {
+        module_instances: usize,
+        resources: usize,
+        diagnostics: Vec<Diagnostic>,
+        out: crate::engine::RunOutput,
+        analysis: Option<Analysis>,
+    }
+    let work = || -> Vec<RootResult> {
         roots
             .par_iter()
             .map(|r| {
-                let a = analyze_module(r, &aopts, &files);
+                let a = analyze_module_shared(r, &aopts, &files, &store);
                 let out = linter.run(&a);
-                (a, out)
+                RootResult {
+                    module_instances: a.modules.len(),
+                    resources: a.stats.resources,
+                    diagnostics: if opts.keep_models {
+                        Vec::new()
+                    } else {
+                        a.diagnostics.clone()
+                    },
+                    out,
+                    analysis: opts.keep_models.then_some(a),
+                }
             })
             .collect()
     };
-    // Deep reference chains recurse; give workers generous stacks.
+    // Deep reference chains recurse; give workers generous stacks. No more
+    // workers than roots: a one-root scan (an editor buffer, a patch) must
+    // not spawn a thread per CPU to use one of them.
+    let threads = opts.threads.unwrap_or_else(|| {
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
+            .min(roots.len().max(1))
+    });
     let pool = rayon::ThreadPoolBuilder::new()
         .stack_size(64 << 20)
-        .num_threads(opts.threads.unwrap_or(0))
+        .num_threads(threads)
         .build()
         .expect("thread pool");
     let results = pool.install(work);
@@ -161,13 +210,18 @@ pub fn scan_with(
     let mut analyses = Vec::new();
     let mut module_instances = 0;
     let mut resources = 0;
-    for (a, out) in results {
-        module_instances += a.modules.len();
-        resources += a.stats.resources;
-        diagnostics.extend(a.diagnostics.iter().cloned());
-        findings.extend(out.findings);
-        rule_errors.extend(out.rule_errors);
-        analyses.push(a);
+    for r in results {
+        module_instances += r.module_instances;
+        resources += r.resources;
+        findings.extend(r.out.findings);
+        rule_errors.extend(r.out.rule_errors);
+        match r.analysis {
+            Some(a) => {
+                diagnostics.extend(a.diagnostics.iter().cloned());
+                analyses.push(a);
+            }
+            None => diagnostics.extend(r.diagnostics),
+        }
     }
     let stats = ScanStats {
         roots: roots.len(),

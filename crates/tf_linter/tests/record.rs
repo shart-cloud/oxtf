@@ -8,7 +8,9 @@ use tf_linter::record::{FindingRecord, SCHEMA, ScanRecord};
 use tf_linter::{ScanOptions, scan_dir};
 
 fn scan(case: &str) -> ScanRecord {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/rules").join(case);
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/rules")
+        .join(case);
     ScanRecord::from_result(&scan_dir(&root, &ScanOptions::default()))
 }
 
@@ -23,34 +25,71 @@ fn schema_1_field_set_is_pinned() {
     assert_eq!(SCHEMA, 1);
     let r = scan("aws-rds-unencrypted/fail_absent_uses_default");
     let json = serde_json::to_value(&r).unwrap();
-    assert_eq!(keys(&json), ["diagnostics", "findings", "rule_errors", "schema", "stats"]);
+    assert_eq!(
+        keys(&json),
+        ["diagnostics", "findings", "rule_errors", "schema", "stats"]
+    );
     assert_eq!(
         keys(&json["stats"]),
         [
-            "conditional", "definite", "elapsed_ms", "files", "findings", "findings_by_rule",
-            "indeterminate", "module_instances", "resources", "roots"
+            "conditional",
+            "definite",
+            "elapsed_ms",
+            "files",
+            "findings",
+            "findings_by_rule",
+            "indeterminate",
+            "module_instances",
+            "resources",
+            "roots"
         ]
     );
     let f = &json["findings"][0];
     assert_eq!(
         keys(f),
         [
-            "attribute", "configured", "effective", "fingerprint", "fix_hint", "hidden",
-            "location", "message", "provenance", "resource", "root", "rule", "schema", "severity"
+            "attribute",
+            "configured",
+            "effective",
+            "fingerprint",
+            "fix_hint",
+            "hidden",
+            "location",
+            "message",
+            "provenance",
+            "resource",
+            "root",
+            "rule",
+            "schema",
+            "severity"
         ]
     );
     assert_eq!(keys(&f["rule"]), ["category", "description", "id", "level"]);
     assert_eq!(
         keys(&f["resource"]),
-        ["address", "base_address", "key", "mode", "module", "name", "type"]
+        [
+            "address",
+            "base_address",
+            "key",
+            "mode",
+            "module",
+            "name",
+            "type"
+        ]
     );
-    assert_eq!(keys(&f["location"]), ["column", "end", "file", "line", "start"]);
+    assert_eq!(
+        keys(&f["location"]),
+        ["column", "end", "file", "line", "start"]
+    );
     assert_eq!(keys(&f["effective"]), ["display", "kind", "value"]);
     assert_eq!(
         keys(&f["provenance"][0]),
         ["attribute", "kind", "label", "location", "resource"]
     );
-    assert_eq!(keys(&f["fix_hint"]), ["action", "attribute", "resource", "site", "value"]);
+    assert_eq!(
+        keys(&f["fix_hint"]),
+        ["action", "attribute", "resource", "site", "value"]
+    );
 }
 
 #[test]
@@ -64,7 +103,10 @@ fn records_round_trip_through_json() {
         r.stats.elapsed_ms = 0.0;
         let text = serde_json::to_string(&r).unwrap();
         let back: ScanRecord = serde_json::from_str(&text).unwrap();
-        let (a, b) = (serde_json::to_value(&back).unwrap(), serde_json::to_value(&r).unwrap());
+        let (a, b) = (
+            serde_json::to_value(&back).unwrap(),
+            serde_json::to_value(&r).unwrap(),
+        );
         assert_eq!(a, b, "{case}");
         assert_eq!(back, r, "{case}");
         for f in &r.findings {
@@ -92,19 +134,28 @@ fn fix_hints_name_the_edit_and_its_site() {
     // Absent attribute: insert into the block (no site).
     let r = scan("aws-rds-unencrypted/fail_absent_uses_default");
     let h = r.findings[0].fix_hint.as_ref().unwrap();
-    assert_eq!((h.action.as_str(), h.attribute.as_str()), ("set", "storage_encrypted"));
+    assert_eq!(
+        (h.action.as_str(), h.attribute.as_str()),
+        ("set", "storage_encrypted")
+    );
     assert_eq!(h.value, serde_json::json!(true));
     assert!(h.site.is_none());
     assert_eq!(h.resource.address, r.findings[0].resource.address);
     assert!(r.findings[0].configured.is_none());
-    assert_eq!(r.findings[0].effective.as_ref().unwrap().value, Some(serde_json::json!(false)));
+    assert_eq!(
+        r.findings[0].effective.as_ref().unwrap().value,
+        Some(serde_json::json!(false))
+    );
 
     // Written attribute: the site is that attribute.
     let r = scan("aws-rds-unencrypted/fail_explicit_false");
     let f = &r.findings[0];
     let h = f.fix_hint.as_ref().unwrap();
     assert_eq!(h.site.as_ref().unwrap(), &f.location);
-    assert_eq!(f.configured.as_ref().unwrap().value, Some(serde_json::json!(false)));
+    assert_eq!(
+        f.configured.as_ref().unwrap().value,
+        Some(serde_json::json!(false))
+    );
 
     // S3: the edit is on the public-access block, not the bucket.
     let r = scan("aws-s3-public-access-block/fail_permissive_block");
@@ -112,7 +163,10 @@ fn fix_hints_name_the_edit_and_its_site() {
     let h = f.fix_hint.as_ref().unwrap();
     assert_eq!(h.resource.ty, "aws_s3_bucket_public_access_block");
     assert_ne!(h.resource.address, f.resource.address);
-    assert!(f.attribute.is_none(), "the deciding value is not on the bucket");
+    assert!(
+        f.attribute.is_none(),
+        "the deciding value is not on the bucket"
+    );
 
     // No block at all: adding a resource is not a mechanical edit.
     let r = scan("aws-s3-public-access-block/fail_missing_block");

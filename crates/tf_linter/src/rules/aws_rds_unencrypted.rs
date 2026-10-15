@@ -28,7 +28,11 @@ impl Rule for AwsRdsUnencrypted {
     }
 
     fn fix_hint(&self, r: &Resource, _v: &Verdict) -> Option<FixHint> {
-        Some(set_attribute(r, "storage_encrypted", serde_json::Value::Bool(true)))
+        Some(set_attribute(
+            r,
+            "storage_encrypted",
+            serde_json::Value::Bool(true),
+        ))
     }
 
     fn message(&self, r: &Resource, v: &Verdict) -> String {
