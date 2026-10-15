@@ -23,6 +23,9 @@ pub struct ScanOptions {
     pub var_files: Vec<PathBuf>,
     /// Worker threads (rayon); `None` = number of CPUs.
     pub threads: Option<usize>,
+    /// In-memory files that shadow the disk (`FileTable::with_overlay`):
+    /// unsaved editor buffers, stdin, a proposed patch.
+    pub overlay: Vec<(PathBuf, Arc<str>)>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -130,7 +133,7 @@ pub fn scan_with(
     opts: &ScanOptions,
 ) -> (ScanResult, Vec<Analysis>) {
     let start = Instant::now();
-    let files = Arc::new(FileTable::new());
+    let files = Arc::new(FileTable::with_overlay(opts.overlay.iter().cloned()));
     let aopts = AnalyzeOptions {
         var_files: opts.var_files.clone(),
         ..AnalyzeOptions::default()

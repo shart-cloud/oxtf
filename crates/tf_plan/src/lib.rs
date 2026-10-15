@@ -120,7 +120,7 @@ pub fn load_plan(
         } else {
             dir
         };
-        has_tf_files(dir).then(|| dir.to_path_buf())
+        has_tf_files(files, dir).then(|| dir.to_path_buf())
     });
     let source = source_dir
         .as_ref()
@@ -135,17 +135,19 @@ pub fn scan_plan(
     path: &Path,
     opts: &PlanOptions,
 ) -> Result<ScanResult, PlanError> {
-    scan_plan_with_model(linter, path, opts).map(|(r, _)| r)
+    scan_plan_with_model(linter, path, opts, Arc::new(FileTable::new())).map(|(r, _)| r)
 }
 
 /// [`scan_plan`], also returning the analysed model built from the plan.
+/// `files` is the scan's file table (an overlay shadows the plan file and
+/// the source directory alike).
 pub fn scan_plan_with_model(
     linter: &Linter,
     path: &Path,
     opts: &PlanOptions,
+    files: Arc<FileTable>,
 ) -> Result<(ScanResult, Analysis), PlanError> {
     let start = Instant::now();
-    let files = Arc::new(FileTable::new());
     let a = load_plan(path, opts, &files)?;
     let out = linter.run(&a);
     let stats = ScanStats {
@@ -169,11 +171,11 @@ pub fn scan_plan_with_model(
     ))
 }
 
-fn has_tf_files(dir: &Path) -> bool {
-    std::fs::read_dir(dir).is_ok_and(|rd| {
-        rd.filter_map(|e| e.ok())
-            .any(|e| e.path().extension().is_some_and(|x| x == "tf"))
-    })
+fn has_tf_files(files: &FileTable, dir: &Path) -> bool {
+    files
+        .read_dir(dir)
+        .iter()
+        .any(|p| p.extension().is_some_and(|x| x == "tf"))
 }
 
 // ---------------------------------------------------------------------------

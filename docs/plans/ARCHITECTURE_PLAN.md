@@ -409,6 +409,21 @@ Only if stdin scanning or editor integration becomes a goal. `FileTable` becomes
 disk adapter and an in-memory adapter; `analyze_sources(&[(PathBuf, String)], opts)` is the entry.
 Phase 3 already removes the test pain that motivated this candidate.
 
+**Done 2026-10-15** (branch `phase6-overlay`). Taken not for editors but for the patch chain:
+verifying a candidate fix means re-scanning with the edit applied, and that must not touch the
+checkout. The shape is an **overlay** on the scan request rather than a separate entry point:
+`ScanRequest::overlay: Vec<(PathBuf, Arc<str>)>` (`--overlay PATH=FILE`, `-` for stdin;
+Python `overlay={path: text}` on `scan` and `scan_plan`). `FileTable::with_overlay` is the
+seam: `load` returns overlay text first (the existing `insert` already did that), and the
+three places that listed a directory (`module_files`, `auto_tfvars`, the plan's `has_tf_files`)
+now go through `FileTable::read_dir`, which unites disk and overlay, so a file or a whole
+module that exists only in memory analyses like one on disk. Root discovery accepts a path
+that exists only in the overlay and, recursively, adds overlay-only directories beside disk
+roots (roots are normalised so one directory is never analysed under two spellings). Test
+`crates/tf_scan/tests/overlay.rs` shows the verify shape: the finding's fingerprint is gone
+after the overlay and the disk is unchanged. Baseline byte-identical. Corpus scan before
+0.216 s, after 0.220 s (min of 5, interleaved, three rounds, all within noise).
+
 ## After this plan
 
 Resume `RULE_ENGINES_PLAN.md` R2–R7 on top of the new seams. Every foreign engine is one more

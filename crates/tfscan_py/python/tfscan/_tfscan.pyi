@@ -184,6 +184,7 @@ def scan(
     policies: Sequence[str | os.PathLike[str]] = ...,
     policy_shape: Optional[str] = None,
     policy_entry: Optional[str] = None,
+    overlay: Sequence[tuple[str | os.PathLike[str], str]] = ...,
     threads: Optional[int] = None,
     _release_gil: bool = True,
 ) -> tuple[ScanResult, int]: ...

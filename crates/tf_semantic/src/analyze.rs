@@ -181,7 +181,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         let root_dir = normalize(dir);
         let mut diags = Vec::new();
         let mut tfvars = Vec::new();
-        let mut var_files = auto_tfvars(&root_dir);
+        let mut var_files = auto_tfvars(files, &root_dir);
         var_files.extend(opts.var_files.iter().cloned());
         for p in var_files {
             match files.load(&p) {
@@ -666,7 +666,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                     ),
                     at,
                 );
-            } else if module_files(dir).is_empty() {
+            } else if module_files(self.files, dir).is_empty() {
                 self.diag(
                     DiagSeverity::Warning,
                     "module-missing",

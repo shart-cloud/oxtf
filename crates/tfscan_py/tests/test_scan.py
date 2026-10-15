@@ -170,3 +170,19 @@ def test_foreign_policy_and_rule_errors():
     assert "%q" in e["message"]
     with pytest.raises(ValueError, match="cannot read policy"):
         tfscan.scan(rego / "foreign", policies=[rego / "missing.rego"])
+
+
+def test_overlay_shadows_disk_and_verifies_a_fix():
+    case = FIXTURES / "aws-rds-unencrypted" / "fail_explicit_false"
+    before = tfscan.scan(case)
+    (f,) = before.findings
+    fixed = (case / "main.tf").read_text().replace("= false", "= true")
+    after = tfscan.scan(case, overlay={case / "main.tf": fixed})
+    assert after.findings == [] and after.stats["files"] == 1
+    assert f.fingerprint not in {g.fingerprint for g in after.findings}
+    assert "= false" in (case / "main.tf").read_text()
+    # A module that exists only in memory.
+    mem = "/nonexistent/oxtf-py-overlay"
+    r = tfscan.scan(mem, overlay={f"{mem}/main.tf": 'resource "aws_db_instance" "x" { storage_encrypted = false }'})
+    assert [(g.address, g.severity) for g in r.findings] == [("aws_db_instance.x", "definite")]
+    assert r.findings[0].file == f"{mem}/main.tf"

@@ -241,3 +241,40 @@ fn policy_compile_errors_exit_two() {
     assert!(out.stdout.is_empty());
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+/// `--overlay PATH=-`: stdin stands in for a file, so an editor buffer or
+/// a candidate patch is scanned with nothing written to disk.
+#[test]
+fn overlay_from_stdin_shadows_the_file() {
+    use std::io::Write;
+    let case = fixture("aws-rds-unencrypted/fail_explicit_false");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .args([
+            "scan",
+            "--format",
+            "json",
+            &case,
+            "--overlay",
+            &format!("{case}/main.tf=-"),
+        ])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"resource \"aws_db_instance\" \"db\" { storage_encrypted = true }\n")
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["stats"]["findings"], 0);
+    assert_eq!(v["stats"]["files"], 1);
+    let bad = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .args(["scan", &case, "--overlay", "nope"])
+        .output()
+        .unwrap();
+    assert_eq!(bad.status.code(), Some(2));
+}

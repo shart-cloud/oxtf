@@ -14,12 +14,14 @@
 
 use std::fmt;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use tf_linter::rule::DynRule;
 use tf_linter::{Linter, RuleSelectionError, ScanOptions, ScanRecord, ScanResult, discover_roots};
 use tf_plan::{PlanError, PlanOptions};
 use tf_rego::{Policies, PolicyError};
-use tf_semantic::Analysis;
+use tf_semantic::source::normalize;
+use tf_semantic::{Analysis, FileTable};
 
 pub use tf_rego::Shape;
 
@@ -116,6 +118,12 @@ pub struct ScanRequest {
     pub var_files: Vec<PathBuf>,
     /// Worker threads; `None` = number of CPUs.
     pub threads: Option<usize>,
+    /// In-memory files that shadow the disk for this scan: their text is
+    /// read instead of the file's, and they are listed in their directory
+    /// whether or not it exists. Paths are matched lexically, so write them
+    /// the way the input paths are written. This is how an unsaved buffer,
+    /// stdin, or a proposed patch is scanned without touching the checkout.
+    pub overlay: Vec<(PathBuf, Arc<str>)>,
 }
 
 impl ScanRequest {
@@ -127,6 +135,7 @@ impl ScanRequest {
             selection: None,
             var_files: Vec::new(),
             threads: None,
+            overlay: Vec::new(),
         }
     }
 
@@ -138,6 +147,7 @@ impl ScanRequest {
             selection: None,
             var_files: Vec::new(),
             threads: None,
+            overlay: Vec::new(),
         }
     }
 }
@@ -206,20 +216,37 @@ pub fn scan(req: ScanRequest) -> Result<ScanOutput, ScanError> {
     };
     match req.input {
         ScanInput::Dirs { paths, recursive } => {
+            // Only for root discovery; the scan builds its own table from
+            // the same overlay so `FileId`s stay scan-local.
+            let files = FileTable::with_overlay(req.overlay.iter().cloned());
             let mut roots = Vec::new();
             for p in &paths {
-                if !p.is_dir() {
+                if !files.is_dir(p) {
                     return Err(ScanError::Input(format!(
                         "{} is not a directory",
                         p.display()
                     )));
                 }
-                roots.extend(discover_roots(p, recursive));
+                // Normalised so a root is never analysed twice under two
+                // spellings when the overlay adds directories below.
+                roots.extend(discover_roots(p, recursive).iter().map(|r| normalize(r)));
+                if recursive {
+                    // Directories that exist only in the overlay.
+                    for f in files.overlay_under(p) {
+                        if f.extension().is_some_and(|x| x == "tf")
+                            && let Some(dir) = f.parent()
+                            && !roots.iter().any(|r| r == dir)
+                        {
+                            roots.push(dir.to_path_buf());
+                        }
+                    }
+                }
             }
             let opts = ScanOptions {
                 recursive,
                 var_files: req.var_files,
                 threads: req.threads,
+                overlay: req.overlay,
             };
             let (result, analyses) = tf_linter::scan_with(&linter, &roots, &opts);
             Ok(ScanOutput { result, analyses })
@@ -230,8 +257,9 @@ pub fn scan(req: ScanRequest) -> Result<ScanOutput, ScanError> {
                     "var files apply to directory input, not a plan".into(),
                 ));
             }
+            let files = Arc::new(FileTable::with_overlay(req.overlay));
             let (result, analysis) =
-                tf_plan::scan_plan_with_model(&linter, &plan, &PlanOptions { source })?;
+                tf_plan::scan_plan_with_model(&linter, &plan, &PlanOptions { source }, files)?;
             Ok(ScanOutput {
                 result,
                 analyses: vec![analysis],

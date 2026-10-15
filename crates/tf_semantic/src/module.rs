@@ -151,44 +151,30 @@ impl<'a> ModuleDef<'a> {
     }
 }
 
-/// The `.tf` files of a directory, sorted by name. (`.tf.json` and override
-/// files are not handled specially: see W3 scope cuts.)
-pub fn module_files(dir: &Path) -> Vec<PathBuf> {
-    let mut v: Vec<PathBuf> = match std::fs::read_dir(dir) {
-        Ok(rd) => rd
-            .filter_map(|e| e.ok())
-            .map(|e| e.path())
-            .filter(|p| p.is_file() && p.extension().is_some_and(|x| x == "tf"))
-            .collect(),
-        Err(_) => Vec::new(),
-    };
-    v.sort();
-    v
+/// The `.tf` files of a directory, sorted by name, as the file table sees
+/// it (overlay included). (`.tf.json` and override files are not handled
+/// specially: see W3 scope cuts.)
+pub fn module_files(files: &FileTable, dir: &Path) -> Vec<PathBuf> {
+    files
+        .read_dir(dir)
+        .into_iter()
+        .filter(|p| p.extension().is_some_and(|x| x == "tf"))
+        .collect()
 }
 
 /// `terraform.tfvars` then `*.auto.tfvars` (lexical order), as Terraform
 /// loads them; later files win.
-pub fn auto_tfvars(dir: &Path) -> Vec<PathBuf> {
+pub fn auto_tfvars(files: &FileTable, dir: &Path) -> Vec<PathBuf> {
     let mut v = Vec::new();
     let t = dir.join("terraform.tfvars");
-    if t.is_file() {
+    if files.is_file(&t) {
         v.push(t);
     }
-    let mut autos: Vec<PathBuf> = match std::fs::read_dir(dir) {
-        Ok(rd) => rd
-            .filter_map(|e| e.ok())
-            .map(|e| e.path())
-            .filter(|p| {
-                p.is_file()
-                    && p.file_name()
-                        .and_then(|n| n.to_str())
-                        .is_some_and(|n| n.ends_with(".auto.tfvars"))
-            })
-            .collect(),
-        Err(_) => Vec::new(),
-    };
-    autos.sort();
-    v.extend(autos);
+    v.extend(files.read_dir(dir).into_iter().filter(|p| {
+        p.file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.ends_with(".auto.tfvars"))
+    }));
     v
 }
 
@@ -225,7 +211,7 @@ pub fn load_module<'a>(alloc: &'a Allocator, files: &FileTable, dir: &Path) -> M
         call_index: HashMap::new(),
         output_index: HashMap::new(),
     };
-    for p in module_files(&dir) {
+    for p in module_files(files, &dir) {
         let Ok(sf) = files.load(&p) else { continue };
         let f = parse_file(alloc, &sf, &mut def.parse_errors);
         def.files.push((sf, f));
