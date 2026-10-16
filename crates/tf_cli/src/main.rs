@@ -49,10 +49,13 @@ scan options:
                           policy, or a directory of them (searched recursively)
       --rego-native       run the seed rules that have a bundled native-tier Rego
                           policy (RDS encryption, GCS uniform access) as Rego
-      --policy FILE       also run a foreign Rego policy over every resource
-                          (repeatable; Conftest / OPA style, unchanged)
+      --policy PATH       also run foreign Rego policies (repeatable): .rego files and
+                          .json/.yaml data, or directories of them, loaded as one bundle
+                          as `opa eval -d PATH` loads them; run unchanged
       --policy-shape S    input document shape for --policy: plan (default) or hcl
-      --policy-entry R    rule path read for violations (default: data.main.deny)
+      --policy-entry R    entry rule read for violations, one rule each (repeatable;
+                          default: data.main.deny)
+      --rego-v0           parse --policy files as Rego v0 (`opa eval --v0-compatible`)
       --overlay PATH=FILE scan FILE's contents as if it were at PATH (repeatable;
                           FILE `-` reads stdin). PATH may be a file that does not exist,
                           in a directory that does not exist. Unsaved buffers, patches.
@@ -111,9 +114,11 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
                 catalog.policies.shape =
                     Some(it.next().ok_or("--policy-shape needs a value")?.parse()?)
             }
-            "--policy-entry" => {
-                catalog.policies.entry = Some(it.next().ok_or("--policy-entry needs a value")?)
-            }
+            "--policy-entry" => catalog
+                .policies
+                .entries
+                .push(it.next().ok_or("--policy-entry needs a value")?),
+            "--rego-v0" => catalog.policies.rego_v0 = true,
             "--plan" => plan = Some(it.next().ok_or("--plan needs a value")?.into()),
             "--source" => source = Some(it.next().ok_or("--source needs a value")?.into()),
             "--overlay" => {

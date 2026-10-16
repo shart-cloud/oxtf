@@ -207,30 +207,142 @@ operators. `AttributeOp` had 24 and now covers all 45, plain and as
 - Regenerating `checkov_frontend.json` with PyYAML 6.0.3 changes only the
   version stamp. The committed file stays pinned to 6.0.2.
 
-### F3. Rego / OPA as a first-class format
+### F3. Rego / OPA as a first-class format (implemented 2026-10-16; gate open on regorus)
 
-- [ ] Load `.rego` files and directories, with library packages shared
-  across policies, plus optional `data` JSON/YAML documents.
-- [ ] Metadata from OPA `# METADATA` annotations (`title`, `description`,
-  `custom.id`, `custom.severity`, `related_resources`), falling back to
-  `__rego_metadata__` objects, then to the current `rego:<file>` ID.
-  Severity maps to `Level`; resource types from metadata narrow which
-  instances are projected.
-- [ ] Verify regorus handles both Rego v0 and v1 (`import rego.v1` and the
-  OPA 1.0 default) on a sample of real-world policies; record gaps.
-- [ ] Result mapping beyond a message: accept structured results (`msg`,
-  plus optional `resource`/`address`, attribute path and `fix`), so a
-  finding can point at an attribute rather than only at the resource.
-- [ ] **Cross-resource policies.** Today each managed resource is projected
-  and evaluated alone, so a policy that joins two resources (bucket and
-  public-access block) only ever sees one. Add a whole-document mode
-  (one evaluation per root module), with results attributed back by
-  address. Decide per policy, from metadata or by detecting iteration over
-  the whole input, and measure the cost against the per-resource mode.
+The reference is `opa eval -d PATH...` with OPA 1.17.0. The code is in
+`tf_rego` (`foreign.rs`) and `tf_rule_ir::goyaml`.
 
-**Gate:** the seed-rule Rego ports and a set of community policies produce
-the same findings as `opa eval` on the corpus. Certainty stays
-classified by the projection's hidden values, as today.
+**Design.**
+
+- *One bundle.* Every `--policy` path (file or directory, walked recursively
+  in name order, hidden files included) loads into one regorus engine, as
+  `opa eval -d a -d b` does. Packages merge across files, so two
+  `package main` files form one `data.main.deny`. A `.json`/`.yaml`/`.yml`
+  file is a data document, placed at its directory's path below the `-d`
+  root and deep-merged. A scalar conflict, a non-object document, or a rule
+  that collides with data is a load error, as in OPA.
+- *YAML* (data files and annotations) is read as OPA reads it, by go-yaml
+  v2 and sigs.k8s.io/yaml (`goyaml.rs`). That is not PyYAML: plain `y`/`n`
+  are booleans, `1e3` is 1000, `08` is the float 8, `1:30` and timestamps
+  stay strings, and a `<<` merge applies where it appears. It shares the
+  event and node layer with `pyyaml.rs`. The tests pin 60+ scalars, keys
+  and merges to `opa eval` output. Float keys, `!!binary`, `!!set` and
+  local tags on collections are rejected; OPA accepts them.
+- *Policy unit = entry rule.* Each `--policy-entry REF` (repeatable;
+  default `data.main.deny`) is one oxtf rule. A missing entry is a load
+  error, and so is an entry that does not evaluate to a set on an empty
+  document. Discovering entries by Conftest's conventions (`deny_*`,
+  namespaces) is F4.
+- *Rego version.* v1 by default, as OPA 1.x. `--rego-v0` matches
+  `opa eval --v0-compatible`, where a file with `import rego.v1` is still
+  v1; regorus follows the same per-file rule.
+- *Builtins.* regorus with the OPA builtin families on (`regex`, `glob`,
+  `net`, `time`, encodings, `semver`, `uuid`, `urlquery`, `yaml`,
+  `jsonpatch`, `graph`). `http.send` and `opa.runtime` stay off: no network
+  or environment access at scan time. regorus's line, file-size and
+  line-count limits are raised, since OPA has none. Builtin errors are
+  strict, as with `opa eval --strict-builtin-errors`, so they surface as
+  rule errors. Default OPA would make the expression undefined, but a
+  builtin that regorus gets wrong would then be a silent pass. The harness
+  compares against strict OPA.
+- *Metadata.* The ID, level, description and resource types come from
+  `# METADATA` annotations, attached as OPA attaches them: to the next
+  package or rule, across blank lines, and not inside a rule body. Each
+  field is taken from the nearest annotation in the chain rule → document
+  → package → subpackages. Then come the package's `__rego_metadata__`
+  object (Trivy/tfsec style), then `rego:<file stem>`, or
+  `rego:<package>.<rule>` when the entry spans files or the stem is
+  ambiguous. The fields read are `custom.id`, `custom.severity`
+  (critical/high/medium/low/info, case-insensitive; any other value is a
+  load error), `title` and `description`. The oxtf-specific
+  `custom.oxtf.resource_types` narrows which instances are projected, and
+  `custom.oxtf.input` picks the input mode. Duplicate IDs among entries
+  are a load error. `related_resources` (guideline URL) and the category
+  wait for F5's metadata model.
+- *Results.* A violation is a string, or an object with `msg` and optional
+  `address` and `path` (`a.b[0].c` or a list). `path` makes the finding
+  point at that attribute when it is definite. Other keys are ignored. An
+  `address` naming another resource in resource mode is a rule error.
+- *Input modes.* `resource` (the default) projects one instance per
+  evaluation, as before. `module` evaluates once per root, with every
+  managed instance of the declared types projected into one plan document,
+  for policies that join resources. It needs the plan shape (Conftest's
+  HCL file semantics are F4). A module-mode result is attributed by its
+  `address`; a result without one, or with an unknown one, is a rule error.
+  Certainty in module mode is the worst over the abstractions (and
+  uncertain existence) of every projected instance. That is sound for the
+  policy's declared contract and conservative across unrelated resources.
+- *Conformance hook.* `OXTF_POLICY_TRACE=FILE` appends each evaluation's
+  entry, input and result (or error) as JSON lines.
+
+- [x] Load `.rego` files and directories, with library packages shared
+  across policies, plus `data` JSON/YAML documents.
+- [x] Metadata from `# METADATA` annotations and `__rego_metadata__`, with
+  the old `rego:<file>` ID as the fallback.
+- [x] Verify v0 and v1 on real-world policies and record gaps (below).
+- [x] Structured results with `msg`, `address` and `path`. `fix` is F4.
+- [x] Cross-resource policies through `custom.oxtf.input: module`, opt-in
+  per policy. Detecting whole-input iteration automatically would be a
+  heuristic, so it is not done.
+- [x] Seed-rule ports: `fixtures/rego/ports` (5 policies; the S3 one in
+  module mode), with fixtures in `fixtures/rego/ports_tf`.
+
+**Gate results** (`bench/rego/opa_compare.py`, corpus `corpus/repos`, OPA
+1.17.0 with `--strict-builtin-errors`). Both engines evaluate the same
+inputs (oxtf's projections), and results are compared per (entry, input):
+
+| Set | Evaluations | Agree | oxtf error, OPA result | Differ |
+| --- | ---: | ---: | ---: | ---: |
+| seed ports (5 entries) | 276 | 241 | 35 (`some .. in null`) | 0 |
+| Conftest hcl2 example (`--policy-shape hcl`) | 2,145 | 949 | 1,196 (`sprintf("%q")`) | 0 |
+| v0 fixture (`--rego-v0`) | 2,850 | 2,850 | 0 | 0 |
+| Azure AVM security, 26 entries, commit `c840dd7`, 1 workaround | 74,100 | 74,100 | 0 | 0 |
+
+There are **no silent differences**. Every disagreement is a rule error
+oxtf reports, caused by a regorus gap. The AVM run renames one
+comprehension variable (gap 3 below) in the staged copy of both engines'
+input. Without that rename, regorus cannot load the set. The gate is
+therefore not met yet: it needs the regorus gaps closed.
+
+**regorus 0.12.0 vs OPA 1.17.0.** Each gap is reproduced in
+`known_regorus_divergences_fail_loudly` (`foreign.rs`). Compile checks with
+`examples/rego_check.rs` against `opa check` covered Trivy checks (1,127
+files, v1), Regula (700, v0), Azure AVM (133), Scalr samples (62) and
+Conftest examples (56). Errors that OPA also reports (Trivy's and
+Conftest's own builtins, Scalr's conflicting rules) are excluded.
+
+1. `some x in <scalar or null>` is a runtime error; OPA treats it as
+   undefined. It is common in real policies, and it is the 35 above.
+2. `sprintf` `%q` is unsupported; OPA formats any value. regorus 0.13.0
+   adds `%q` for strings.
+3. A comprehension variable named like its enclosing function, or bound
+   later in the comprehension, fails with "used before definition".
+   1 AVM file and 1 Conftest example. Possibly fixed by 0.13.0
+   ("schedule comprehensions in rule outputs").
+4. An `import` after rules is a parse error. 1 Trivy file.
+5. v0 rules with several bodies (`p[x] { … } { … }`) are rejected as
+   `else`. 119 of Regula's 700 files.
+
+regorus 0.13.0 (2026-10-14) passes the two-week rule on 2026-10-28. The
+next step is to upgrade, rerun the harness, and report 1, 4 and 5
+upstream.
+
+**Not runnable unchanged** (input shape, not engine): Scalr's samples read
+`input.tfplan`, Trivy checks read Trivy's adapted `cloud` state, and Regula
+reads its own resource view. KICS and Trivy are roadmap items.
+
+**Cost.** Corpus scan with the 26 AVM entries: 5.5 s wall (8 threads)
+against 0.12 s without policies, 74,100 evaluations. About 70% of it is
+regorus evaluating AVM's `utils.resource` comprehensions. Input conversion
+and engine clone/drop take about 5% each. AVM declares no resource types,
+so every entry runs on every resource. `custom.oxtf.resource_types`
+removes that, and the budget is F5's gate.
+
+**Not yet carried over.** Python `tfscan.scan` still takes one
+`policy_entry` and no `rego_v0` (F5). Plan JSON's `configuration` section
+is not projected, so a policy that reads `input.configuration` (some AVM
+helpers do) sees none. Module resources sit flat in
+`planned_values.root_module`, not under `child_modules`.
 
 ### F4. Conftest compatibility
 

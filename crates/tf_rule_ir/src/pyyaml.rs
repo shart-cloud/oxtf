@@ -47,14 +47,14 @@ impl std::fmt::Display for Error {
     }
 }
 
-fn position(mark: Marker) -> Position {
+pub(crate) fn position(mark: Marker) -> Position {
     Position {
         line: mark.line(),
         col: mark.col() + 1,
     }
 }
 
-fn error(mark: Marker, message: impl Into<String>) -> Error {
+pub(crate) fn error(mark: Marker, message: impl Into<String>) -> Error {
     Error {
         position: Some(position(mark)),
         message: message.into(),
@@ -62,7 +62,7 @@ fn error(mark: Marker, message: impl Into<String>) -> Error {
 }
 
 #[derive(Clone, Debug)]
-enum Node {
+pub(crate) enum Node {
     Scalar {
         value: String,
         style: TScalarStyle,
@@ -82,7 +82,7 @@ enum Node {
 }
 
 impl Node {
-    fn mark(&self) -> Marker {
+    pub(crate) fn mark(&self) -> Marker {
         match self {
             Node::Scalar { mark, .. } | Node::Seq { mark, .. } | Node::Map { mark, .. } => *mark,
         }
@@ -92,6 +92,24 @@ impl Node {
 /// Load a single YAML document. An empty stream is `null`, and more than
 /// one document is an error, as for `safe_load`.
 pub fn load(text: &str) -> Result<Document, Error> {
+    let mut docs = documents(text)?;
+    if docs.len() > 1 {
+        return Err(error(docs[1].1, "expected a single document in the stream"));
+    }
+    let mut positions = HashMap::new();
+    let Some((root, _)) = docs.pop() else {
+        return Ok(Document {
+            value: Json::Null,
+            positions,
+        });
+    };
+    let value = construct(&root, String::new(), &mut positions)?;
+    Ok(Document { value, positions })
+}
+
+/// Every document in the stream as a node tree (aliases expanded), with
+/// the mark of its `---` (or first event).
+pub(crate) fn documents(text: &str) -> Result<Vec<(Node, Marker)>, Error> {
     let mut parser = Parser::new_from_str(text);
     let mut anchors: HashMap<usize, Node> = HashMap::new();
     let mut next = || {
@@ -100,31 +118,20 @@ pub fn load(text: &str) -> Result<Document, Error> {
             message: e.info().to_string(),
         })
     };
-    let mut root = None;
+    let mut docs = Vec::new();
     loop {
         let (event, mark) = next()?;
         match event {
             Event::StreamStart | Event::DocumentEnd | Event::Nothing => {}
             Event::StreamEnd => break,
             Event::DocumentStart => {
-                if root.is_some() {
-                    return Err(error(mark, "expected a single document in the stream"));
-                }
-                let (event, mark) = next()?;
-                root = Some(node(event, mark, &mut next, &mut anchors)?);
+                let (event, m) = next()?;
+                docs.push((node(event, m, &mut next, &mut anchors)?, mark));
             }
             _ => return Err(error(mark, "unexpected YAML event")),
         }
     }
-    let mut positions = HashMap::new();
-    let Some(root) = root else {
-        return Ok(Document {
-            value: Json::Null,
-            positions,
-        });
-    };
-    let value = construct(&root, String::new(), &mut positions)?;
-    Ok(Document { value, positions })
+    Ok(docs)
 }
 
 fn node(

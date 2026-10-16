@@ -272,10 +272,7 @@ fn foreign_policy_compile_errors_refuse_the_scan() {
     ))
     .err()
     .unwrap();
-    assert!(
-        missing.to_string().contains("cannot read policy"),
-        "{missing}"
-    );
+    assert!(missing.to_string().contains("none.rego"), "{missing}");
     std::fs::remove_dir_all(dir).unwrap();
 }
 
@@ -322,4 +319,73 @@ fn selection_covers_the_whole_catalog() {
     req.selection = Some(vec!["rego:nope".into()]);
     let err = scan(req).err().unwrap();
     assert!(matches!(err, ScanError::Selection(_)), "{err}");
+}
+
+fn ports(root: &str, shape: Shape) -> ScanRequest {
+    let mut req = ScanRequest::dirs(vec![repo().join(root)], false);
+    req.catalog.builtin = false;
+    req.catalog.policies.foreign = vec![repo().join("fixtures/rego/ports")];
+    req.catalog.policies.entries = vec![
+        "data.ports.rds.deny".into(),
+        "data.ports.s3_public_access_block.deny".into(),
+    ];
+    req.catalog.policies.shape = Some(shape);
+    req
+}
+
+/// The seed-rule ports: IDs and levels from `# METADATA`, a module-input
+/// policy joining buckets to public access blocks across the root, and a
+/// `path` in the violation pointing the finding at the attribute.
+#[test]
+fn ported_policies_use_metadata_module_input_and_paths() {
+    let known = run(ports("fixtures/rego/ports_tf/known", Shape::Plan));
+    let rows: Vec<(String, String, String, String, Value)> = known["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| {
+            (
+                f["rule"]["id"].as_str().unwrap().into(),
+                f["rule"]["level"].as_str().unwrap().into(),
+                f["resource"]["address"].as_str().unwrap().into(),
+                f["severity"].as_str().unwrap().into(),
+                f["location"]["line"].clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            (
+                "PORT-AWS-RDS-UNENCRYPTED".into(),
+                "high".into(),
+                "aws_db_instance.db".into(),
+                "definite".into(),
+                // `storage_encrypted = false`, from the violation's `path`.
+                serde_json::json!(20)
+            ),
+            (
+                "PORT-AWS-S3-PUBLIC-ACCESS-BLOCK".into(),
+                "high".into(),
+                "aws_s3_bucket.exposed".into(),
+                "definite".into(),
+                serde_json::json!(13)
+            ),
+        ]
+    );
+    let tainted = run(ports("fixtures/rego/ports_tf/tainted", Shape::Plan));
+    let f = &tainted["findings"][0];
+    assert_eq!(tainted["findings"].as_array().unwrap().len(), 1);
+    assert_eq!(f["resource"]["address"], "aws_s3_bucket.named");
+    assert_eq!(f["severity"], "conditional");
+    assert!(f["message"].as_str().unwrap().contains("var.name"), "{f}");
+    assert_eq!(f["hidden"][0]["path"], "aws_s3_bucket.named.bucket");
+    // Module input is defined for the plan shape only.
+    let err = scan(ports("fixtures/rego/ports_tf/known", Shape::Hcl))
+        .err()
+        .unwrap();
+    assert!(
+        err.to_string().contains("needs the plan input shape"),
+        "{err}"
+    );
 }

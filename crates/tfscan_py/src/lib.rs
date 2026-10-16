@@ -1023,7 +1023,8 @@ fn build_catalog(
             native: rego_native,
             foreign: policies,
             shape,
-            entry: policy_entry,
+            entries: policy_entry.into_iter().collect(),
+            rego_v0: false,
         },
     };
     let error = Arc::new(Mutex::new(None));

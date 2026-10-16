@@ -9,6 +9,7 @@ publish.workspace = true
 tf_eval.workspace = true
 tf_linter.workspace = true
 tf_semantic.workspace = true
+tf_rule_ir.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-regorus = { version = "=0.12.0", default-features = false, features = ["std", "arc"] }
+regorus = { version = "=0.12.0", default-features = false, features = ["std", "arc", "base64", "base64url", "glob", "graph", "hex", "jsonpatch", "net", "regex", "semver", "time", "urlquery", "uuid", "yaml"] }
