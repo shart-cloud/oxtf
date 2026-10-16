@@ -73,7 +73,7 @@ def test_validation_in_rust():
     with pytest.raises(ValueError):
         tfscan.compile_rules('{"name": "x", "message": "m", "clauses": [], "version": 1}')
     with pytest.raises(ValueError):
-        tfscan.compile_rules('{"name": "x", "message": "m", "version": 2, "clauses": '
+        tfscan.compile_rules('{"name": "x", "message": "m", "version": 999, "clauses": '
                              '[{"resource_types": ["t"], "condition": {"op": "lit", "value": true}}]}')
     with pytest.raises(ValueError):
         rule("x", level="severe")

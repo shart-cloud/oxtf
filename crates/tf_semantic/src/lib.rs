@@ -14,6 +14,7 @@
 
 pub mod address;
 pub mod analyze;
+pub mod graph;
 pub mod model;
 pub mod module;
 pub mod references;

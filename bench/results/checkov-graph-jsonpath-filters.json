@@ -1,0 +1,192 @@
+{
+  "date": "2026-10-15",
+  "source_version": "3.2.328",
+  "ir_version": 3,
+  "native_rules": 691,
+  "inventory": {
+    "resource/unsupported": 402,
+    "resource/translated": 508,
+    "graph/translated": 184,
+    "graph/unsupported": 2
+  },
+  "added_graph_policies": [
+    "CKV2_AWS_40",
+    "CKV2_AWS_68",
+    "CKV2_AWS_72",
+    "CKV2_GCP_13",
+    "CKV2_GCP_14",
+    "CKV2_GCP_15",
+    "CKV2_GCP_16",
+    "CKV2_GCP_17"
+  ],
+  "capability": "Compiled array wildcards and string equality/inequality filters with conjunctions; JSONPath not_equals and not_contains; all-match aggregation, abstract filter eligibility and structured JSON policy traversal.",
+  "related_correction": "Ordinary flattened attribute wildcards recognize singleton blocks without a numeric index, and numeric map keys; discovered through CKV2_AWS_72.",
+  "limits": [
+    "Regex and numeric filter comparisons remain unsupported, along with indices, slices, recursive descent and filter disjunction.",
+    "Known operands that cause upstream scalar-membership or noninteger-scalar wildcard exceptions remain indeterminate in native evaluation.",
+    "The earlier literal-field JSONPath scope and conservative handling of dotted-key collisions remain in place.",
+    "Generated policy and solver cases plus selected full-runner fixtures do not establish full-corpus runner parity."
+  ],
+  "pack": {
+    "path": "bench/results/out/checkov-3.2.328-graph-jsonpath-filters-verified",
+    "rules_sha256": "e0131995b04d965b6ef6f5e7b81f37dbef6d9207826fbe4ba132beff8e19bc97",
+    "manifest_sha256": "46fdc5cca4f3809cf6c89553f77846a89569fe3dccbfa9ec681d5dcbab46bcc9",
+    "command": [
+      "/home/jg/.local/share/pipx/venvs/checkov/bin/python",
+      "scripts/import_checkov.py",
+      "--output",
+      "bench/results/out/checkov-3.2.328-graph-jsonpath-filters-verified"
+    ]
+  },
+  "graph_conformance": {
+    "policies": 184,
+    "cases": 16880,
+    "disagreements": 0,
+    "reference_errors": 0,
+    "native_sha256": "fa4baaaf251510dd60ae404fe10e3bb821ac79c5c218fec3d463d90d96436800",
+    "rules_sha256": "32aa39dd573631b721e892c09daa68c24effb6f92a8913d955db2e554230024d",
+    "report": "bench/results/out/checkov-graph-jsonpath-filters-verified/report.json",
+    "report_sha256": "97c2c4b0891bc33d1e35701337a883ded373f9d0fbf609ca85fa96ada86411cb",
+    "diagnostic_errors": 0,
+    "warnings": 30,
+    "rule_errors": 0,
+    "command": [
+      "/home/jg/.local/share/pipx/venvs/checkov/bin/python",
+      "bench/checkov/graph_compare.py",
+      "--native",
+      "target/release/oxtf",
+      "--output",
+      "bench/results/out/checkov-graph-jsonpath-filters-verified"
+    ]
+  },
+  "baseline_regressions": [
+    {
+      "reference_report": "bench/results/out/checkov-graph-conformance-verified/report.json",
+      "cases": 14880,
+      "disagreements": 0,
+      "diagnostic_errors": 0,
+      "warnings": 20,
+      "diagnostics_unchanged": true,
+      "rule_errors": 0,
+      "reference_report_sha256": "eeab67b7743b4b033522af950aa92f32f9fd2183da223a13c4be27d60ee8a0ba",
+      "native_sha256": "fa4baaaf251510dd60ae404fe10e3bb821ac79c5c218fec3d463d90d96436800"
+    },
+    {
+      "reference_report": "bench/results/out/checkov-graph-operators-verified/report.json",
+      "cases": 15320,
+      "disagreements": 0,
+      "diagnostic_errors": 0,
+      "warnings": 19,
+      "diagnostics_unchanged": true,
+      "rule_errors": 0,
+      "reference_report_sha256": "76620922e541d2843dbe5cbf48e20dc5a8345df5c08df3224ea860feef05bf59",
+      "native_sha256": "fa4baaaf251510dd60ae404fe10e3bb821ac79c5c218fec3d463d90d96436800"
+    },
+    {
+      "reference_report": "bench/results/out/checkov-graph-filters-verified/report.json",
+      "cases": 16120,
+      "disagreements": 0,
+      "diagnostic_errors": 0,
+      "warnings": 19,
+      "diagnostics_unchanged": true,
+      "rule_errors": 0,
+      "reference_report_sha256": "bc42c784b10a619d795cc942edf8481abcd4aab27298e7aa86368212cace3cb6",
+      "native_sha256": "fa4baaaf251510dd60ae404fe10e3bb821ac79c5c218fec3d463d90d96436800"
+    },
+    {
+      "reference_report": "bench/results/out/checkov-graph-jsonpath-verified/report.json",
+      "cases": 16320,
+      "disagreements": 0,
+      "diagnostic_errors": 0,
+      "warnings": 19,
+      "diagnostics_unchanged": true,
+      "rule_errors": 0,
+      "reference_report_sha256": "b7888bab587efb45b41ddf3e535f744d7d90a3fc80589f395d01c70556b06b28",
+      "native_sha256": "fa4baaaf251510dd60ae404fe10e3bb821ac79c5c218fec3d463d90d96436800"
+    }
+  ],
+  "validation": {
+    "cargo test -p tf_rule_ir": "36 passed, plus doc tests",
+    "cargo clippy -p tf_rule_ir -p tf_cli -p tfscan_py --all-targets -- -D warnings": "passed",
+    "python -m pytest -q crates/tfscan_py/tests --tb=short": "161 passed",
+    "filtered_jsonpath_differential_cases": 2016,
+    "retained_literal_jsonpath_differential_cases": 365,
+    "full_runner_policy_fixtures": 27,
+    "new_policies_with_passing_and_failing_runner_fixtures": 8,
+    "cargo build --release -p tf_cli": "passed"
+  },
+  "source_sha256": {
+    "crates/tfscan_py/python/tfscan/checkov.py": "11505bb7dbd775c83aaa0e216ddb8c883b942eae916bae2b2cb6cd0db6b5de9f",
+    "crates/tf_rule_ir/src/checkov.rs": "eaa62ef88664735bcc18d40879b7f08c8e023b12e4bead6fda97257795762720",
+    "crates/tf_rule_ir/src/jsonpath.rs": "b66784140df130c5bf01a2f26db01b2686d83200d55fee2fb5fde0dbf4350d28",
+    "crates/tf_rule_ir/src/graph.rs": "07f4c3e013547d0d682f3573d44180eb5de918c6e209a3f6cc6c615aa1d15305",
+    "crates/tf_rule_ir/src/lib.rs": "8bfb5b291927c8535eae32c4e0504d6a305b93008fabef42c72861d95d5fa01a",
+    "bench/checkov/graph_compare.py": "40de5180f947a650288e7908b8f55415beaaa69e9dcfeb2e0eeb321786ba7c31",
+    "crates/tf_rule_ir/tests/jsonpath.rs": "2883442d1caad270a91addb77c7b9c5f476581f835b92f124c6305e4aa6c2bdb",
+    "crates/tf_rule_ir/tests/graph.rs": "ec7413d908f39a9081493047838ba3abc535bd01098600063d7c2fd51358caf0",
+    "crates/tfscan_py/tests/test_checkov.py": "c99c62db8377f7761e8677ed6a951b5ef5afe6d95629c0c82c0a2dbcb4198822"
+  },
+  "remaining_graph_policies": [
+    {
+      "id": "CKV2_AWS_69",
+      "source": "terraform/checks/graph_checks/aws/RDSEncryptionInTransit.json",
+      "source_sha256": "46cee3a91e74b63f311c646b6a9f66c224035177383946c960b301162fcced3a",
+      "blockers": [
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/1/or/1/and/1/or/0/operator",
+          "reason": "unsupported graph operator: not_regex_match"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/1/or/1/and/2/or/0/operator",
+          "reason": "unsupported graph operator: not_regex_match"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/1/or/1/and/3/or/0/operator",
+          "reason": "unsupported graph operator: not_regex_match"
+        }
+      ]
+    },
+    {
+      "id": "CKV2_OCI_4",
+      "source": "terraform/checks/graph_checks/oci/OCI_NFSaccessRestrictedToRootUsers.json",
+      "source_sha256": "1ced7991a0a9726464c3537210922a1e11aecc84a1276c2597ad616939a00da0",
+      "blockers": [
+        {
+          "code": "jsonpath",
+          "path": "/definition/or/0/attribute",
+          "reason": "unsupported JSONPath syntax or filter predicate"
+        },
+        {
+          "code": "jsonpath_regex",
+          "path": "/definition/or/0/attribute",
+          "reason": "graph JSONPath predicate requires regex support"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/or/1/attribute",
+          "reason": "unsupported JSONPath syntax or filter predicate"
+        },
+        {
+          "code": "jsonpath_regex",
+          "path": "/definition/or/1/attribute",
+          "reason": "graph JSONPath predicate requires regex support"
+        }
+      ]
+    }
+  ],
+  "next_milestone": {
+    "target": "186/186",
+    "capabilities": [
+      "not_regex_match",
+      "regex in JSONPath filters",
+      "numeric filter comparisons with pinned Python coercions"
+    ],
+    "policies": [
+      "CKV2_AWS_69",
+      "CKV2_OCI_4"
+    ]
+  }
+}

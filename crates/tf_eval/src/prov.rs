@@ -110,7 +110,8 @@ impl Step {
 }
 
 struct Node {
-    step: Step,
+    step: Option<Step>,
+    dependencies: Option<Arc<Vec<ResourceDependency>>>,
     len: u32,
     prev: Option<Arc<Node>>,
 }
@@ -119,15 +120,59 @@ struct Node {
 #[derive(Clone, Default)]
 pub struct Prov(Option<Arc<Node>>);
 
+/// A resource traversal evaluated by the resolver. Separate from the bounded
+/// explanation chain: dependencies survive transformations and are not identity
+/// comparisons between values. An unresolved instance index has uncertain edges.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ResourceDependency {
+    pub resource: Arc<str>,
+    pub key: Option<Arc<str>>,
+    pub certainty: crate::Truth,
+}
+
 impl Prov {
     pub const EMPTY: Prov = Prov(None);
+
+    pub fn dependencies(&self) -> &[ResourceDependency] {
+        self.0
+            .as_ref()
+            .and_then(|n| n.dependencies.as_deref())
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+
+    /// A direct traversal names this resource, not all of its dependencies.
+    pub fn referencing(self, dependencies: Vec<ResourceDependency>) -> Self {
+        Prov(Some(Arc::new(Node {
+            step: None,
+            len: self.len() as u32,
+            dependencies: (!dependencies.is_empty()).then(|| Arc::new(dependencies)),
+            prev: self.0,
+        })))
+    }
+
+    pub(crate) fn join_dependencies(&mut self, other: &Prov) {
+        if other.dependencies().is_empty() {
+            return;
+        }
+        let mut refs = self.dependencies().to_vec();
+        let old_len = refs.len();
+        for dependency in other.dependencies() {
+            if !refs.contains(dependency) {
+                refs.push(dependency.clone());
+            }
+        }
+        if refs.len() != old_len {
+            *self = self.clone().referencing(refs);
+        }
+    }
 
     pub fn single(step: Step) -> Prov {
         Prov::EMPTY.push(step)
     }
 
     pub fn is_empty(&self) -> bool {
-        self.0.is_none()
+        self.len() == 0
     }
 
     pub fn len(&self) -> usize {
@@ -136,7 +181,7 @@ impl Prov {
 
     /// The newest step (closest to where the value is used).
     pub fn last(&self) -> Option<&Step> {
-        self.0.as_ref().map(|n| &n.step)
+        self.iter_newest_first().next()
     }
 
     /// A new chain with `step` appended as the newest step. A step at the same
@@ -144,13 +189,14 @@ impl Prov {
     #[must_use]
     pub fn push(&self, step: Step) -> Prov {
         if let Some(n) = &self.0
-            && (n.step.same_place(&step) || n.len >= MAX_STEPS)
+            && (self.last().is_some_and(|s| s.same_place(&step)) || n.len >= MAX_STEPS)
         {
             return self.clone();
         }
         let len = self.len() as u32 + 1;
         Prov(Some(Arc::new(Node {
-            step,
+            step: Some(step),
+            dependencies: self.0.as_ref().and_then(|n| n.dependencies.clone()),
             len,
             prev: self.0.clone(),
         })))
@@ -160,9 +206,13 @@ impl Prov {
     pub fn iter_newest_first(&self) -> impl Iterator<Item = &Step> {
         let mut cur = self.0.as_deref();
         std::iter::from_fn(move || {
-            let n = cur?;
-            cur = n.prev.as_deref();
-            Some(&n.step)
+            loop {
+                let n = cur?;
+                cur = n.prev.as_deref();
+                if let Some(step) = &n.step {
+                    return Some(step);
+                }
+            }
         })
     }
 
@@ -179,16 +229,20 @@ impl Prov {
     /// `self` are skipped.
     #[must_use]
     pub fn then(&self, outer: &Prov) -> Prov {
+        let mut joined = self.clone();
+        joined.join_dependencies(outer);
         if outer.is_empty() {
-            return self.clone();
+            return joined;
         }
         if self.is_empty() {
-            return outer.clone();
+            let mut joined = outer.clone();
+            joined.join_dependencies(self);
+            return joined;
         }
         if Arc::ptr_eq(self.0.as_ref().unwrap(), outer.0.as_ref().unwrap()) {
-            return self.clone();
+            return joined;
         }
-        let mut r = self.clone();
+        let mut r = joined;
         for s in outer.steps() {
             if !r.iter_newest_first().any(|x| x.same_place(&s)) {
                 r = r.push(s);

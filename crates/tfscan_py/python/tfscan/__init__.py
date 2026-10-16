@@ -72,17 +72,23 @@ PathLike = Union[str, "os.PathLike[str]"]
 class Report(NamedTuple):
     """What a callback rule returns to report a finding. ``witness`` (a
     ``Value``) supplies the provenance chain and primary location;
-    ``conditional=True`` reports a conditional finding."""
+    ``conditional=True`` reports a conditional finding. ``indeterminate=True``
+    marks a finding depending on apply-time data. ``hidden`` records projected
+    input paths paired with ``"tainted"`` or ``"unknown"``."""
 
     message: str
     witness: Optional[Value] = None
     conditional: bool = False
+    indeterminate: bool = False
+    hidden: Sequence[tuple[str, str]] = ()
 
 
 class CallbackRule:
     """A Python function run for each resource of ``resource_types`` (the
     filter is applied in Rust). It returns ``None``/``False`` (no finding),
-    a message string, a ``Report``, or a list of those."""
+    a message string, a ``Report``, or a list of those. By default exceptions
+    propagate to the caller; ``record_errors=True`` instead retains them in
+    ``ScanResult.rule_errors`` and lets other rules continue."""
 
     def __init__(
         self,
@@ -92,6 +98,8 @@ class CallbackRule:
         level: str = "medium",
         category: str = "network",
         description: str = "",
+        *,
+        record_errors: bool = False,
     ):
         if not resource_types:
             raise ValueError("callback rules need resource_types (the Rust-side filter)")
@@ -101,6 +109,7 @@ class CallbackRule:
         self.level = level
         self.category = category
         self.description = description or (func.__doc__ or "").strip()
+        self.record_errors = record_errors
 
     def __call__(self, resource: Resource) -> Any:
         return self.func(resource)

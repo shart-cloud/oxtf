@@ -246,6 +246,16 @@ pub type RuleFailure = String;
 /// the result, so a reader never mistakes it for "no finding".
 pub trait DynRule: Send + Sync {
     fn info(&self) -> RuleInfo;
+    /// Rules that need connections across module boundaries run once per root.
+    fn needs_graph(&self) -> bool {
+        false
+    }
+    fn judge_graph<'a>(
+        &self,
+        _graph: &tf_semantic::graph::ResourceGraph<'a>,
+    ) -> Result<Vec<(&'a Resource, Judgement)>, RuleFailure> {
+        Ok(Vec::new())
+    }
     /// Judgements on one resource instance (usually zero or one); only
     /// judgements that can become findings are returned.
     fn judge_resource(&self, resource: &Resource) -> Result<Vec<Judgement>, RuleFailure>;

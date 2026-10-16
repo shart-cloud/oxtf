@@ -105,6 +105,41 @@ impl<'a> Resolver<'a> for NoResolver {
 /// Cap on the cartesian product when lifting operations over `OneOf`s.
 pub const MAX_ALTERNATIVES: usize = 16;
 
+/// One possible collection produced by a `for` expression.
+#[derive(Clone, Default)]
+struct ForResult {
+    list: Vec<Value>,
+    object: Map,
+    grouped: std::collections::BTreeMap<Arc<str>, Vec<Value>>,
+}
+
+impl ForResult {
+    fn push(&mut self, key: Option<Arc<str>>, value: Value, grouping: bool) {
+        match key {
+            None => self.list.push(value),
+            Some(key) if grouping => self.grouped.entry(key).or_default().push(value),
+            Some(key) => {
+                self.object.insert(key, value);
+            }
+        }
+    }
+
+    fn finish(self, f: &ForExpr<'_>) -> Value {
+        if f.key_expr.is_none() {
+            Value::list(self.list)
+        } else if f.grouping {
+            Value::object(
+                self.grouped
+                    .into_iter()
+                    .map(|(k, v)| (k, Value::list(v)))
+                    .collect(),
+            )
+        } else {
+            Value::object(self.object)
+        }
+    }
+}
+
 pub struct Evaluator<'r, 'a> {
     pub resolver: &'r dyn Resolver<'a>,
     /// File the expressions being evaluated live in.
@@ -367,14 +402,22 @@ impl<'r, 'a> Evaluator<'r, 'a> {
 
     fn eval_try(&self, args: &'a [Expression<'a>], sc: Scope<'_>) -> Value {
         let mut last = Value::error("try: no arguments succeeded");
+        let mut successes = Vec::new();
+        let mut tainted = false;
         for a in args {
-            let v = self.eval(a, sc);
-            if !contains_error(&v) {
-                return v;
+            let outcome = try_outcome(&self.eval(a, sc));
+            if let Some(value) = outcome.value {
+                successes.push(value);
+                tainted |= outcome.tainted;
             }
-            last = v;
+            match outcome.error {
+                // No failing alternatives remain: do not evaluate any fallback.
+                None => return Value::one_of(successes, tainted),
+                Some(error) => last = error,
+            }
         }
-        last
+        successes.push(last);
+        Value::one_of(successes, tainted)
     }
 
     fn eval_can(&self, args: &'a [Expression<'a>], sc: Scope<'_>) -> Value {
@@ -445,9 +488,9 @@ impl<'r, 'a> Evaluator<'r, 'a> {
         items: Vec<(Value, Value)>,
         sc: Scope<'_>,
     ) -> Value {
-        let mut list = Vec::new();
-        let mut obj = Map::new();
-        let mut grouped: std::collections::BTreeMap<Arc<str>, Vec<Value>> = Default::default();
+        let mut alternatives = vec![ForResult::default()];
+        let mut tainted = false;
+        let mut prov = Prov::EMPTY;
         for (k, v) in items {
             let mut binds: Vec<(&str, Value)> = Vec::with_capacity(2);
             if let Some(kv) = &f.key_var {
@@ -455,32 +498,20 @@ impl<'r, 'a> Evaluator<'r, 'a> {
             }
             binds.push((f.value_var.name.as_str(), v));
             let res = sc.with_all(&binds, |s| {
-                let keep = match &f.condition {
-                    None => Some(true),
-                    Some(c) => {
-                        let cv = self.eval(c, s);
-                        match &cv.kind {
-                            Kind::Known(_) => match cv.as_bool() {
-                                Some(b) => Some(b),
-                                None => return Err(Value::error("for: condition is not a bool")),
-                            },
-                            Kind::Tainted(_) => None,
-                            _ if cv.is_error() => return Err(cv),
-                            _ => None,
-                        }
-                        .map_or(Ok(None), |b| Ok(Some(b)))?
-                    }
-                };
-                if keep == Some(false) {
+                let condition = f
+                    .condition
+                    .as_ref()
+                    .map_or_else(|| Value::bool(true), |c| self.eval(c, s));
+                if condition.is_error() {
+                    return Err(condition);
+                }
+                if condition.is_known() && condition.as_bool().is_none() {
+                    return Err(Value::error("for: condition is not a bool"));
+                }
+                if condition.as_bool() == Some(false) {
                     return Ok(None);
                 }
                 let val = self.eval(&f.value_expr, s);
-                // An element whose condition is not known may be absent.
-                let val = if keep.is_none() {
-                    Value::one_of(vec![val, Value::null()], true)
-                } else {
-                    val
-                };
                 let key = match &f.key_expr {
                     Some(ke) => {
                         let kv = self.eval(ke, s);
@@ -491,33 +522,42 @@ impl<'r, 'a> Evaluator<'r, 'a> {
                     }
                     None => None,
                 };
-                Ok(Some((key, val)))
+                Ok(Some((key, val, condition)))
             });
             match res {
                 Err(e) => return e,
                 Ok(None) => {}
-                Ok(Some((None, val))) => list.push(val),
-                Ok(Some((Some(key), val))) => {
-                    if f.grouping {
-                        grouped.entry(key).or_default().push(val);
+                Ok(Some((key, val, condition))) => {
+                    // Absence changes the collection itself, including its
+                    // length and keys. A null element would still be present.
+                    let skipped = if condition.as_bool().is_none() {
+                        tainted |=
+                            crate::truth::uncertainty(&condition) == crate::truth::Truth::Tainted;
+                        prov = prov.then(&condition.prov);
+                        if alternatives.len() * 2 > MAX_ALTERNATIVES {
+                            return if tainted {
+                                Value::tainted("(conditional for filter)")
+                            } else {
+                                Value::other("for: too many filter alternatives")
+                            }
+                            .with_prov(prov);
+                        }
+                        Some(alternatives.clone())
                     } else {
-                        obj.insert(key, val);
+                        None
+                    };
+                    for result in &mut alternatives {
+                        result.push(key.clone(), val.clone(), f.grouping);
                     }
+                    alternatives.extend(skipped.into_iter().flatten());
                 }
             }
         }
-        if f.key_expr.is_none() {
-            Value::list(list)
-        } else if f.grouping {
-            Value::object(
-                grouped
-                    .into_iter()
-                    .map(|(k, v)| (k, Value::list(v)))
-                    .collect(),
-            )
-        } else {
-            Value::object(obj)
-        }
+        Value::one_of(
+            alternatives.into_iter().map(|r| r.finish(f)).collect(),
+            tainted,
+        )
+        .with_prov(prov)
     }
 
     // -- templates --------------------------------------------------------
@@ -714,6 +754,83 @@ pub fn contains_error(v: &Value) -> bool {
         Kind::Known(Known::Json(j)) => contains_error(j),
         Kind::OneOf(o) => o.alternatives.iter().all(contains_error),
         _ => false,
+    }
+}
+
+/// Successful alternatives of one `try` argument, plus an error if some
+/// alternatives fail. Errors inside a container fail the whole argument;
+/// the fallback must not be substituted into just the failing element.
+struct TryOutcome {
+    value: Option<Value>,
+    error: Option<Value>,
+    tainted: bool,
+}
+
+fn try_outcome(v: &Value) -> TryOutcome {
+    let mut outcome = match &v.kind {
+        Kind::OneOf(o) => {
+            let mut values = Vec::new();
+            let mut error = None;
+            let mut tainted = o.tainted;
+            for alternative in &o.alternatives {
+                let result = try_outcome(alternative);
+                values.extend(result.value);
+                error = error.or(result.error);
+                tainted |= result.tainted;
+            }
+            let mixed = !values.is_empty() && error.is_some();
+            TryOutcome {
+                value: (!values.is_empty()).then(|| Value::one_of(values, tainted)),
+                error,
+                // Uncertainty within successful values is already carried
+                // by `value`; only a choice between success and failure
+                // controls whether a later fallback can be taken.
+                tainted: tainted && mixed,
+            }
+        }
+        Kind::Known(Known::List(items)) => try_container(items.iter(), Value::list),
+        Kind::Known(Known::Object(items)) => try_container(items.values(), |values| {
+            Value::object(items.keys().cloned().zip(values).collect())
+        }),
+        Kind::Known(Known::Json(inner)) => {
+            let mut result = try_outcome(inner);
+            result.value = result.value.map(|v| Value::known(Known::Json(Arc::new(v))));
+            result
+        }
+        _ => {
+            return TryOutcome {
+                value: (!v.is_error()).then(|| v.clone()),
+                error: v.is_error().then(|| v.clone()),
+                tainted: false,
+            };
+        }
+    };
+    outcome.value = outcome.value.map(|value| value.child_of(v));
+    outcome.error = outcome.error.map(|error| error.child_of(v));
+    outcome
+}
+
+fn try_container<'v>(
+    items: impl Iterator<Item = &'v Value>,
+    build: impl FnOnce(Vec<Value>) -> Value,
+) -> TryOutcome {
+    let mut values = Vec::new();
+    let mut error = None;
+    let mut tainted = false;
+    let mut can_succeed = true;
+    for item in items {
+        let result = try_outcome(item);
+        match result.value {
+            Some(value) => values.push(value),
+            None => can_succeed = false,
+        }
+        error = error.or(result.error);
+        tainted |= result.tainted;
+    }
+    TryOutcome {
+        value: can_succeed.then(|| build(values)),
+        error,
+        tainted,
     }
 }
 

@@ -1,0 +1,530 @@
+{
+  "date": "2026-10-15",
+  "source_version": "3.2.328",
+  "ir_version": 3,
+  "native_rules": 678,
+  "inventory": {
+    "resource/unsupported": 402,
+    "resource/translated": 508,
+    "graph/translated": 171,
+    "graph/unsupported": 15
+  },
+  "added_graph_policies": [
+    "CKV2_AWS_23",
+    "CKV2_AWS_27",
+    "CKV2_AWS_30"
+  ],
+  "capability": "Attribute within filters on literal top-level configured attributes in connection groups; string or scalar-list operands.",
+  "pack": {
+    "path": "bench/results/out/checkov-3.2.328-graph-filters",
+    "rules_sha256": "936b148e6978ef9b0fc96674647b293f401f700c243894e7fc4c625e7e47229b",
+    "manifest_sha256": "3b6c5c12c8b0c1091d4e73d4397f787c5c89ce880a9f83dafa8e2ebd6a9c3b34",
+    "command": [
+      "/home/jg/.local/share/pipx/venvs/checkov/bin/python",
+      "scripts/import_checkov.py",
+      "--output",
+      "bench/results/out/checkov-3.2.328-graph-filters"
+    ]
+  },
+  "graph_conformance": {
+    "policies": 171,
+    "cases": 16120,
+    "disagreements": 0,
+    "reference_errors": 0,
+    "native_sha256": "30220e1c7195adf60ed6b52690518d8fc761eae4314047ab03d3098b31ce4fc5",
+    "rules_sha256": "3488b060f3e455fccd78506ad0cd238d82168a75a40b69e612fb959c6f237e3f",
+    "report": "bench/results/out/checkov-graph-filters-verified/report.json",
+    "report_sha256": "bc42c784b10a619d795cc942edf8481abcd4aab27298e7aa86368212cace3cb6",
+    "diagnostic_errors": 0,
+    "warnings": 19,
+    "rule_errors": 0,
+    "command": [
+      "/home/jg/.local/share/pipx/venvs/checkov/bin/python",
+      "bench/checkov/graph_compare.py",
+      "--native",
+      "target/release/oxtf",
+      "--output",
+      "bench/results/out/checkov-graph-filters-verified"
+    ]
+  },
+  "baseline_regressions": [
+    {
+      "reference_report": "bench/results/out/checkov-graph-conformance-verified/report.json",
+      "cases": 14880,
+      "disagreements": 0,
+      "diagnostic_errors": 0,
+      "warnings": 20,
+      "diagnostics_unchanged": true,
+      "rule_errors": 0,
+      "reference_report_sha256": "eeab67b7743b4b033522af950aa92f32f9fd2183da223a13c4be27d60ee8a0ba",
+      "native_sha256": "30220e1c7195adf60ed6b52690518d8fc761eae4314047ab03d3098b31ce4fc5"
+    },
+    {
+      "reference_report": "bench/results/out/checkov-graph-operators-verified/report.json",
+      "cases": 15320,
+      "disagreements": 0,
+      "diagnostic_errors": 0,
+      "warnings": 19,
+      "diagnostics_unchanged": true,
+      "rule_errors": 0,
+      "reference_report_sha256": "76620922e541d2843dbe5cbf48e20dc5a8345df5c08df3224ea860feef05bf59",
+      "native_sha256": "30220e1c7195adf60ed6b52690518d8fc761eae4314047ab03d3098b31ce4fc5"
+    }
+  ],
+  "validation": {
+    "cargo test -p tf_rule_ir": "29 passed, plus doc tests",
+    "cargo clippy -p tf_rule_ir -p tf_cli -p tfscan_py --all-targets -- -D warnings": "passed",
+    "python -m pytest -q crates/tfscan_py/tests --tb=short": "95 passed",
+    "filter_differential_cases": 90,
+    "full_runner_policy_fixtures": 14,
+    "new_policies_with_passing_and_failing_runner_fixtures": 3,
+    "cargo build --release -p tf_cli": "passed"
+  },
+  "source_sha256": {
+    "crates/tfscan_py/python/tfscan/checkov.py": "cb37f3d9392af8f91cc16d14c0a6103e8c3f23250b64a11a248651be42f4c8af",
+    "crates/tf_rule_ir/src/checkov.rs": "f8682d922767612e60aa949cced14c8a76e895931d8f0340d45afd6ae6b5cf0c",
+    "crates/tf_rule_ir/src/graph.rs": "e6e8efa893b49b6b8f49c6ed43924cca3ab8c8ae5e96fccf7a3e86bb4106bd4e",
+    "crates/tf_rule_ir/src/lib.rs": "df5cd757f22ba96c053cd1b96b855a632df90fd1a5969d46b83bf4d488f1020c",
+    "bench/checkov/graph_compare.py": "5c3eb87a9593de953c778ba92334aa999cdb9c1bd830f5d0c950a2dcd227ea34",
+    "crates/tf_rule_ir/tests/graph.rs": "ce6dfb707a73ac8069e71f7691f046445cc865183054100ac6211452a42089e0",
+    "crates/tfscan_py/tests/test_checkov.py": "9fe751baebc3803fd93801d2d7d1d8b97ef4b69df3cc273ebee067f3544f7230"
+  },
+  "remaining_graph_policies": [
+    {
+      "id": "CKV2_AWS_72",
+      "source": "terraform/checks/graph_checks/aws/CloudfrontOriginNotHTTPSOnly.json",
+      "source_sha256": "0cdd10c3ec90eff125f523f90f24acb29130045233d46a012fc0f6b6976655bf",
+      "blockers": [
+        {
+          "code": "attribute_operator",
+          "path": "/definition/or/2/and/0/operator",
+          "reason": "unsupported graph operator: jsonpath_not_contains"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/or/2/and/0/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/or/2/and/1/operator",
+          "reason": "unsupported graph operator: jsonpath_not_contains"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/or/2/and/1/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/or/2/and/2/operator",
+          "reason": "unsupported graph operator: jsonpath_not_contains"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/or/2/and/2/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        }
+      ]
+    },
+    {
+      "id": "CKV2_AWS_40",
+      "source": "terraform/checks/graph_checks/aws/IAMPolicyNotAllowFullIAMAccess.json",
+      "source_sha256": "60f22eaf77b805d3426036c01e16e74998fef33d12ac2b23ce9fadc31300be0a",
+      "blockers": [
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/0/or/0/operator",
+          "reason": "unsupported graph operator: jsonpath_not_equals"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/and/0/or/0/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/0/or/1/operator",
+          "reason": "unsupported graph operator: jsonpath_not_equals"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/and/0/or/1/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/0/or/2/operator",
+          "reason": "unsupported graph operator: jsonpath_not_equals"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/and/0/or/2/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/1/or/0/operator",
+          "reason": "unsupported graph operator: jsonpath_not_equals"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/and/1/or/0/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/1/or/1/operator",
+          "reason": "unsupported graph operator: jsonpath_not_equals"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/and/1/or/1/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/1/or/2/operator",
+          "reason": "unsupported graph operator: jsonpath_not_equals"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/and/1/or/2/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        }
+      ]
+    },
+    {
+      "id": "CKV2_AWS_69",
+      "source": "terraform/checks/graph_checks/aws/RDSEncryptionInTransit.json",
+      "source_sha256": "46cee3a91e74b63f311c646b6a9f66c224035177383946c960b301162fcced3a",
+      "blockers": [
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/1/or/1/and/1/or/0/operator",
+          "reason": "unsupported graph operator: not_regex_match"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/1/or/1/and/1/or/1/and/0/operator",
+          "reason": "unsupported graph operator: jsonpath_exists"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/and/1/or/1/and/1/or/1/and/0/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/1/or/1/and/1/or/1/and/1/operator",
+          "reason": "unsupported graph operator: jsonpath_equals"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/and/1/or/1/and/1/or/1/and/1/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/1/or/1/and/2/or/0/operator",
+          "reason": "unsupported graph operator: not_regex_match"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/1/or/1/and/2/or/1/and/0/operator",
+          "reason": "unsupported graph operator: jsonpath_exists"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/and/1/or/1/and/2/or/1/and/0/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/1/or/1/and/2/or/1/and/1/operator",
+          "reason": "unsupported graph operator: jsonpath_equals"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/and/1/or/1/and/2/or/1/and/1/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/1/or/1/and/3/or/0/operator",
+          "reason": "unsupported graph operator: not_regex_match"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/1/or/1/and/3/or/1/and/0/operator",
+          "reason": "unsupported graph operator: jsonpath_exists"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/and/1/or/1/and/3/or/1/and/0/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/1/or/1/and/3/or/1/and/1/operator",
+          "reason": "unsupported graph operator: jsonpath_equals"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/and/1/or/1/and/3/or/1/and/1/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        }
+      ]
+    },
+    {
+      "id": "CKV2_AWS_68",
+      "source": "terraform/checks/graph_checks/aws/SageMakerIAMPolicyOverlyPermissiveToAllTraffic.json",
+      "source_sha256": "4b461430e3765e95747c34b530009fead620b02ca09f153f1519b6b7eec047de",
+      "blockers": [
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/2/operator",
+          "reason": "unsupported graph operator: jsonpath_not_equals"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/and/2/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        }
+      ]
+    },
+    {
+      "id": "CKV2_GCP_13",
+      "source": "terraform/checks/graph_checks/gcp/GCPPostgreSQLDatabaseFlaglog_durationIsSetToON.json",
+      "source_sha256": "446a4043b16167cb2d3013e4d4718d0571d495f47d2a6f7bc13fea35ddc8603c",
+      "blockers": [
+        {
+          "code": "attribute_operator",
+          "path": "/definition/or/1/operator",
+          "reason": "unsupported graph operator: jsonpath_exists"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/or/1/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        }
+      ]
+    },
+    {
+      "id": "CKV2_GCP_14",
+      "source": "terraform/checks/graph_checks/gcp/GCPPostgreSQLDatabaseFlaglog_executor_statsIsSetToOFF.json",
+      "source_sha256": "a4acc3c189995d35f76eafc5ac7c85dfd1c2144cb80903e1ae54d9e4a0cf9a66",
+      "blockers": [
+        {
+          "code": "attribute_operator",
+          "path": "/definition/or/1/operator",
+          "reason": "unsupported graph operator: jsonpath_not_exists"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/or/1/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/or/2/operator",
+          "reason": "unsupported graph operator: jsonpath_not_exists"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/or/2/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        }
+      ]
+    },
+    {
+      "id": "CKV2_GCP_15",
+      "source": "terraform/checks/graph_checks/gcp/GCPPostgreSQLDatabaseFlaglog_parser_statsIsSetToOFF.json",
+      "source_sha256": "06b79883e5371cc821902919b0937180a706e5cb9d2cc0525609d4822ecef7b2",
+      "blockers": [
+        {
+          "code": "attribute_operator",
+          "path": "/definition/or/1/operator",
+          "reason": "unsupported graph operator: jsonpath_not_exists"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/or/1/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/or/2/operator",
+          "reason": "unsupported graph operator: jsonpath_not_exists"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/or/2/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        }
+      ]
+    },
+    {
+      "id": "CKV2_GCP_16",
+      "source": "terraform/checks/graph_checks/gcp/GCPPostgreSQLDatabaseFlaglog_planner_statsIsSetToOFF.json",
+      "source_sha256": "95095779c70869c251c339e4e25a1e3c6623bbcd3e210ee5b6bb6fcfec0a21a9",
+      "blockers": [
+        {
+          "code": "attribute_operator",
+          "path": "/definition/or/1/operator",
+          "reason": "unsupported graph operator: jsonpath_not_exists"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/or/1/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/or/2/operator",
+          "reason": "unsupported graph operator: jsonpath_not_exists"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/or/2/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        }
+      ]
+    },
+    {
+      "id": "CKV2_GCP_17",
+      "source": "terraform/checks/graph_checks/gcp/GCPPostgreSQLDatabaseFlaglog_statement_statsIsSetToOFF.json",
+      "source_sha256": "de1faba5cc35b3403e6cffc88b54f8039fcbba49f45ad6a8e172b0feb40cafdf",
+      "blockers": [
+        {
+          "code": "attribute_operator",
+          "path": "/definition/or/1/operator",
+          "reason": "unsupported graph operator: jsonpath_not_exists"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/or/1/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/or/2/operator",
+          "reason": "unsupported graph operator: jsonpath_not_exists"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/or/2/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        }
+      ]
+    },
+    {
+      "id": "CKV2_GCP_32",
+      "source": "terraform/checks/graph_checks/gcp/GCPTpuV2VmPrivateEndpoint.json",
+      "source_sha256": "b0f1f1f8422e790b55e7452dc8af14cc575717eedf003d28ea6f67d854fff920",
+      "blockers": [
+        {
+          "code": "attribute_operator",
+          "path": "/definition/operator",
+          "reason": "unsupported graph operator: jsonpath_equals"
+        }
+      ]
+    },
+    {
+      "id": "CKV2_GCP_35",
+      "source": "terraform/checks/graph_checks/gcp/GCPVertexRuntimeEncryptedWithCMK.json",
+      "source_sha256": "829b17f5ed564898cd1a6242eadcd8c314e993173fecd7909e969c5f0c762575",
+      "blockers": [
+        {
+          "code": "attribute_operator",
+          "path": "/definition/operator",
+          "reason": "unsupported graph operator: jsonpath_exists"
+        }
+      ]
+    },
+    {
+      "id": "CKV2_GCP_36",
+      "source": "terraform/checks/graph_checks/gcp/GCPVertexRuntimePrivate.json",
+      "source_sha256": "419016b2e00c11ca4cf96d971c973a8935c975e30c66bd611ac0f42b40348a55",
+      "blockers": [
+        {
+          "code": "attribute_operator",
+          "path": "/definition/operator",
+          "reason": "unsupported graph operator: jsonpath_equals"
+        }
+      ]
+    },
+    {
+      "id": "CKV2_GCP_27",
+      "source": "terraform/checks/graph_checks/gcp/GCPVertexWorkbenchInstanceEncryptedWithCMK.json",
+      "source_sha256": "ee4b88aca1dded51254cf8fce5a6cc60d572e62054d7944f8d3403648df81f8f",
+      "blockers": [
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/0/operator",
+          "reason": "unsupported graph operator: jsonpath_exists"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/1/or/0/operator",
+          "reason": "unsupported graph operator: jsonpath_not_exists"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/and/1/or/1/operator",
+          "reason": "unsupported graph operator: jsonpath_exists"
+        }
+      ]
+    },
+    {
+      "id": "CKV2_GCP_28",
+      "source": "terraform/checks/graph_checks/gcp/GCPVertexWorkbenchInstanceNoPublicIp.json",
+      "source_sha256": "c7a4e6eabcd9fb5c2bcbca982dd8a541f7bf7e720dce7857560da4559e4d642a",
+      "blockers": [
+        {
+          "code": "attribute_operator",
+          "path": "/definition/operator",
+          "reason": "unsupported graph operator: jsonpath_equals"
+        }
+      ]
+    },
+    {
+      "id": "CKV2_OCI_4",
+      "source": "terraform/checks/graph_checks/oci/OCI_NFSaccessRestrictedToRootUsers.json",
+      "source_sha256": "1ced7991a0a9726464c3537210922a1e11aecc84a1276c2597ad616939a00da0",
+      "blockers": [
+        {
+          "code": "attribute_operator",
+          "path": "/definition/or/0/operator",
+          "reason": "unsupported graph operator: jsonpath_not_exists"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/or/0/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        },
+        {
+          "code": "jsonpath_regex",
+          "path": "/definition/or/0/attribute",
+          "reason": "graph JSONPath predicate requires regex support"
+        },
+        {
+          "code": "attribute_operator",
+          "path": "/definition/or/1/operator",
+          "reason": "unsupported graph operator: jsonpath_exists"
+        },
+        {
+          "code": "jsonpath",
+          "path": "/definition/or/1/attribute",
+          "reason": "graph predicate requires JSONPath support"
+        },
+        {
+          "code": "jsonpath_regex",
+          "path": "/definition/or/1/attribute",
+          "reason": "graph JSONPath predicate requires regex support"
+        }
+      ]
+    }
+  ],
+  "interpretation": "Pinned graph-solver conformance and per-policy runner fixtures, not full-corpus Checkov runner parity. Filters apply after both AND and OR joins, ignore resource_types metadata, and preserve uncertainty when eligibility is unresolved. Falsy values are excluded before membership. Attribute-only filter groups, nested filter paths, other attribute-filter operators, and invalid operands remain unsupported. The resource-check inventory is unchanged."
+}
