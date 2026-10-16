@@ -38,3 +38,8 @@ tf_schema_codegen = { path = "crates/tf_schema_codegen" }
 
 [profile.release]
 debug = 1
+
+# regorus 0.13.0 plus four OPA-conformance fixes (jlgore/regorus, branch
+# oxtf; see FIRST_CLASS_RULES_PLAN.md F3). Drop once upstream releases them.
+[patch.crates-io]
+regorus = { git = "https://github.com/jlgore/regorus", rev = "b395fb851e73d94a61d395ee3258ffbe1710961c" }

@@ -243,9 +243,9 @@ fn rule_errors_exit_one_with_output() {
             "--no-bundled",
             "--format",
             "json",
-            &format!("{repo}/fixtures/rego/foreign_sprintf"),
+            &format!("{repo}/fixtures/rego/foreign_runtime_error"),
             "--policy",
-            &format!("{repo}/fixtures/rego/foreign/conftest_hcl2_deny.rego"),
+            &format!("{repo}/fixtures/rego/runtime_error/protocol_number.rego"),
             "--policy-shape",
             "hcl",
         ])
@@ -255,7 +255,7 @@ fn rule_errors_exit_one_with_output() {
     let err = String::from_utf8_lossy(&out.stderr);
     // Conftest evaluates the whole file, so the error names the file.
     assert!(
-        err.contains("foreign_sprintf/main.tf") && err.contains("%q"),
+        err.contains("foreign_runtime_error/main.tf") && err.contains("to_number"),
         "{err}"
     );
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
