@@ -300,6 +300,7 @@ fn a_later_catalog_source_shadows_by_name() {
     }
     .resolve()
     .unwrap()
+    .rules
     .iter()
     .map(|r| r.info().name.to_string())
     .collect();

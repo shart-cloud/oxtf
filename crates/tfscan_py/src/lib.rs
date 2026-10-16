@@ -1176,7 +1176,7 @@ fn _rule_time(
         let mut analyse = ScanRequest::dirs(paths, recursive);
         analyse.catalog = Catalog::default();
         let analyses = tf_scan::scan(analyse)?.analyses;
-        let rules = catalog.resolve()?;
+        let rules = catalog.resolve()?.rules;
         let linter = match &select {
             Some(ids) => Linter::filtered(rules, ids)?,
             None => Linter::new(rules),

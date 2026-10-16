@@ -45,7 +45,7 @@ pub enum FilterOp {
     NotEquals,
 }
 
-fn field_name(s: &str) -> bool {
+pub(crate) fn field_name(s: &str) -> bool {
     let mut chars = s.chars();
     chars
         .next()

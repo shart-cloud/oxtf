@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! oxtf scan [PATH...] [-r|--recursive] [--format text|json] [--var-file FILE]...
-//!           [--rule ID]... [--rule-file FILE]... [--threads N] [--color] [--no-diagnostics] [--quiet]
+//!           [--rule ID]... [--rule-file PATH]... [--threads N] [--color] [--no-diagnostics] [--quiet]
 //! oxtf scan --plan PLAN.json [--source DIR] [options]
 //! oxtf rules
 //! ```
@@ -36,7 +36,7 @@ const USAGE: &str = "usage:
                                   scan `terraform show -json` output; findings are mapped
                                   back to .tf spans in DIR (default: the plan's directory
                                   if it has .tf files, else locations point into the JSON)
-  oxtf rules [--rule-file FILE]... list built-in and imported rules
+  oxtf rules [--rule-file PATH]... list built-in and imported rules
 
 scan options:
   -r, --recursive         every directory under PATH containing .tf files is a root module
@@ -44,8 +44,9 @@ scan options:
       --var-file FILE     extra .tfvars for the root module(s) (repeatable)
       --rule ID           only run this rule (repeatable); ids come from the whole
                           catalog: seed rules, --rule-file rules and Rego policies
-      --rule-file FILE    also run rules from a JSON rule-IR file (repeatable; e.g. written
-                          by the tfscan Python expression API or Checkov importer)
+      --rule-file PATH    also run rules from PATH (repeatable): a rule-IR JSON file (e.g.
+                          written by the tfscan Python expression API), a Checkov YAML/JSON
+                          policy, or a directory of them (searched recursively)
       --rego-native       run the seed rules that have a bundled native-tier Rego
                           policy (RDS encryption, GCS uniform access) as Rego
       --policy FILE       also run a foreign Rego policy over every resource
@@ -191,7 +192,12 @@ fn main() -> ExitCode {
             let rules = match parse_args(args)
                 .and_then(|a| a.request.catalog.resolve().map_err(|e| e.to_string()))
             {
-                Ok(rules) => rules,
+                Ok(resolved) => {
+                    for w in &resolved.warnings {
+                        eprintln!("warning: {w}");
+                    }
+                    resolved.rules
+                }
                 Err(e) => {
                     eprintln!("error: {e}");
                     return ExitCode::from(2);
@@ -239,6 +245,11 @@ fn scan(a: Args) -> ExitCode {
         }
     };
     let r = &output.result;
+    // Skipped rule files are shown even with --no-diagnostics: they change
+    // what an empty result means.
+    for d in r.diagnostics.iter().filter(|d| d.code == "rule-skipped") {
+        eprintln!("warning: {}", d.message);
+    }
     for e in &r.rule_errors {
         match &e.resource {
             Some(res) => eprintln!("rule error: {} on {res}: {}", e.rule, e.message),
@@ -275,7 +286,8 @@ fn print_result(
             let _ = writeln!(out, "{}", render_finding(&r.files, f, color));
         }
         if diagnostics {
-            for d in &r.diagnostics {
+            // Skipped rule files were already printed to stderr.
+            for d in r.diagnostics.iter().filter(|d| d.code != "rule-skipped") {
                 let at =
                     d.at.map(|x| format!("{}: ", location(&r.files, x)))
                         .unwrap_or_default();

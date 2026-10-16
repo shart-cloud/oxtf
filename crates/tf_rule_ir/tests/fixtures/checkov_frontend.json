@@ -1,0 +1,2399 @@
+{
+ "checkov": "3.2.328",
+ "generator": "bench/checkov/frontend_fixtures.py",
+ "jsonpath": [
+  {
+   "attribute": "a",
+   "path": [
+    "a"
+   ]
+  },
+  {
+   "attribute": "a.b",
+   "path": [
+    "a",
+    "b"
+   ]
+  },
+  {
+   "attribute": "a.b.c",
+   "path": [
+    "a",
+    "b",
+    "c"
+   ]
+  },
+  {
+   "attribute": "a-b.c_d",
+   "path": [
+    "a-b",
+    "c_d"
+   ]
+  },
+  {
+   "attribute": "a[*]",
+   "path": [
+    "a",
+    {
+     "kind": "each"
+    }
+   ]
+  },
+  {
+   "attribute": "a[*].b",
+   "path": [
+    "a",
+    {
+     "kind": "each"
+    },
+    "b"
+   ]
+  },
+  {
+   "attribute": "a[*][*]",
+   "path": [
+    "a",
+    {
+     "kind": "each"
+    },
+    {
+     "kind": "each"
+    }
+   ]
+  },
+  {
+   "attribute": "a.b[*].c",
+   "path": [
+    "a",
+    "b",
+    {
+     "kind": "each"
+    },
+    "c"
+   ]
+  },
+  {
+   "attribute": "a[:]",
+   "path": [
+    "a",
+    {
+     "kind": "each"
+    }
+   ]
+  },
+  {
+   "attribute": "a[0]",
+   "path": null
+  },
+  {
+   "attribute": "a[0].b",
+   "path": null
+  },
+  {
+   "attribute": "a..b",
+   "path": null
+  },
+  {
+   "attribute": "$.a",
+   "path": null
+  },
+  {
+   "attribute": "$",
+   "path": null
+  },
+  {
+   "attribute": "@.a",
+   "path": null
+  },
+  {
+   "attribute": "*",
+   "path": null
+  },
+  {
+   "attribute": "a.*",
+   "path": null
+  },
+  {
+   "attribute": "a.*.b",
+   "path": null
+  },
+  {
+   "attribute": "[*].a",
+   "path": null
+  },
+  {
+   "attribute": "a.[*]",
+   "path": [
+    "a",
+    {
+     "kind": "each"
+    }
+   ]
+  },
+  {
+   "attribute": "a .b",
+   "path": null
+  },
+  {
+   "attribute": " a.b",
+   "path": null
+  },
+  {
+   "attribute": "a.b ",
+   "path": null
+  },
+  {
+   "attribute": "a[ * ]",
+   "path": [
+    "a",
+    {
+     "kind": "each"
+    }
+   ]
+  },
+  {
+   "attribute": "'a'.b",
+   "path": null
+  },
+  {
+   "attribute": "a['b']",
+   "path": null
+  },
+  {
+   "attribute": "a[\"b\"]",
+   "path": null
+  },
+  {
+   "attribute": "a['b'][*]",
+   "path": [
+    "a",
+    "b",
+    {
+     "kind": "each"
+    }
+   ]
+  },
+  {
+   "attribute": "a.'b'[*]",
+   "path": [
+    "a",
+    "b",
+    {
+     "kind": "each"
+    }
+   ]
+  },
+  {
+   "attribute": "true_flag",
+   "path": null
+  },
+  {
+   "attribute": "truex.a",
+   "path": null
+  },
+  {
+   "attribute": "false",
+   "path": null
+  },
+  {
+   "attribute": "a.true",
+   "path": null
+  },
+  {
+   "attribute": "where.a",
+   "path": null
+  },
+  {
+   "attribute": "a.where",
+   "path": null
+  },
+  {
+   "attribute": "contains",
+   "path": null
+  },
+  {
+   "attribute": "a.contains[*]",
+   "path": null
+  },
+  {
+   "attribute": "a@b",
+   "path": null
+  },
+  {
+   "attribute": "@a.b",
+   "path": null
+  },
+  {
+   "attribute": "a.b@c[*]",
+   "path": null
+  },
+  {
+   "attribute": "1a",
+   "path": null
+  },
+  {
+   "attribute": "a.1",
+   "path": null
+  },
+  {
+   "attribute": "a.b-1[*]",
+   "path": [
+    "a",
+    "b-1",
+    {
+     "kind": "each"
+    }
+   ]
+  },
+  {
+   "attribute": "a[?(@.k == 'v')]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": "v"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?(@.k = 'v')]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": "v"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?(@.k != 'v')]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "not_equals",
+       "path": [
+        "k"
+       ],
+       "value": "v"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?(@.k == \"v\")]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": "v"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?(@.k == v)]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": "v"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?(@.k=='v')]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": "v"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?( @.k == 'v' )]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": "v"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?@.k == 'v']",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": "v"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?(k == 'v')]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": "v"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?(k.l == 'v')]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k",
+        "l"
+       ],
+       "value": "v"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?(@.k.l == 'v')]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k",
+        "l"
+       ],
+       "value": "v"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?(@ == 'v')]",
+   "path": null
+  },
+  {
+   "attribute": "a[?(@.k == 'v' & @.m == 'w')]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": "v"
+      },
+      {
+       "operator": "equals",
+       "path": [
+        "m"
+       ],
+       "value": "w"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?(@.k == 'v' && @.m == 'w')]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": "v"
+      },
+      {
+       "operator": "equals",
+       "path": [
+        "m"
+       ],
+       "value": "w"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?(@.k == 'v' | @.m == 'w')]",
+   "path": null
+  },
+  {
+   "attribute": "a[?((@.k == 'v'))]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": "v"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?((@.k == 'v') & (@.m == 'w'))]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": "v"
+      },
+      {
+       "operator": "equals",
+       "path": [
+        "m"
+       ],
+       "value": "w"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?(@.k == 'v')].b",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": "v"
+      }
+     ]
+    },
+    "b"
+   ]
+  },
+  {
+   "attribute": "a[?(@.k == 'v')][*]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": "v"
+      }
+     ]
+    },
+    {
+     "kind": "each"
+    }
+   ]
+  },
+  {
+   "attribute": "a[*][?(@.k == 'v')].b",
+   "path": [
+    "a",
+    {
+     "kind": "each"
+    },
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": "v"
+      }
+     ]
+    },
+    "b"
+   ]
+  },
+  {
+   "attribute": "a[?(@.k == 1)]",
+   "path": null
+  },
+  {
+   "attribute": "a[?(@.k == true)]",
+   "path": null
+  },
+  {
+   "attribute": "a[?(@.k == 'it\\'s')]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": "it's"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?(@.k =~ 'v')]",
+   "path": null
+  },
+  {
+   "attribute": "a[?(@.k > 'v')]",
+   "path": null
+  },
+  {
+   "attribute": "a[?(@.k)]",
+   "path": null
+  },
+  {
+   "attribute": "a[?(!@.k)]",
+   "path": null
+  },
+  {
+   "attribute": "a[?(@.k == 'v')",
+   "path": null
+  },
+  {
+   "attribute": "a[?(@.k == '')]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": ""
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?(@.k == 'v w')]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": "v w"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?(@.k == @v)]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": "@v"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?(@.k == 'v')].lifecycle",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": "v"
+      }
+     ]
+    },
+    "lifecycle"
+   ]
+  },
+  {
+   "attribute": "lifecycle[*]",
+   "path": [
+    "lifecycle",
+    {
+     "kind": "each"
+    }
+   ]
+  },
+  {
+   "attribute": "a[?(@.true == 'v')]",
+   "path": null
+  },
+  {
+   "attribute": "a[?(@.k-1 == 'v')]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k-1"
+       ],
+       "value": "v"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?(@.k == where)]",
+   "path": null
+  },
+  {
+   "attribute": "a[?(@.k == truthy)]",
+   "path": [
+    "a",
+    {
+     "kind": "filter",
+     "predicates": [
+      {
+       "operator": "equals",
+       "path": [
+        "k"
+       ],
+       "value": "truthy"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "attribute": "a[?(@.k == 1.5)]",
+   "path": null
+  },
+  {
+   "attribute": "a\t.b[*]",
+   "path": [
+    "a",
+    "b",
+    {
+     "kind": "each"
+    }
+   ]
+  },
+  {
+   "attribute": "a\n.b[*]",
+   "path": [
+    "a",
+    "b",
+    {
+     "kind": "each"
+    }
+   ]
+  },
+  {
+   "attribute": "a\r.b[*]",
+   "path": null
+  }
+ ],
+ "pyyaml": "6.0.2",
+ "yaml": [
+  {
+   "text": "v: on",
+   "value": {
+    "v": true
+   }
+  },
+  {
+   "text": "v: 'on'",
+   "value": {
+    "v": "on"
+   }
+  },
+  {
+   "text": "v: \"on\"",
+   "value": {
+    "v": "on"
+   }
+  },
+  {
+   "text": "v: off",
+   "value": {
+    "v": false
+   }
+  },
+  {
+   "text": "v: 'off'",
+   "value": {
+    "v": "off"
+   }
+  },
+  {
+   "text": "v: \"off\"",
+   "value": {
+    "v": "off"
+   }
+  },
+  {
+   "text": "v: On",
+   "value": {
+    "v": true
+   }
+  },
+  {
+   "text": "v: 'On'",
+   "value": {
+    "v": "On"
+   }
+  },
+  {
+   "text": "v: \"On\"",
+   "value": {
+    "v": "On"
+   }
+  },
+  {
+   "text": "v: OFF",
+   "value": {
+    "v": false
+   }
+  },
+  {
+   "text": "v: 'OFF'",
+   "value": {
+    "v": "OFF"
+   }
+  },
+  {
+   "text": "v: \"OFF\"",
+   "value": {
+    "v": "OFF"
+   }
+  },
+  {
+   "text": "v: yes",
+   "value": {
+    "v": true
+   }
+  },
+  {
+   "text": "v: 'yes'",
+   "value": {
+    "v": "yes"
+   }
+  },
+  {
+   "text": "v: \"yes\"",
+   "value": {
+    "v": "yes"
+   }
+  },
+  {
+   "text": "v: No",
+   "value": {
+    "v": false
+   }
+  },
+  {
+   "text": "v: 'No'",
+   "value": {
+    "v": "No"
+   }
+  },
+  {
+   "text": "v: \"No\"",
+   "value": {
+    "v": "No"
+   }
+  },
+  {
+   "text": "v: y",
+   "value": {
+    "v": "y"
+   }
+  },
+  {
+   "text": "v: 'y'",
+   "value": {
+    "v": "y"
+   }
+  },
+  {
+   "text": "v: \"y\"",
+   "value": {
+    "v": "y"
+   }
+  },
+  {
+   "text": "v: n",
+   "value": {
+    "v": "n"
+   }
+  },
+  {
+   "text": "v: 'n'",
+   "value": {
+    "v": "n"
+   }
+  },
+  {
+   "text": "v: \"n\"",
+   "value": {
+    "v": "n"
+   }
+  },
+  {
+   "text": "v: Y",
+   "value": {
+    "v": "Y"
+   }
+  },
+  {
+   "text": "v: 'Y'",
+   "value": {
+    "v": "Y"
+   }
+  },
+  {
+   "text": "v: \"Y\"",
+   "value": {
+    "v": "Y"
+   }
+  },
+  {
+   "text": "v: true",
+   "value": {
+    "v": true
+   }
+  },
+  {
+   "text": "v: 'true'",
+   "value": {
+    "v": "true"
+   }
+  },
+  {
+   "text": "v: \"true\"",
+   "value": {
+    "v": "true"
+   }
+  },
+  {
+   "text": "v: False",
+   "value": {
+    "v": false
+   }
+  },
+  {
+   "text": "v: 'False'",
+   "value": {
+    "v": "False"
+   }
+  },
+  {
+   "text": "v: \"False\"",
+   "value": {
+    "v": "False"
+   }
+  },
+  {
+   "text": "v: TRUE",
+   "value": {
+    "v": true
+   }
+  },
+  {
+   "text": "v: 'TRUE'",
+   "value": {
+    "v": "TRUE"
+   }
+  },
+  {
+   "text": "v: \"TRUE\"",
+   "value": {
+    "v": "TRUE"
+   }
+  },
+  {
+   "text": "v: tRue",
+   "value": {
+    "v": "tRue"
+   }
+  },
+  {
+   "text": "v: 'tRue'",
+   "value": {
+    "v": "tRue"
+   }
+  },
+  {
+   "text": "v: \"tRue\"",
+   "value": {
+    "v": "tRue"
+   }
+  },
+  {
+   "text": "v: ~",
+   "value": {
+    "v": null
+   }
+  },
+  {
+   "text": "v: '~'",
+   "value": {
+    "v": "~"
+   }
+  },
+  {
+   "text": "v: \"~\"",
+   "value": {
+    "v": "~"
+   }
+  },
+  {
+   "text": "v: null",
+   "value": {
+    "v": null
+   }
+  },
+  {
+   "text": "v: 'null'",
+   "value": {
+    "v": "null"
+   }
+  },
+  {
+   "text": "v: \"null\"",
+   "value": {
+    "v": "null"
+   }
+  },
+  {
+   "text": "v: Null",
+   "value": {
+    "v": null
+   }
+  },
+  {
+   "text": "v: 'Null'",
+   "value": {
+    "v": "Null"
+   }
+  },
+  {
+   "text": "v: \"Null\"",
+   "value": {
+    "v": "Null"
+   }
+  },
+  {
+   "text": "v: NULL",
+   "value": {
+    "v": null
+   }
+  },
+  {
+   "text": "v: 'NULL'",
+   "value": {
+    "v": "NULL"
+   }
+  },
+  {
+   "text": "v: \"NULL\"",
+   "value": {
+    "v": "NULL"
+   }
+  },
+  {
+   "text": "v: nULL",
+   "value": {
+    "v": "nULL"
+   }
+  },
+  {
+   "text": "v: 'nULL'",
+   "value": {
+    "v": "nULL"
+   }
+  },
+  {
+   "text": "v: \"nULL\"",
+   "value": {
+    "v": "nULL"
+   }
+  },
+  {
+   "text": "v: ''",
+   "value": {
+    "v": ""
+   }
+  },
+  {
+   "text": "v: \"\"",
+   "value": {
+    "v": ""
+   }
+  },
+  {
+   "text": "v: 0",
+   "value": {
+    "v": 0
+   }
+  },
+  {
+   "text": "v: '0'",
+   "value": {
+    "v": "0"
+   }
+  },
+  {
+   "text": "v: \"0\"",
+   "value": {
+    "v": "0"
+   }
+  },
+  {
+   "text": "v: -0",
+   "value": {
+    "v": 0
+   }
+  },
+  {
+   "text": "v: '-0'",
+   "value": {
+    "v": "-0"
+   }
+  },
+  {
+   "text": "v: \"-0\"",
+   "value": {
+    "v": "-0"
+   }
+  },
+  {
+   "text": "v: +0",
+   "value": {
+    "v": 0
+   }
+  },
+  {
+   "text": "v: '+0'",
+   "value": {
+    "v": "+0"
+   }
+  },
+  {
+   "text": "v: \"+0\"",
+   "value": {
+    "v": "+0"
+   }
+  },
+  {
+   "text": "v: 00",
+   "value": {
+    "v": 0
+   }
+  },
+  {
+   "text": "v: '00'",
+   "value": {
+    "v": "00"
+   }
+  },
+  {
+   "text": "v: \"00\"",
+   "value": {
+    "v": "00"
+   }
+  },
+  {
+   "text": "v: 012",
+   "value": {
+    "v": 10
+   }
+  },
+  {
+   "text": "v: '012'",
+   "value": {
+    "v": "012"
+   }
+  },
+  {
+   "text": "v: \"012\"",
+   "value": {
+    "v": "012"
+   }
+  },
+  {
+   "text": "v: 08",
+   "value": {
+    "v": "08"
+   }
+  },
+  {
+   "text": "v: '08'",
+   "value": {
+    "v": "08"
+   }
+  },
+  {
+   "text": "v: \"08\"",
+   "value": {
+    "v": "08"
+   }
+  },
+  {
+   "text": "v: 0o12",
+   "value": {
+    "v": "0o12"
+   }
+  },
+  {
+   "text": "v: '0o12'",
+   "value": {
+    "v": "0o12"
+   }
+  },
+  {
+   "text": "v: \"0o12\"",
+   "value": {
+    "v": "0o12"
+   }
+  },
+  {
+   "text": "v: 0b101",
+   "value": {
+    "v": 5
+   }
+  },
+  {
+   "text": "v: '0b101'",
+   "value": {
+    "v": "0b101"
+   }
+  },
+  {
+   "text": "v: \"0b101\"",
+   "value": {
+    "v": "0b101"
+   }
+  },
+  {
+   "text": "v: -0b11",
+   "value": {
+    "v": -3
+   }
+  },
+  {
+   "text": "v: '-0b11'",
+   "value": {
+    "v": "-0b11"
+   }
+  },
+  {
+   "text": "v: \"-0b11\"",
+   "value": {
+    "v": "-0b11"
+   }
+  },
+  {
+   "text": "v: 0b",
+   "value": {
+    "v": "0b"
+   }
+  },
+  {
+   "text": "v: '0b'",
+   "value": {
+    "v": "0b"
+   }
+  },
+  {
+   "text": "v: \"0b\"",
+   "value": {
+    "v": "0b"
+   }
+  },
+  {
+   "text": "v: 0x1F",
+   "value": {
+    "v": 31
+   }
+  },
+  {
+   "text": "v: '0x1F'",
+   "value": {
+    "v": "0x1F"
+   }
+  },
+  {
+   "text": "v: \"0x1F\"",
+   "value": {
+    "v": "0x1F"
+   }
+  },
+  {
+   "text": "v: 0X1F",
+   "value": {
+    "v": "0X1F"
+   }
+  },
+  {
+   "text": "v: '0X1F'",
+   "value": {
+    "v": "0X1F"
+   }
+  },
+  {
+   "text": "v: \"0X1F\"",
+   "value": {
+    "v": "0X1F"
+   }
+  },
+  {
+   "text": "v: -0x_ff",
+   "value": {
+    "v": -255
+   }
+  },
+  {
+   "text": "v: '-0x_ff'",
+   "value": {
+    "v": "-0x_ff"
+   }
+  },
+  {
+   "text": "v: \"-0x_ff\"",
+   "value": {
+    "v": "-0x_ff"
+   }
+  },
+  {
+   "text": "v: 1_000",
+   "value": {
+    "v": 1000
+   }
+  },
+  {
+   "text": "v: '1_000'",
+   "value": {
+    "v": "1_000"
+   }
+  },
+  {
+   "text": "v: \"1_000\"",
+   "value": {
+    "v": "1_000"
+   }
+  },
+  {
+   "text": "v: _1",
+   "value": {
+    "v": "_1"
+   }
+  },
+  {
+   "text": "v: '_1'",
+   "value": {
+    "v": "_1"
+   }
+  },
+  {
+   "text": "v: \"_1\"",
+   "value": {
+    "v": "_1"
+   }
+  },
+  {
+   "text": "v: 1__0",
+   "value": {
+    "v": 10
+   }
+  },
+  {
+   "text": "v: '1__0'",
+   "value": {
+    "v": "1__0"
+   }
+  },
+  {
+   "text": "v: \"1__0\"",
+   "value": {
+    "v": "1__0"
+   }
+  },
+  {
+   "text": "v: 1:30",
+   "value": {
+    "v": 90
+   }
+  },
+  {
+   "text": "v: '1:30'",
+   "value": {
+    "v": "1:30"
+   }
+  },
+  {
+   "text": "v: \"1:30\"",
+   "value": {
+    "v": "1:30"
+   }
+  },
+  {
+   "text": "v: 1:60",
+   "value": {
+    "v": "1:60"
+   }
+  },
+  {
+   "text": "v: '1:60'",
+   "value": {
+    "v": "1:60"
+   }
+  },
+  {
+   "text": "v: \"1:60\"",
+   "value": {
+    "v": "1:60"
+   }
+  },
+  {
+   "text": "v: -1:2:3",
+   "value": {
+    "v": -3723
+   }
+  },
+  {
+   "text": "v: '-1:2:3'",
+   "value": {
+    "v": "-1:2:3"
+   }
+  },
+  {
+   "text": "v: \"-1:2:3\"",
+   "value": {
+    "v": "-1:2:3"
+   }
+  },
+  {
+   "text": "v: 190:20:30",
+   "value": {
+    "v": 685230
+   }
+  },
+  {
+   "text": "v: '190:20:30'",
+   "value": {
+    "v": "190:20:30"
+   }
+  },
+  {
+   "text": "v: \"190:20:30\"",
+   "value": {
+    "v": "190:20:30"
+   }
+  },
+  {
+   "text": "v: 1.5",
+   "value": {
+    "v": 1.5
+   }
+  },
+  {
+   "text": "v: '1.5'",
+   "value": {
+    "v": "1.5"
+   }
+  },
+  {
+   "text": "v: \"1.5\"",
+   "value": {
+    "v": "1.5"
+   }
+  },
+  {
+   "text": "v: 1.",
+   "value": {
+    "v": 1.0
+   }
+  },
+  {
+   "text": "v: '1.'",
+   "value": {
+    "v": "1."
+   }
+  },
+  {
+   "text": "v: \"1.\"",
+   "value": {
+    "v": "1."
+   }
+  },
+  {
+   "text": "v: .5",
+   "value": {
+    "v": 0.5
+   }
+  },
+  {
+   "text": "v: '.5'",
+   "value": {
+    "v": ".5"
+   }
+  },
+  {
+   "text": "v: \".5\"",
+   "value": {
+    "v": ".5"
+   }
+  },
+  {
+   "text": "v: -.5",
+   "value": {
+    "v": "-.5"
+   }
+  },
+  {
+   "text": "v: '-.5'",
+   "value": {
+    "v": "-.5"
+   }
+  },
+  {
+   "text": "v: \"-.5\"",
+   "value": {
+    "v": "-.5"
+   }
+  },
+  {
+   "text": "v: +1.5",
+   "value": {
+    "v": 1.5
+   }
+  },
+  {
+   "text": "v: '+1.5'",
+   "value": {
+    "v": "+1.5"
+   }
+  },
+  {
+   "text": "v: \"+1.5\"",
+   "value": {
+    "v": "+1.5"
+   }
+  },
+  {
+   "text": "v: 1e3",
+   "value": {
+    "v": "1e3"
+   }
+  },
+  {
+   "text": "v: '1e3'",
+   "value": {
+    "v": "1e3"
+   }
+  },
+  {
+   "text": "v: \"1e3\"",
+   "value": {
+    "v": "1e3"
+   }
+  },
+  {
+   "text": "v: 1E3",
+   "value": {
+    "v": "1E3"
+   }
+  },
+  {
+   "text": "v: '1E3'",
+   "value": {
+    "v": "1E3"
+   }
+  },
+  {
+   "text": "v: \"1E3\"",
+   "value": {
+    "v": "1E3"
+   }
+  },
+  {
+   "text": "v: 1.0e3",
+   "value": {
+    "v": "1.0e3"
+   }
+  },
+  {
+   "text": "v: '1.0e3'",
+   "value": {
+    "v": "1.0e3"
+   }
+  },
+  {
+   "text": "v: \"1.0e3\"",
+   "value": {
+    "v": "1.0e3"
+   }
+  },
+  {
+   "text": "v: 1.0e+3",
+   "value": {
+    "v": 1000.0
+   }
+  },
+  {
+   "text": "v: '1.0e+3'",
+   "value": {
+    "v": "1.0e+3"
+   }
+  },
+  {
+   "text": "v: \"1.0e+3\"",
+   "value": {
+    "v": "1.0e+3"
+   }
+  },
+  {
+   "text": "v: 1.0E-3",
+   "value": {
+    "v": 0.001
+   }
+  },
+  {
+   "text": "v: '1.0E-3'",
+   "value": {
+    "v": "1.0E-3"
+   }
+  },
+  {
+   "text": "v: \"1.0E-3\"",
+   "value": {
+    "v": "1.0E-3"
+   }
+  },
+  {
+   "text": "v: 1_0.5_0",
+   "value": {
+    "v": 10.5
+   }
+  },
+  {
+   "text": "v: '1_0.5_0'",
+   "value": {
+    "v": "1_0.5_0"
+   }
+  },
+  {
+   "text": "v: \"1_0.5_0\"",
+   "value": {
+    "v": "1_0.5_0"
+   }
+  },
+  {
+   "text": "v: 1:30.5",
+   "value": {
+    "v": 90.5
+   }
+  },
+  {
+   "text": "v: '1:30.5'",
+   "value": {
+    "v": "1:30.5"
+   }
+  },
+  {
+   "text": "v: \"1:30.5\"",
+   "value": {
+    "v": "1:30.5"
+   }
+  },
+  {
+   "text": "v: 1:2:3.75",
+   "value": {
+    "v": 3723.75
+   }
+  },
+  {
+   "text": "v: '1:2:3.75'",
+   "value": {
+    "v": "1:2:3.75"
+   }
+  },
+  {
+   "text": "v: \"1:2:3.75\"",
+   "value": {
+    "v": "1:2:3.75"
+   }
+  },
+  {
+   "error": "nonfinite",
+   "text": "v: .inf"
+  },
+  {
+   "text": "v: '.inf'",
+   "value": {
+    "v": ".inf"
+   }
+  },
+  {
+   "text": "v: \".inf\"",
+   "value": {
+    "v": ".inf"
+   }
+  },
+  {
+   "error": "nonfinite",
+   "text": "v: -.Inf"
+  },
+  {
+   "text": "v: '-.Inf'",
+   "value": {
+    "v": "-.Inf"
+   }
+  },
+  {
+   "text": "v: \"-.Inf\"",
+   "value": {
+    "v": "-.Inf"
+   }
+  },
+  {
+   "error": "nonfinite",
+   "text": "v: +.INF"
+  },
+  {
+   "text": "v: '+.INF'",
+   "value": {
+    "v": "+.INF"
+   }
+  },
+  {
+   "text": "v: \"+.INF\"",
+   "value": {
+    "v": "+.INF"
+   }
+  },
+  {
+   "error": "nonfinite",
+   "text": "v: .nan"
+  },
+  {
+   "text": "v: '.nan'",
+   "value": {
+    "v": ".nan"
+   }
+  },
+  {
+   "text": "v: \".nan\"",
+   "value": {
+    "v": ".nan"
+   }
+  },
+  {
+   "error": "nonfinite",
+   "text": "v: .NaN"
+  },
+  {
+   "text": "v: '.NaN'",
+   "value": {
+    "v": ".NaN"
+   }
+  },
+  {
+   "text": "v: \".NaN\"",
+   "value": {
+    "v": ".NaN"
+   }
+  },
+  {
+   "text": "v: inf",
+   "value": {
+    "v": "inf"
+   }
+  },
+  {
+   "text": "v: 'inf'",
+   "value": {
+    "v": "inf"
+   }
+  },
+  {
+   "text": "v: \"inf\"",
+   "value": {
+    "v": "inf"
+   }
+  },
+  {
+   "text": "v: nan",
+   "value": {
+    "v": "nan"
+   }
+  },
+  {
+   "text": "v: 'nan'",
+   "value": {
+    "v": "nan"
+   }
+  },
+  {
+   "text": "v: \"nan\"",
+   "value": {
+    "v": "nan"
+   }
+  },
+  {
+   "error": "TypeError",
+   "text": "v: 2026-10-16"
+  },
+  {
+   "text": "v: '2026-10-16'",
+   "value": {
+    "v": "2026-10-16"
+   }
+  },
+  {
+   "text": "v: \"2026-10-16\"",
+   "value": {
+    "v": "2026-10-16"
+   }
+  },
+  {
+   "text": "v: 2026-1-6",
+   "value": {
+    "v": "2026-1-6"
+   }
+  },
+  {
+   "text": "v: '2026-1-6'",
+   "value": {
+    "v": "2026-1-6"
+   }
+  },
+  {
+   "text": "v: \"2026-1-6\"",
+   "value": {
+    "v": "2026-1-6"
+   }
+  },
+  {
+   "error": "TypeError",
+   "text": "v: 2026-10-16T10:00:00Z"
+  },
+  {
+   "text": "v: '2026-10-16T10:00:00Z'",
+   "value": {
+    "v": "2026-10-16T10:00:00Z"
+   }
+  },
+  {
+   "text": "v: \"2026-10-16T10:00:00Z\"",
+   "value": {
+    "v": "2026-10-16T10:00:00Z"
+   }
+  },
+  {
+   "error": "TypeError",
+   "text": "v: 2026-10-16 10:00:00.5 +01:00"
+  },
+  {
+   "text": "v: '2026-10-16 10:00:00.5 +01:00'",
+   "value": {
+    "v": "2026-10-16 10:00:00.5 +01:00"
+   }
+  },
+  {
+   "text": "v: \"2026-10-16 10:00:00.5 +01:00\"",
+   "value": {
+    "v": "2026-10-16 10:00:00.5 +01:00"
+   }
+  },
+  {
+   "error": "TypeError",
+   "text": "v: 2026-10-16t1:00:00"
+  },
+  {
+   "text": "v: '2026-10-16t1:00:00'",
+   "value": {
+    "v": "2026-10-16t1:00:00"
+   }
+  },
+  {
+   "text": "v: \"2026-10-16t1:00:00\"",
+   "value": {
+    "v": "2026-10-16t1:00:00"
+   }
+  },
+  {
+   "text": "v: 2026-10-16 10:00",
+   "value": {
+    "v": "2026-10-16 10:00"
+   }
+  },
+  {
+   "text": "v: '2026-10-16 10:00'",
+   "value": {
+    "v": "2026-10-16 10:00"
+   }
+  },
+  {
+   "text": "v: \"2026-10-16 10:00\"",
+   "value": {
+    "v": "2026-10-16 10:00"
+   }
+  },
+  {
+   "error": "ConstructorError",
+   "text": "v: <<"
+  },
+  {
+   "text": "v: '<<'",
+   "value": {
+    "v": "<<"
+   }
+  },
+  {
+   "text": "v: \"<<\"",
+   "value": {
+    "v": "<<"
+   }
+  },
+  {
+   "error": "ConstructorError",
+   "text": "v: ="
+  },
+  {
+   "text": "v: '='",
+   "value": {
+    "v": "="
+   }
+  },
+  {
+   "text": "v: \"=\"",
+   "value": {
+    "v": "="
+   }
+  },
+  {
+   "text": "v: 1-2",
+   "value": {
+    "v": "1-2"
+   }
+  },
+  {
+   "text": "v: '1-2'",
+   "value": {
+    "v": "1-2"
+   }
+  },
+  {
+   "text": "v: \"1-2\"",
+   "value": {
+    "v": "1-2"
+   }
+  },
+  {
+   "text": "v: 0.0.0.0/0",
+   "value": {
+    "v": "0.0.0.0/0"
+   }
+  },
+  {
+   "text": "v: '0.0.0.0/0'",
+   "value": {
+    "v": "0.0.0.0/0"
+   }
+  },
+  {
+   "text": "v: \"0.0.0.0/0\"",
+   "value": {
+    "v": "0.0.0.0/0"
+   }
+  },
+  {
+   "text": "v: 12345678901234567890",
+   "value": {
+    "v": 12345678901234567890
+   }
+  },
+  {
+   "text": "v: '12345678901234567890'",
+   "value": {
+    "v": "12345678901234567890"
+   }
+  },
+  {
+   "text": "v: \"12345678901234567890\"",
+   "value": {
+    "v": "12345678901234567890"
+   }
+  },
+  {
+   "text": "v: -9223372036854775809",
+   "value": {
+    "v": -9223372036854775809
+   }
+  },
+  {
+   "text": "v: '-9223372036854775809'",
+   "value": {
+    "v": "-9223372036854775809"
+   }
+  },
+  {
+   "text": "v: \"-9223372036854775809\"",
+   "value": {
+    "v": "-9223372036854775809"
+   }
+  },
+  {
+   "text": "v: 0x7fffffffffffffffffff",
+   "value": {
+    "v": 604462909807314587353087
+   }
+  },
+  {
+   "text": "v: '0x7fffffffffffffffffff'",
+   "value": {
+    "v": "0x7fffffffffffffffffff"
+   }
+  },
+  {
+   "text": "v: \"0x7fffffffffffffffffff\"",
+   "value": {
+    "v": "0x7fffffffffffffffffff"
+   }
+  },
+  {
+   "text": "v: 3.0",
+   "value": {
+    "v": 3.0
+   }
+  },
+  {
+   "text": "v: '3.0'",
+   "value": {
+    "v": "3.0"
+   }
+  },
+  {
+   "text": "v: \"3.0\"",
+   "value": {
+    "v": "3.0"
+   }
+  },
+  {
+   "text": "v: 1_",
+   "value": {
+    "v": 1
+   }
+  },
+  {
+   "text": "v: '1_'",
+   "value": {
+    "v": "1_"
+   }
+  },
+  {
+   "text": "v: \"1_\"",
+   "value": {
+    "v": "1_"
+   }
+  },
+  {
+   "text": "v: +",
+   "value": {
+    "v": "+"
+   }
+  },
+  {
+   "text": "v: '+'",
+   "value": {
+    "v": "+"
+   }
+  },
+  {
+   "text": "v: \"+\"",
+   "value": {
+    "v": "+"
+   }
+  },
+  {
+   "text": "v: '-'",
+   "value": {
+    "v": "-"
+   }
+  },
+  {
+   "text": "v: \"-\"",
+   "value": {
+    "v": "-"
+   }
+  },
+  {
+   "text": "v: .",
+   "value": {
+    "v": "."
+   }
+  },
+  {
+   "text": "v: '.'",
+   "value": {
+    "v": "."
+   }
+  },
+  {
+   "text": "v: \".\"",
+   "value": {
+    "v": "."
+   }
+  },
+  {
+   "text": "v: 'a: b'",
+   "value": {
+    "v": "a: b"
+   }
+  },
+  {
+   "text": "v: \"a: b\"",
+   "value": {
+    "v": "a: b"
+   }
+  },
+  {
+   "text": "on: x",
+   "value": {
+    "true": "x"
+   }
+  },
+  {
+   "text": "1: x",
+   "value": {
+    "1": "x"
+   }
+  },
+  {
+   "text": "1.5: x",
+   "value": {
+    "1.5": "x"
+   }
+  },
+  {
+   "text": "null: x",
+   "value": {
+    "null": "x"
+   }
+  },
+  {
+   "text": "~: x",
+   "value": {
+    "null": "x"
+   }
+  },
+  {
+   "text": "'1': x",
+   "value": {
+    "1": "x"
+   }
+  },
+  {
+   "text": "yes: x",
+   "value": {
+    "true": "x"
+   }
+  },
+  {
+   "text": "012: x",
+   "value": {
+    "10": "x"
+   }
+  },
+  {
+   "error": "TypeError",
+   "text": "2026-10-16: x"
+  },
+  {
+   "error": "ConstructorError",
+   "text": "[a]: x"
+  },
+  {
+   "error": "ConstructorError",
+   "text": "{a: 1}: x"
+  },
+  {
+   "text": "=: x",
+   "value": {
+    "=": "x"
+   }
+  },
+  {
+   "text": "a: &x {p: 1, q: 2}\nb:\n  <<: *x\n  q: 3\n",
+   "value": {
+    "a": {
+     "p": 1,
+     "q": 2
+    },
+    "b": {
+     "p": 1,
+     "q": 3
+    }
+   }
+  },
+  {
+   "text": "a: &x {p: 1}\nc: &y {p: 2, r: 3}\nb:\n  <<: [*x, *y]\n",
+   "value": {
+    "a": {
+     "p": 1
+    },
+    "b": {
+     "p": 1,
+     "r": 3
+    },
+    "c": {
+     "p": 2,
+     "r": 3
+    }
+   }
+  },
+  {
+   "text": "b:\n  <<: {p: 1}\n  <<: {p: 2}\n",
+   "value": {
+    "b": {
+     "p": 2
+    }
+   }
+  },
+  {
+   "text": "b:\n  '<<': {p: 1}\n",
+   "value": {
+    "b": {
+     "<<": {
+      "p": 1
+     }
+    }
+   }
+  },
+  {
+   "error": "ConstructorError",
+   "text": "b: {<<: [1]}\n"
+  },
+  {
+   "text": "a: 1\na: 2\n",
+   "value": {
+    "a": 2
+   }
+  },
+  {
+   "text": "a: !!str 1\nb: !!int '7'\nc: !!float '1'\nd: !!bool 'yes'\ne: !!null ''\n",
+   "value": {
+    "a": "1",
+    "b": 7,
+    "c": 1.0,
+    "d": true,
+    "e": null
+   }
+  },
+  {
+   "error": "TypeError",
+   "text": "a: !!binary aGk=\n"
+  },
+  {
+   "error": "TypeError",
+   "text": "a: !!set {x}\n"
+  },
+  {
+   "text": "a: !!omap [{x: 1}]\n",
+   "value": {
+    "a": [
+     [
+      "x",
+      1
+     ]
+    ]
+   }
+  },
+  {
+   "error": "ConstructorError",
+   "text": "a: !custom x\n"
+  },
+  {
+   "error": "ParserError",
+   "text": "a: [1, 2\n"
+  },
+  {
+   "error": "ComposerError",
+   "text": "a: 1\n---\nb: 2\n"
+  },
+  {
+   "text": "",
+   "value": null
+  },
+  {
+   "text": "---\n",
+   "value": null
+  },
+  {
+   "text": "# only a comment\n",
+   "value": null
+  },
+  {
+   "text": "a: |\n  line1\n  line2\n",
+   "value": {
+    "a": "line1\nline2\n"
+   }
+  },
+  {
+   "text": "a: >\n  folded\n  text\n",
+   "value": {
+    "a": "folded text\n"
+   }
+  },
+  {
+   "text": "a: 'it''s'\n",
+   "value": {
+    "a": "it's"
+   }
+  },
+  {
+   "text": "a: \"\\u00e9\\n\"\n",
+   "value": {
+    "a": "é\n"
+   }
+  },
+  {
+   "text": "a:\n  - on\n  -\n  - ~\n",
+   "value": {
+    "a": [
+     true,
+     null,
+     null
+    ]
+   }
+  },
+  {
+   "text": "? complex\n: value\n",
+   "value": {
+    "complex": "value"
+   }
+  },
+  {
+   "error": "ComposerError",
+   "text": "a: *undefined\n"
+  }
+ ]
+}

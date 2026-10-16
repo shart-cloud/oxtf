@@ -21,7 +21,7 @@ use tf_linter::{Linter, RuleSelectionError, ScanOptions, ScanRecord, ScanResult,
 use tf_plan::{PlanError, PlanOptions};
 use tf_rego::{Policies, PolicyError};
 use tf_semantic::source::normalize;
-use tf_semantic::{Analysis, FileTable};
+use tf_semantic::{Analysis, DiagSeverity, Diagnostic, FileTable};
 
 pub use tf_rego::Shape;
 
@@ -68,8 +68,10 @@ impl Catalog {
         }
     }
 
-    /// The rules this catalog yields, in order, shadowed by name.
-    pub fn resolve(self) -> Result<Vec<Box<dyn DynRule>>, ScanError> {
+    /// The rules this catalog yields, in order, shadowed by name, and a
+    /// warning for each rule-directory file that was skipped.
+    pub fn resolve(self) -> Result<Resolved, ScanError> {
+        let mut warnings = Vec::new();
         let mut rules: Vec<Box<dyn DynRule>> = Vec::new();
         let mut add = |batch: Vec<Box<dyn DynRule>>| {
             for rule in batch {
@@ -82,8 +84,14 @@ impl Catalog {
             add(tf_linter::rules::all());
         }
         for path in &self.rule_files {
-            let specs = tf_rule_ir::load_rules_file(path).map_err(ScanError::Rules)?;
-            add(compile_specs(specs)?);
+            let loaded = tf_rule_ir::load_rules_file(path).map_err(ScanError::Rules)?;
+            warnings.extend(
+                loaded
+                    .skipped
+                    .into_iter()
+                    .map(|s| format!("skipped rule file {}:\n{}", s.path.display(), s.reason)),
+            );
+            add(compile_specs(loaded.rules)?);
         }
         for json in &self.rule_json {
             let specs = tf_rule_ir::parse_rules(json).map_err(ScanError::Rules)?;
@@ -93,7 +101,26 @@ impl Catalog {
         if !self.policies.is_empty() {
             add(tf_rego::catalog(&self.policies)?);
         }
-        Ok(rules)
+        Ok(Resolved { rules, warnings })
+    }
+}
+
+/// A resolved catalog.
+pub struct Resolved {
+    pub rules: Vec<Box<dyn DynRule>>,
+    /// Rule files skipped while loading a rule directory, one entry per
+    /// file. A scan reports each as a `rule-skipped` warning diagnostic.
+    pub warnings: Vec<String>,
+}
+
+impl Resolved {
+    fn diagnostics(&self) -> impl Iterator<Item = Diagnostic> + '_ {
+        self.warnings.iter().map(|message| Diagnostic {
+            severity: DiagSeverity::Warning,
+            code: "rule-skipped",
+            message: message.clone(),
+            at: None,
+        })
     }
 }
 
@@ -216,10 +243,16 @@ impl From<PlanError> for ScanError {
 /// Run one request. The catalog is resolved and the selection validated
 /// before any input is read, so a bad rule id never costs a parse.
 pub fn scan(req: ScanRequest) -> Result<ScanOutput, ScanError> {
-    let rules = req.catalog.resolve()?;
+    let resolved = req.catalog.resolve()?;
+    let skipped: Vec<Diagnostic> = resolved.diagnostics().collect();
     let linter = match &req.selection {
-        Some(ids) => Linter::filtered(rules, ids)?,
-        None => Linter::new(rules),
+        Some(ids) => Linter::filtered(resolved.rules, ids)?,
+        None => Linter::new(resolved.rules),
+    };
+    // Skipped rule files come first: they qualify every finding below them.
+    let output = |mut result: ScanResult, analyses| {
+        result.diagnostics.splice(0..0, skipped.iter().cloned());
+        Ok(ScanOutput { result, analyses })
     };
     match req.input {
         ScanInput::Dirs { paths, recursive } => {
@@ -257,7 +290,7 @@ pub fn scan(req: ScanRequest) -> Result<ScanOutput, ScanError> {
                 keep_models: req.keep_models,
             };
             let (result, analyses) = tf_linter::scan_with(&linter, &roots, &opts);
-            Ok(ScanOutput { result, analyses })
+            output(result, analyses)
         }
         ScanInput::Plan { plan, source } => {
             if !req.var_files.is_empty() {
@@ -268,10 +301,7 @@ pub fn scan(req: ScanRequest) -> Result<ScanOutput, ScanError> {
             let files = Arc::new(FileTable::with_overlay(req.overlay));
             let (result, analysis) =
                 tf_plan::scan_plan_with_model(&linter, &plan, &PlanOptions { source }, files)?;
-            Ok(ScanOutput {
-                result,
-                analyses: vec![analysis],
-            })
+            output(result, vec![analysis])
         }
     }
 }

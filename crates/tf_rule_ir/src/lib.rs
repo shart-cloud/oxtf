@@ -52,8 +52,10 @@ use tf_linter::{Category, DynRule, Judgement, Level, RuleFailure, RuleInfo};
 use tf_semantic::{Module, Resource};
 
 pub mod checkov;
+pub mod checkov_policy;
 pub mod graph;
 pub mod jsonpath;
+pub mod pyyaml;
 
 /// Current IR version. Versions 1 and 2 remain readable; graph policies need 3.
 pub const IR_VERSION: u32 = 3;
@@ -228,10 +230,115 @@ pub fn parse_rules(json: &str) -> Result<Vec<RuleSpec>, String> {
     }
 }
 
-/// Read and parse a rules file.
-pub fn load_rules_file(path: &std::path::Path) -> Result<Vec<RuleSpec>, String> {
+/// Rules loaded from a `--rule-file` path, and the files of a directory
+/// that were skipped.
+#[derive(Debug, Default)]
+pub struct LoadedRules {
+    pub rules: Vec<RuleSpec>,
+    pub skipped: Vec<SkippedFile>,
+}
+
+/// A file in a rule directory that did not load: unparsable, an unsupported
+/// policy, or a rule name already defined by an earlier file.
+#[derive(Debug, PartialEq)]
+pub struct SkippedFile {
+    pub path: std::path::PathBuf,
+    /// One line per problem, each starting with the file (and position).
+    pub reason: String,
+}
+
+/// Read and parse a rules file or directory.
+///
+/// A file is rule IR JSON or a Checkov policy: `.yaml`/`.yml` always, and
+/// `.json` when it has Checkov's `metadata` and `definition`. A named file
+/// that does not load is an error.
+///
+/// A directory is walked recursively in name order, as Checkov walks a
+/// policy directory, for `.json`, `.yaml` and `.yml` files, each read by its
+/// own format. A file that does not load is skipped and reported in
+/// [`LoadedRules::skipped`], never dropped silently. When two files define
+/// the same rule name, the first wins (as in Checkov) and the later file is
+/// skipped.
+pub fn load_rules_file(path: &std::path::Path) -> Result<LoadedRules, String> {
+    if !path.is_dir() {
+        return load_one(path).map(|rules| LoadedRules {
+            rules,
+            skipped: Vec::new(),
+        });
+    }
+    let mut files = Vec::new();
+    collect_rule_files(path, &mut files).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut out = LoadedRules::default();
+    let mut seen: std::collections::HashMap<String, std::path::PathBuf> = Default::default();
+    for file in files {
+        let specs = match load_one(&file) {
+            Ok(specs) => specs,
+            Err(reason) => {
+                out.skipped.push(SkippedFile { path: file, reason });
+                continue;
+            }
+        };
+        let duplicates: Vec<String> = specs
+            .iter()
+            .filter_map(|spec| {
+                seen.get(&spec.name).map(|first| {
+                    format!(
+                        "{}: rule {} is already defined in {}",
+                        file.display(),
+                        spec.name,
+                        first.display()
+                    )
+                })
+            })
+            .collect();
+        if !duplicates.is_empty() {
+            out.skipped.push(SkippedFile {
+                path: file,
+                reason: duplicates.join("\n"),
+            });
+            continue;
+        }
+        for spec in specs {
+            seen.insert(spec.name.clone(), file.clone());
+            out.rules.push(spec);
+        }
+    }
+    Ok(out)
+}
+
+fn collect_rule_files(
+    dir: &std::path::Path,
+    out: &mut Vec<std::path::PathBuf>,
+) -> std::io::Result<()> {
+    let mut entries: Vec<_> = std::fs::read_dir(dir)?.collect::<Result<_, _>>()?;
+    entries.sort_by_key(|e| e.file_name());
+    for entry in entries {
+        let path = entry.path();
+        if entry.file_type()?.is_dir() {
+            collect_rule_files(&path, out)?;
+        } else if matches!(
+            path.extension().and_then(|e| e.to_str()),
+            Some("json" | "yaml" | "yml")
+        ) {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn load_one(path: &std::path::Path) -> Result<Vec<RuleSpec>, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    parse_rules(&text).map_err(|e| format!("{}: {e}", path.display()))
+    let source = match path.extension().and_then(|e| e.to_str()) {
+        Some("yaml" | "yml") => checkov_policy::PolicySource::parse(path, &text),
+        _ => match serde_json::from_str::<serde_json::Value>(&text) {
+            Ok(v) if checkov_policy::is_policy(&v) => {
+                Ok(checkov_policy::PolicySource::from_json(v, &text))
+            }
+            _ => return parse_rules(&text).map_err(|e| format!("{}: {e}", path.display())),
+        },
+    };
+    let source = source.map_err(|e| format!("{}: {e}", path.display()))?;
+    checkov_policy::translate_source(path, &source).map(|r| vec![r])
 }
 
 // ---------------------------------------------------------------------------
