@@ -1,4 +1,4 @@
-# Finding record (schema 1)
+# Finding record (schema 2)
 
 The finding record is the machine-readable form of a scan. Every output of
 oxtf is a projection of it: `oxtf scan --format json` prints it verbatim,
@@ -9,6 +9,11 @@ shows a subset for humans. It is produced by `tf_linter::record`.
 The shape is versioned by the top-level `schema` field (and repeated on each
 finding). Any change that removes or renames a field, or changes a field's
 meaning, bumps it. Adding an optional field does not.
+
+Schema 2 (2026-10-16) adds `subject` and makes `resource` nullable: a
+Conftest policy is evaluated over a whole file, and a result that no single
+resource reproduces (a module, provider or variable check, or a join) is a
+finding on that file.
 
 ## Worked example
 
@@ -82,12 +87,16 @@ meaning, bumps it. Adding an optional field does not.
         "id": "aws-rds-unencrypted",
         "level": "high"
       },
-      "schema": 1,
-      "severity": "definite"
+      "schema": 2,
+      "severity": "definite",
+      "subject": {
+        "address": "aws_db_instance.db",
+        "kind": "resource"
+      }
     }
   ],
   "rule_errors": [],
-  "schema": 1,
+  "schema": 2,
   "stats": {
     "conditional": 0,
     "definite": 1,
@@ -119,15 +128,16 @@ meaning, bumps it. Adding an optional field does not.
 
 | Field | Meaning |
 | --- | --- |
-| `fingerprint` | Stable identity across scans: a hash of `rule.id`, `resource.address` and `attribute`. It excludes locations, message and severity on purpose, so unrelated edits keep the identity and a certainty change updates an existing issue instead of filing a new one. |
+| `fingerprint` | Stable identity across scans: a hash of `rule.id`, the subject's address (`resource.address`, or the file's path) and `attribute`. It excludes locations, message and severity on purpose, so unrelated edits keep the identity and a certainty change updates an existing issue instead of filing a new one. |
 | `rule` | `id`, `category` (`network`, `storage`, `iam`, `encryption`, `other`), `level` (`low`, `medium`, `high`, `critical`: impact, independent of certainty), `description`. |
 | `severity` | Certainty. `definite`: insecure as written. `conditional`: insecure for some value of an unconstrained variable. `indeterminate`: a foreign policy fired on the Known values, but an input it may depend on is provider-computed; needs a human. Native rules never produce `indeterminate`. |
-| `resource` | The resource instance: `address` (full), `base_address` (no key), `module` (`""` for the root), `mode` (`managed` or `data`), `type`, `name`, `key` (a number for `count`, a string for `for_each`, or `null`). |
+| `subject` | What the finding is about: `{"kind": "resource", "address"}`, or `{"kind": "file", "file", "module"}` for a whole-file policy result that no single resource reproduces (`module` is the module instance address, `""` for the root). |
+| `resource` | The resource instance: `address` (full), `base_address` (no key), `module` (`""` for the root), `mode` (`managed` or `data`), `type`, `name`, `key` (a number for `count`, a string for `for_each`, or `null`). `null` when the subject is a file. |
 | `root` | Root module directory the finding was produced in. |
 | `attribute` | Path of the deciding value within the resource (`storage_encrypted`, `ingress.cidr_blocks`), or `null` when the deciding value is on another resource (the S3 join) or the rule points at the header. |
 | `configured` | The deciding top-level attribute as written, or `null` when it is not set. |
 | `effective` | The same after the defaults overlay. |
-| `location` | Where to point: the deciding attribute, else the resource header. |
+| `location` | Where to point: the deciding attribute, else the resource header (the file's start for a file subject). |
 | `provenance` | Origin-first explanation of the deciding value: each step has `kind`, `label`, `resource` (base address of the resource whose attribute the step reads, if any), `attribute` (path within it, if any) and `location`. |
 | `message` | Human wording, with a certainty suffix for conditional findings. |
 | `hidden` | For foreign policies: configured values the policy did not see, each with `path` and `kind` (`tainted` or `unknown`). Empty for native rules. |
@@ -163,6 +173,6 @@ step, with different blast radius.
 | Output | Keeps |
 | --- | --- |
 | JSON | Everything. |
-| Python `Finding` | Everything: flat getters for scalars, dicts for `resource`, `configured`, `effective`, `fix_hint`, `hidden`, and `to_dict()` for the whole record. `provenance` dicts carry `kind`, `label`, `file`, `line`, `column`, `resource`, `attribute`. |
-| Arrow | Columns `fingerprint`, `rule`, `category`, `level`, `severity`, `address`, `resource_type`, `module`, `message`, `root`, `attribute`, `file`, `line`, `column`, `provenance` (structs with `kind`, `label`, `file`, `line`, `column`, `resource`, `attribute`) and `record` (the whole record as JSON). `configured`, `effective`, `fix_hint`, `hidden` and the structured `resource` are only in `record`. |
+| Python `Finding` | Everything: flat getters for scalars (`resource_type` is `None` for a file subject), dicts for `subject`, `resource`, `configured`, `effective`, `fix_hint`, `hidden`, and `to_dict()` for the whole record. `provenance` dicts carry `kind`, `label`, `file`, `line`, `column`, `resource`, `attribute`. |
+| Arrow | Columns `fingerprint`, `rule`, `category`, `level`, `severity`, `address` (the file's path for a file subject), `resource_type` (null for a file subject), `module`, `message`, `root`, `attribute`, `file`, `line`, `column`, `provenance` (structs with `kind`, `label`, `file`, `line`, `column`, `resource`, `attribute`) and `record` (the whole record as JSON). `configured`, `effective`, `fix_hint`, `hidden` and the structured `resource` are only in `record`. |
 | Text | Rule, severity, address, message, the primary location and the provenance chain. No fingerprint, values or fix hint. |

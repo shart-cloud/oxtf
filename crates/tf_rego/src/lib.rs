@@ -20,6 +20,7 @@
 //! records it as a rule error on the scan.
 
 pub mod foreign;
+pub mod hcl2json;
 pub mod projection;
 
 use std::cell::RefCell;
@@ -52,6 +53,12 @@ pub struct Policies {
     pub entries: Vec<String>,
     /// Parse foreign policies as Rego v0 (`opa eval --v0-compatible`).
     pub rego_v0: bool,
+    /// Data documents for foreign policies (Conftest's `--data`).
+    pub data: Vec<PathBuf>,
+    /// Conftest namespaces (`main` when empty), unless `entries` are named.
+    pub namespaces: Vec<String>,
+    /// Every namespace (`--all-namespaces`).
+    pub all_namespaces: bool,
 }
 
 impl Policies {
@@ -91,7 +98,10 @@ pub fn catalog(policies: &Policies) -> Result<Vec<Box<dyn DynRule>>, PolicyError
     if !policies.foreign.is_empty() {
         rules.extend(foreign::rules(&foreign::Options {
             paths: &policies.foreign,
+            data: &policies.data,
             entries: &policies.entries,
+            namespaces: &policies.namespaces,
+            all_namespaces: policies.all_namespaces,
             shape: policies.shape.unwrap_or(Shape::Plan),
             rego_v0: policies.rego_v0,
         })?);

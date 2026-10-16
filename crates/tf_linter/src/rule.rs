@@ -19,8 +19,32 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use tf_eval::{Kind, Step, Truth, Verdict};
-use tf_semantic::{Module, Resource};
-use tf_span::FileSpan;
+use tf_semantic::source::SourceFile;
+use tf_semantic::{Analysis, Module, Resource};
+use tf_span::{FileSpan, Span};
+
+/// One `.tf` file of one module instance, parsed, for rules that judge
+/// whole configuration files (Conftest policies).
+pub struct ConfigFile<'a> {
+    pub module: &'a Module,
+    pub source: Arc<SourceFile>,
+    pub ast: &'a tf_ast::File<'a>,
+    /// Unique per [`crate::Linter::run_with`] call: the files of one root
+    /// share it, so a rule may cache per-root work under it.
+    pub run: u64,
+}
+
+/// What a whole-file judgement is about.
+#[derive(Clone, Copy)]
+pub enum Subject<'a> {
+    Resource(&'a Resource),
+    /// A configuration file of a module instance, for a result no single
+    /// resource accounts for (module, provider or variable blocks, joins).
+    File {
+        module: &'a Module,
+        file: tf_span::FileId,
+    },
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -256,6 +280,19 @@ pub trait DynRule: Send + Sync {
     ) -> Result<Vec<(&'a Resource, Judgement)>, RuleFailure> {
         Ok(Vec::new())
     }
+    /// Rules that judge whole configuration files run once per root.
+    fn needs_files(&self) -> bool {
+        false
+    }
+    /// Judgements over the root's analysis and every parsed file of every
+    /// module instance (empty for a plan scan, which has no source files).
+    fn judge_files<'a>(
+        &self,
+        _analysis: &'a Analysis,
+        _files: &[ConfigFile<'a>],
+    ) -> Result<Vec<(Subject<'a>, Judgement)>, RuleFailure> {
+        Ok(Vec::new())
+    }
     /// Judgements on one resource instance (usually zero or one); only
     /// judgements that can become findings are returned.
     fn judge_resource(&self, resource: &Resource) -> Result<Vec<Judgement>, RuleFailure>;
@@ -304,6 +341,24 @@ trait Judge: Rule {
 }
 impl<T: Rule> Judge for T {}
 
+/// What a finding is about: a resource instance, or (for a whole-file
+/// policy result that no single resource accounts for) a configuration
+/// file of a module instance.
+#[derive(Clone, Debug, PartialEq)]
+pub enum FindingSubject {
+    Resource(tf_semantic::Address),
+    File { path: PathBuf },
+}
+
+impl FindingSubject {
+    pub fn resource(&self) -> Option<&tf_semantic::Address> {
+        match self {
+            FindingSubject::Resource(a) => Some(a),
+            FindingSubject::File { .. } => None,
+        }
+    }
+}
+
 /// A finding.
 #[derive(Clone, Debug)]
 pub struct Finding {
@@ -311,11 +366,13 @@ pub struct Finding {
     pub category: Category,
     pub description: Arc<str>,
     pub level: Level,
-    /// The resource instance's identity.
-    pub resource: tf_semantic::Address,
-    /// Resource address, module path included (`module.m.aws_s3_bucket.b`).
+    /// What the finding is about.
+    pub subject: FindingSubject,
+    /// Resource address, module path included (`module.m.aws_s3_bucket.b`);
+    /// for a file subject, the file's path.
     pub address: Arc<str>,
-    pub resource_type: Arc<str>,
+    /// `None` for a file subject.
+    pub resource_type: Option<Arc<str>>,
     /// Module instance address (`""` for the root module).
     pub module: Arc<str>,
     pub severity: Severity,
@@ -447,9 +504,9 @@ impl Finding {
             category: info.category,
             description: info.description.clone(),
             level: info.level,
-            resource: resource.id.clone(),
+            subject: FindingSubject::Resource(resource.id.clone()),
             address: resource.address.clone(),
-            resource_type: resource.ty.clone(),
+            resource_type: Some(resource.ty.clone()),
             module: resource.module.clone(),
             severity,
             message,
@@ -462,5 +519,65 @@ impl Finding {
             hidden,
             fix_hint,
         })
+    }
+
+    /// A finding on a configuration file of `module` (a whole-file policy
+    /// result no single resource accounts for). The primary location is the
+    /// witness's newest provenance step in that file, else the file's start.
+    #[allow(clippy::too_many_arguments)]
+    pub fn for_file(
+        info: &RuleInfo,
+        module: &Module,
+        file: &SourceFile,
+        severity: Severity,
+        witness: Option<&tf_eval::Value>,
+        message: &str,
+        root: &Path,
+        hidden: Vec<Hidden>,
+    ) -> Finding {
+        let provenance = witness.map(|w| w.prov.steps()).unwrap_or_default();
+        let primary = provenance
+            .iter()
+            .rev()
+            .find(|s| s.at.file == file.id)
+            .map(|s| s.at)
+            .unwrap_or(FileSpan {
+                file: file.id,
+                span: Span::new(0, 0),
+            });
+        let message = match (severity, witness.map(|w| &w.kind)) {
+            (Severity::Conditional, Some(Kind::Tainted(t))) if !t.variable.starts_with('(') => {
+                format!(
+                    "{message} (depends on unconstrained variable var.{})",
+                    t.variable
+                )
+            }
+            (Severity::Conditional, _) => {
+                format!("{message} (depends on an unconstrained variable)")
+            }
+            _ => message.to_string(),
+        };
+        Finding {
+            rule: info.name.clone(),
+            category: info.category,
+            description: info.description.clone(),
+            level: info.level,
+            subject: FindingSubject::File {
+                path: file.path.clone(),
+            },
+            address: file.path.display().to_string().into(),
+            resource_type: None,
+            module: module.address.clone(),
+            severity,
+            message,
+            primary,
+            provenance,
+            root: root.to_path_buf(),
+            attribute: None,
+            configured: None,
+            effective: None,
+            hidden,
+            fix_hint: None,
+        }
     }
 }

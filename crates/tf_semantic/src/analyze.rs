@@ -33,6 +33,11 @@ pub struct AnalyzeOptions {
     /// `for_each` / `dynamic` collections larger than this are evaluated as
     /// one abstract instance instead of being expanded.
     pub max_expand: usize,
+    /// Also evaluate what only whole-file rules read: every `locals`
+    /// entry ([`model::Module::locals`]) and every module-call argument
+    /// ([`model::ModuleCallInfo::arguments`]). Off by default: unused
+    /// locals cost time.
+    pub whole_files: bool,
 }
 
 impl Default for AnalyzeOptions {
@@ -41,6 +46,7 @@ impl Default for AnalyzeOptions {
             var_files: Vec::new(),
             max_module_depth: 10,
             max_expand: 64,
+            whole_files: false,
         }
     }
 }
@@ -1211,6 +1217,22 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                 },
                 remote: matches!(c.source, ModuleSource::Remote(_)),
                 span: FileSpan::new(c.file, header_span(c.block)),
+                // Evaluated in the caller, outside any `count`/`for_each`
+                // instance: an argument that reads `count.index` or
+                // `each` is not known here.
+                arguments: if self.opts.whole_files {
+                    c.block
+                        .body
+                        .attributes()
+                        .filter(|a| !matches!(&*a.key.name, "providers" | "depends_on"))
+                        .map(|a| {
+                            let v = self.eval(inst_id, c.file, &a.value, Scope::EMPTY);
+                            (Arc::from(&*a.key.name), v)
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                },
             })
             .collect();
         let mut symbols = Vec::new();
@@ -1248,6 +1270,34 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                 span: FileSpan::new(o.file, header_span(o.block)),
             });
         }
+        // Every attribute of the other top-level blocks (`provider`,
+        // `terraform`, `check`, `import`, ...), evaluated in this instance,
+        // by expression span: what a whole-file rule renders.
+        let mut block_values = std::collections::HashMap::new();
+        if self.opts.whole_files {
+            for (sf, file) in &def.files {
+                for b in file.body.blocks() {
+                    if !matches!(
+                        &*b.ident.name,
+                        "resource" | "data" | "module" | "variable" | "locals" | "output"
+                    ) {
+                        self.block_values(inst_id, sf.id, &b.body, &mut block_values);
+                    }
+                }
+            }
+        }
+        let locals = if self.opts.whole_files {
+            def.locals
+                .iter()
+                .map(|l| model::VariableInfo {
+                    name: l.name.into(),
+                    value: self.local_value(inst_id, l.name),
+                    span: FileSpan::new(l.file, l.attr.span),
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         model::Module {
             address: inst.address.clone(),
             dir: def.dir.clone(),
@@ -1255,9 +1305,29 @@ impl<'a, 'o> Analyzer<'a, 'o> {
             resources,
             variables,
             outputs,
+            locals,
+            block_values,
             module_calls,
             symbols,
             references: def.references.clone(),
+        }
+    }
+
+    fn block_values(
+        &self,
+        inst_id: usize,
+        file: FileId,
+        body: &'a Body<'a>,
+        out: &mut std::collections::HashMap<FileSpan, Value>,
+    ) {
+        for a in body.attributes() {
+            let v = self.eval(inst_id, file, &a.value, Scope::EMPTY);
+            out.insert(FileSpan::new(file, tf_span::GetSpan::span(&a.value)), v);
+        }
+        for b in body.blocks() {
+            if &*b.ident.name != "dynamic" {
+                self.block_values(inst_id, file, &b.body, out);
+            }
         }
     }
 

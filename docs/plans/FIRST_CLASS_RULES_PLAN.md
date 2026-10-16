@@ -228,11 +228,12 @@ The reference is `opa eval -d PATH...` with OPA 1.17.0. The code is in
   event and node layer with `pyyaml.rs`. The tests pin 60+ scalars, keys
   and merges to `opa eval` output. Float keys, `!!binary`, `!!set` and
   local tags on collections are rejected; OPA accepts them.
-- *Policy unit = entry rule.* Each `--policy-entry REF` (repeatable;
-  default `data.main.deny`) is one oxtf rule. A missing entry is a load
-  error, and so is an entry that does not evaluate to a set on an empty
-  document. Discovering entries by Conftest's conventions (`deny_*`,
-  namespaces) is F4.
+- *Policy unit = entry rule.* Each `--policy-entry REF` (repeatable) is
+  one oxtf rule. A missing entry is a load error, and so is an entry that
+  does not evaluate to a set on an empty document. Without
+  `--policy-entry`, F4's Conftest mode applies instead: rules are
+  discovered, and only `.rego` loads from `--policy`. The bundle and data
+  rules above are OPA mode's.
 - *Rego version.* v1 by default, as OPA 1.x. `--rego-v0` matches
   `opa eval --v0-compatible`, where a file with `import rego.v1` is still
   v1; regorus follows the same per-file rule.
@@ -344,23 +345,115 @@ is not projected, so a policy that reads `input.configuration` (some AVM
 helpers do) sees none. Module resources sit flat in
 `planned_values.root_module`, not under `child_modules`.
 
-### F4. Conftest compatibility
+### F4. Conftest compatibility (implemented 2026-10-16)
 
-- [ ] Conftest's rule conventions: `deny`, `violation` and `warn`, including
-  prefixed rules (`deny_*`, `warn_*`), across namespaces (`--namespace`,
-  `--all-namespaces`, default `main`). This replaces the single
-  `--policy-entry`. `warn` maps to a lower `Level` (decide which) but
-  keeps full certainty semantics; `exception` rules suppress as Conftest does.
-- [ ] Input shapes per policy: Conftest's hcl2 parser shape (`Shape::Hcl`)
-  and plan JSON (`Shape::Plan`). Make the shape configurable per policy
-  directory instead of the global `--policy-shape`.
-- [ ] `oxtf rules test` runs a policy directory's `test_*` rules, like
-  `conftest verify`, so authors can keep their existing test workflow.
-- [ ] Define and document the optional `fix` field (criterion 6) in a way
-  that is harmless to real Conftest.
+The oracle is Conftest v0.71.0 (2026-09-30; it embeds OPA 1.21.0 and
+hcl2json v0.6.7), downloaded from the release and checked against its
+`checksums.txt`. Its source at the tag was read for every rule below.
 
-**Gate:** pinned `conftest test` and oxtf agree on the corpus for a policy
-set covering every rule convention above, compared per (policy, resource).
+**Decisions (with the user).** Conftest evaluates one file at a time, in
+hcl2json's shape, so oxtf does the same: per file, with hcl2json's
+structure but oxtf's values. That per-file result is the answer. Each
+violation is then attributed by ablation, to every resource instance whose
+block alone reproduces it. A violation no single resource reproduces
+(module, provider or variable checks, joins) is a finding on the file,
+through the new `subject` of finding schema 2 (`docs/FINDING_SCHEMA.md`).
+Certainty is decided over the whole file: Definite only when nothing in the
+file was hidden from the policy.
+
+- [x] **Modes.** Naming any `--policy-entry` keeps F3's OPA mode.
+  Otherwise oxtf follows Conftest:
+  - `--policy` loads `.rego` only, and `--data` adds JSON/YAML documents;
+  - every rule named `deny`, `violation` or `warn`, alone or with
+    `_suffix` (Conftest's regexes), in the selected namespaces is one oxtf
+    rule. Namespaces come from `--namespace` (repeatable, default `main`)
+    or `--all-namespaces`; a namespace with no package is a load error,
+    where Conftest silently passes;
+  - `warn` rules default to level `low`, deny/violation to `medium`, and
+    `custom.severity` overrides both;
+  - `exception` sets suppress a rule's results on an input exactly as
+    Conftest's query does (`data.<ns>.exception[_][_] == "<name>"`);
+  - results are read as Conftest reads them: strings, or objects with a
+    `msg` string (an object without one is an error), with empty messages
+    and other values ignored.
+- [x] **Input documents.** In the HCL shape (the default for directory
+  scans), each module instance's `.tf` files are rendered by
+  `tf_rego::hcl2json`:
+  - the structure is hcl2json's;
+  - resource and data bodies come from the evaluated instances (a key on
+    which instances disagree is hidden; `count = 0` removes the block);
+  - `locals`, module-call arguments and outputs come from the model,
+    and other blocks' attributes are evaluated in the module instance
+    (`AnalyzeOptions::whole_files`, on only when such a rule runs);
+  - syntax positions keep hcl2json's `${...}` text: variable `type`,
+    `depends_on`, `provider`, `ignore_changes`, conditions and `moved`;
+  - `data.conftest.file` is set when a policy can read it.
+
+  In the plan shape (the default for `--plan` scans) the document is the
+  root's plan, and a result no resource reproduces is a rule error, since
+  a plan has no file to report it on. `custom.oxtf.shape` and
+  `custom.oxtf.input` (`document`, `resource`, `module`) override both per
+  policy.
+- [x] `oxtf rules test --policy DIR [--data ...] [--namespace ...]` runs
+  `test_*` rules as `conftest verify` does (`todo_test_*` are skipped), and
+  exits 1 on a failure or error. Conftest's `parse_config` is provided for
+  `hcl2` (the exact hcl2json rendering) and `json`. `parse_config_file`
+  resolves each string literal against the directories of the policy files
+  that pass it, and is an error when that is ambiguous.
+  `parse_combined_config_files` is an error.
+- [x] `fix`: a violation object may carry
+  `"fix": {"attribute": "<top-level name>", "value": <literal>}`, which
+  becomes the finding's fix hint (action `set`). Conftest keeps unknown
+  keys as metadata, so the field is harmless there.
+
+**Gate results.**
+
+- *hcl2json rendering:* `tf_rego::hcl2json::raw` equals
+  `conftest parse --parser hcl2` on all 2,171 corpus `.tf` files and on
+  `fixtures/rego/hcl2json/tricky.tf` (escapes, strip markers, directives,
+  heredocs, object keys, big numbers), with
+  `bench/rego/hcl2json_compare.py`.
+- *Fixtures, against `conftest test`:*
+  - `fixtures/rego/foreign` (Conftest's own hcl2 example policy): the same
+    four failures, one per certainty class;
+  - `fixtures/rego/conftest`: the same failures, the warning and the
+    exception, with module and provider results on the file and the join
+    on the bucket;
+  - `rules test` on its tests: 2 passed, 1 failure, 1 skipped, the same as
+    `conftest verify`.
+- *Corpus (`bench/rego/conftest_compare.py`):*
+  - `fixtures/rego/conftest_gate` (every convention, two namespaces,
+    `--all-namespaces`): 15,197 (rule, file) comparisons. 15,171 agree
+    (58 of them with violations), 0 differ in files with only literal
+    values, and 0 oxtf errors. The other 26 differ in files with
+    expressions, all where the semantic contract says they should: computed
+    `tags` that oxtf hides and Conftest sees as `"${merge(...)}"`,
+    resources with `count = 0` or an empty `for_each` that Conftest still
+    sees, and `force_destroy`/`count` values Conftest sees only as
+    `${var...}`.
+  - `fixtures/rego/conftest/policy`: 6,513 of 6,513 agree. Before
+    provider blocks were evaluated in their module, 63 differed on
+    `region = local.region`.
+- *Conformance of OPA mode* (F3 harness, rerun): unchanged.
+
+**Cost** (corpus, 8 threads; baseline without policies 0.10 s):
+
+- `conftest_gate`: 0.65–0.78 s.
+- The same set without its `data.conftest.file` exception: about 0.27 s.
+
+Each file a policy can read `data.conftest.file` for needs its own prepared
+engine, shared by the bundle's rules for that root. A `with` override per
+query was tried and was slower, because the query is compiled each time.
+Rendered documents, engines and exception results are cached per root
+(`ConfigFile::run`). The budget gate is F5's.
+
+**Known limits:**
+
+- A file finding points at the file's start: the result does not say
+  which block it is about.
+- Conftest's `--combine` and its non-Terraform parsers are out of scope.
+- The regorus gaps of F3 apply. Conftest's own hcl2 example uses
+  `sprintf("%q")`, so two of its five tests are rule errors.
 
 ### F5. Unified loading, metadata and UX
 
@@ -371,7 +464,9 @@ set covering every rule convention above, compared per (policy, resource).
   shows the source engine and file; JSON output includes it.
 - [ ] Load diagnostics with spans for all three formats (criterion 4).
 - [ ] `tfscan` takes the same paths (`rules=["policies/"]`); the Python-side
-  Checkov graph importer is deleted.
+  Checkov graph importer is deleted. `tfscan.scan` also needs the
+  F3/F4 policy options it lacks: several entries, `rego_v0`, `--data`,
+  namespaces.
 - [ ] Fix-hint derivation from IR predicates (criterion 6), with
   fixtures that apply each hint and rescan to a pass.
 - [ ] Suppression-comment compatibility: `#checkov:skip=ID:reason` applies

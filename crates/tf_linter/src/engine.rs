@@ -6,9 +6,19 @@ use std::sync::Arc;
 
 use tf_eval::Truth;
 use tf_semantic::Analysis;
+use tf_semantic::source::FileTable;
+use tf_semantic::store::ModuleStore;
 
 use crate::record::RuleError;
-use crate::rule::{DynRule, Finding, RuleInfo};
+use crate::rule::{ConfigFile, DynRule, Finding, RuleInfo, Subject};
+
+/// Where a root's parsed source lives while its rules run, for rules that
+/// judge whole files.
+#[derive(Clone, Copy)]
+pub struct Sources<'s> {
+    pub store: &'s ModuleStore,
+    pub files: &'s FileTable,
+}
 
 /// What one module-instance pass produced.
 #[derive(Default)]
@@ -72,6 +82,11 @@ impl Linter {
         select_rules(rules, ids).map(Self::new)
     }
 
+    /// Whether any rule judges whole files (see [`Linter::run_with`]).
+    pub fn needs_files(&self) -> bool {
+        self.rules.iter().any(|r| r.needs_files())
+    }
+
     pub fn rules(&self) -> &[RuleInfo] {
         &self.infos
     }
@@ -80,6 +95,12 @@ impl Linter {
     /// the only place findings are constructed, and the only place a rule
     /// failure is turned into a [`RuleError`].
     pub fn run(&self, analysis: &Analysis) -> RunOutput {
+        self.run_with(analysis, None)
+    }
+
+    /// [`Linter::run`] with the parsed source available to whole-file
+    /// rules.
+    pub fn run_with(&self, analysis: &Analysis, sources: Option<Sources<'_>>) -> RunOutput {
         let root = analysis.root_dir.as_path();
         let mut out = Vec::new();
         let mut rule_errors = Vec::new();
@@ -114,6 +135,70 @@ impl Linter {
                     resource: None,
                     message,
                 }),
+            }
+        }
+        if self.rules.iter().any(|r| r.needs_files()) {
+            static RUN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            let run = RUN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let mut config = Vec::new();
+            if let Some(src) = sources {
+                for m in &analysis.modules {
+                    for (sf, ast) in &src.store.module(src.files, &m.dir).files {
+                        config.push(ConfigFile {
+                            module: m,
+                            source: sf.clone(),
+                            ast,
+                            run,
+                        });
+                    }
+                }
+            }
+            for (i, rule) in self
+                .rules
+                .iter()
+                .enumerate()
+                .filter(|(_, r)| r.needs_files())
+            {
+                match rule.judge_files(analysis, &config) {
+                    Ok(judgements) => {
+                        for (subject, j) in judgements {
+                            match subject {
+                                Subject::Resource(r) => out.extend(Finding::build(
+                                    &self.infos[i],
+                                    r,
+                                    j.severity,
+                                    j.witness.as_ref(),
+                                    &j.message,
+                                    root,
+                                    j.hidden,
+                                    j.fix_hint,
+                                )),
+                                Subject::File { module, file } => {
+                                    let sf = config
+                                        .iter()
+                                        .find(|c| c.source.id == file)
+                                        .map(|c| c.source.clone())
+                                        .expect("a file subject names a loaded file");
+                                    out.push(Finding::for_file(
+                                        &self.infos[i],
+                                        module,
+                                        &sf,
+                                        j.severity,
+                                        j.witness.as_ref(),
+                                        &j.message,
+                                        root,
+                                        j.hidden,
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                    Err(message) => rule_errors.push(RuleError {
+                        rule: self.infos[i].name.to_string(),
+                        resource: None,
+                        message,
+                    }),
+                }
             }
         }
         for m in &analysis.modules {

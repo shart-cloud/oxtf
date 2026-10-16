@@ -14,11 +14,11 @@ use tf_eval::{Kind, Known, Step, Truth, Value};
 use tf_semantic::{Address, Diagnostic, FileTable, InstanceKey, Mode};
 use tf_span::FileSpan;
 
-use crate::rule::{Category, Finding, FixHint, Hidden, Level, Severity};
+use crate::rule::{Category, Finding, FindingSubject, FixHint, Hidden, Level, Severity};
 use crate::scan::{ScanResult, ScanStats};
 
 /// Version of the record shape. Bumped on any breaking change.
-pub const SCHEMA: u32 = 1;
+pub const SCHEMA: u32 = 2;
 
 /// A resolved source location.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -82,6 +82,15 @@ impl From<&Address> for ResourceRef {
             }),
         }
     }
+}
+
+/// `{"kind": "resource", "address"}` or `{"kind": "file", "file",
+/// "module"}`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SubjectRecord {
+    Resource { address: String },
+    File { file: String, module: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -192,7 +201,10 @@ pub struct FindingRecord {
     pub fingerprint: String,
     pub rule: RuleRef,
     pub severity: Severity,
-    pub resource: ResourceRef,
+    /// What the finding is about.
+    pub subject: SubjectRecord,
+    /// The resource instance, or `None` when the subject is a file.
+    pub resource: Option<ResourceRef>,
     /// Root module directory the finding was produced in.
     pub root: String,
     /// Attribute path of the deciding value within the resource.
@@ -235,7 +247,16 @@ pub fn finding_record(files: &FileTable, f: &Finding) -> FindingRecord {
             description: f.description.to_string(),
         },
         severity: f.severity,
-        resource: ResourceRef::from(&f.resource),
+        subject: match &f.subject {
+            FindingSubject::Resource(a) => SubjectRecord::Resource {
+                address: a.to_string(),
+            },
+            FindingSubject::File { path } => SubjectRecord::File {
+                file: path.display().to_string(),
+                module: f.module.to_string(),
+            },
+        },
+        resource: f.subject.resource().map(ResourceRef::from),
         root: f.root.display().to_string(),
         attribute: f.attribute.as_deref().map(str::to_string),
         configured: f.configured.as_ref().map(value_record),

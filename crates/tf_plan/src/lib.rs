@@ -294,6 +294,8 @@ impl<'p> Builder<'p> {
                     resources: Vec::new(),
                     variables: self.variables(a, src),
                     outputs: Vec::new(),
+                    locals: src.map(|m| m.locals.clone()).unwrap_or_default(),
+                    block_values: src.map(|m| m.block_values.clone()).unwrap_or_default(),
                     module_calls: src.map(|m| m.module_calls.clone()).unwrap_or_default(),
                     symbols: src.map(|m| m.symbols.clone()).unwrap_or_default(),
                     references: src.map(|m| m.references.clone()).unwrap_or_default(),

@@ -159,6 +159,7 @@ pub fn scan_with(
     let store = ModuleStore::new();
     let aopts = AnalyzeOptions {
         var_files: opts.var_files.clone(),
+        whole_files: linter.needs_files(),
         ..AnalyzeOptions::default()
     };
     // What survives a root once its rules have run.
@@ -174,7 +175,13 @@ pub fn scan_with(
             .par_iter()
             .map(|r| {
                 let a = analyze_module_shared(r, &aopts, &files, &store);
-                let out = linter.run(&a);
+                let out = linter.run_with(
+                    &a,
+                    Some(crate::engine::Sources {
+                        store: &store,
+                        files: &files,
+                    }),
+                );
                 RootResult {
                     module_instances: a.modules.len(),
                     resources: a.stats.resources,

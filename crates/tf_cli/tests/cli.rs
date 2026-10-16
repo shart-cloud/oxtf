@@ -239,14 +239,20 @@ fn rule_errors_exit_one_with_output() {
         .unwrap();
     assert_eq!(out.status.code(), Some(1));
     let err = String::from_utf8_lossy(&out.stderr);
+    // Conftest evaluates the whole file, so the error names the file.
     assert!(
-        err.contains("aws_security_group_rule.open") && err.contains("%q"),
+        err.contains("foreign_sprintf/main.tf") && err.contains("%q"),
         "{err}"
     );
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(
-        v["rule_errors"][0]["resource"],
-        "aws_security_group_rule.open"
+    assert_eq!(v["rule_errors"][0]["resource"], serde_json::Value::Null);
+    // No finding from the policy whose evaluation failed.
+    assert!(
+        v["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|f| !f["rule"]["id"].as_str().unwrap().starts_with("rego:"))
     );
 }
 

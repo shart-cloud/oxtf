@@ -7,3 +7,9 @@ https://github.com/open-policy-agent/conftest at commit
 SHA-256: `822b1c1902c6597aa596ecb0d83ae29d2fb1bbb7a4b41ce2db58c524b0a97dd7`.
 It is run unchanged over oxtf's HCL-shaped projection as the exit check for
 the foreign-policy seam.
+
+The Terraform is one file per certainty class (`plain.tf` definite,
+`from_var.tf` conditional, `from_data.tf` indeterminate, `ok.tf` flagged by
+the policy's own logic): Conftest evaluates a file at a time, and oxtf
+classifies a finding over everything in its file. `conftest test` v0.71.0
+on these four files reports the same four failures.

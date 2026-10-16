@@ -1588,6 +1588,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
+ "tf_ast",
  "tf_eval",
  "tf_schema",
  "tf_semantic",
@@ -1621,13 +1622,18 @@ dependencies = [
 name = "tf_rego"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
  "regorus",
  "serde",
  "serde_json",
+ "tf_allocator",
+ "tf_ast",
  "tf_eval",
  "tf_linter",
+ "tf_parser",
  "tf_rule_ir",
  "tf_semantic",
+ "tf_span",
 ]
 
 [[package]]

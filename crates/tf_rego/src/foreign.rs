@@ -1,11 +1,21 @@
-//! Foreign Rego policies: OPA bundles people already have, run unchanged.
+//! Foreign Rego policies: Conftest policy directories and OPA bundles
+//! people already have, run unchanged.
 //!
-//! Every `--policy` path loads into one engine, as `opa eval -d a -d b`
-//! loads its paths: `.rego` files are modules (packages merge across
-//! files) and `.json`/`.yaml`/`.yml` files are data documents placed at
-//! their directory's path below the root they were found under. Each entry
-//! rule (`data.main.deny` by default) is one oxtf rule, with its identity,
-//! level and description from the policy's own metadata ([`Meta`]).
+//! Two modes, chosen by whether entry rules are named:
+//!
+//! - **Conftest** (no `entries`): as `conftest test`, policy paths load
+//!   `.rego` files only, data comes from `data` paths, and every rule named
+//!   `deny`, `violation` or `warn` (alone or with a `_suffix`) in the
+//!   selected namespaces (`main` by default) is one oxtf rule. A rule's
+//!   results on an input are suppressed when the namespace's `exception`
+//!   set names it.
+//! - **OPA** (`entries` given): as `opa eval -d a -d b`, `.json`/`.yaml`
+//!   files next to the policies are data too, and each entry rule is one
+//!   oxtf rule.
+//!
+//! In both, packages merge across files, data documents sit at their
+//! directory's path below the root they were found under, and identity,
+//! level and description come from the policy's own metadata ([`Meta`]).
 //!
 //! Rego never sees an abstract value: each evaluation's input is the
 //! Known-only [`projection`](crate::projection), and certainty is decided
@@ -19,7 +29,7 @@ use std::sync::{Arc, Mutex};
 use regorus::unstable::{Expr, Module, Rule, RuleHead};
 use serde_json::{Map as JsonMap, Value as Json, json};
 use tf_eval::{Kind, Known, Truth, Value};
-use tf_linter::rule::{DynRule, Hidden, Judgement, RuleFailure, RuleInfo};
+use tf_linter::rule::{ConfigFile, DynRule, Hidden, Judgement, RuleFailure, RuleInfo, Subject};
 use tf_linter::{ANY_TYPE, Category, Level, Severity};
 use tf_semantic::{Body, Resource};
 
@@ -29,8 +39,17 @@ use crate::projection::{self, Abstraction, Projection, Shape};
 #[derive(Clone, Debug)]
 pub struct Options<'a> {
     pub paths: &'a [PathBuf],
+    /// Data documents (`.json`/`.yaml`/`.yml`), as Conftest's `--data`.
+    pub data: &'a [PathBuf],
     /// Entry rules, `data.<package>.<rule>`; each becomes one oxtf rule.
+    /// Naming any selects OPA mode.
     pub entries: &'a [String],
+    /// Conftest namespaces to run (`main` when empty).
+    pub namespaces: &'a [String],
+    /// Run every namespace (`conftest --all-namespaces`).
+    pub all_namespaces: bool,
+    /// The input shape for policies that do not declare
+    /// `custom.oxtf.shape`.
     pub shape: Shape,
     /// Parse as `opa eval --v0-compatible` does (a file that imports
     /// `rego.v1` is still v1).
@@ -40,20 +59,59 @@ pub struct Options<'a> {
 /// The default entry rule, Conftest's.
 pub const DEFAULT_ENTRY: &str = "data.main.deny";
 
+/// Conftest's rule-name conventions (`policy/engine.go`).
+fn conftest_kind(name: &str) -> Option<RuleKind> {
+    let suffix_ok = |rest: &str| {
+        rest.is_empty()
+            || rest.strip_prefix('_').is_some_and(|r| {
+                r.split('_')
+                    .all(|part| !part.is_empty() && part.bytes().all(|c| c.is_ascii_alphanumeric()))
+            })
+    };
+    if let Some(rest) = name.strip_prefix("warn") {
+        return suffix_ok(rest).then_some(RuleKind::Warning);
+    }
+    for prefix in ["deny", "violation"] {
+        if let Some(rest) = name.strip_prefix(prefix) {
+            return suffix_ok(rest).then_some(RuleKind::Failure);
+        }
+    }
+    None
+}
+
+/// The name an `exception` entry uses for a rule: without its
+/// `deny_`/`violation_`/`warn_` prefix, `""` for a bare `deny`.
+fn exception_name(rule: &str) -> &str {
+    if matches!(rule, "deny" | "violation" | "warn") {
+        return "";
+    }
+    ["violation_", "deny_", "warn_"]
+        .iter()
+        .find_map(|p| rule.strip_prefix(p))
+        .unwrap_or(rule)
+}
+
+/// A Conftest rule's class: failures (`deny`, `violation`) or warnings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum RuleKind {
+    Failure,
+    Warning,
+}
+
 /// Load the bundle and build one rule per entry. Every load-time problem
 /// (unreadable file, compile error, missing entry, bad metadata, merge
 /// conflict) is an `Err` naming the file.
 pub fn rules(opts: &Options) -> Result<Vec<Box<dyn DynRule>>, String> {
     let bundle = Bundle::load(opts)?;
-    let defaults = [DEFAULT_ENTRY.to_string()];
-    let entries = if opts.entries.is_empty() {
-        &defaults[..]
-    } else {
-        opts.entries
-    };
     let mut units = Vec::new();
-    for entry in entries {
-        units.push(bundle.unit(entry)?);
+    if opts.entries.is_empty() {
+        for (path, kind) in bundle.conftest_rules(opts)? {
+            units.push(bundle.unit(path, Some(kind))?);
+        }
+    } else {
+        for entry in opts.entries {
+            units.push(bundle.unit(parse_entry(entry)?, None)?);
+        }
     }
     // Fallback IDs from file stems must be unique; ambiguous ones use the
     // rule path instead.
@@ -79,16 +137,41 @@ pub fn rules(opts: &Options) -> Result<Vec<Box<dyn DynRule>>, String> {
                 "rule ID {id} is declared by both {other} and {entry}"
             ));
         }
-        if u.meta.input == Input::Module && opts.shape != Shape::Plan {
+        let shape = u.meta.shape.unwrap_or(opts.shape);
+        // Conftest evaluates whole documents unless the policy says otherwise.
+        let input = match (u.kind, u.meta.input_set) {
+            (Some(_), false) => Input::Document,
+            _ => u.meta.input,
+        };
+        if input == Input::Module && shape != Shape::Plan {
             return Err(format!(
                 "{entry}: custom.oxtf.input `module` needs the plan input shape"
             ));
         }
+        // Only a package that defines `exception` can suppress (Conftest's
+        // query is simply undefined otherwise).
+        let exception = u.kind.and_then(|_| {
+            let (rule, package) = u.path.split_last().expect("a rule path");
+            let mut defined = package.to_vec();
+            defined.push("exception".into());
+            bundle
+                .rules
+                .iter()
+                .any(|r| r.path == defined)
+                .then(|| Exception {
+                    rule: format!("data.{}", defined.join(".")),
+                    name: exception_name(rule).to_string(),
+                })
+        });
+        let default_level = match u.kind {
+            Some(RuleKind::Warning) => Level::Low,
+            _ => Level::Medium,
+        };
         rules.push(Box::new(ForeignPolicy {
             info: RuleInfo {
                 name: id.as_str().into(),
                 category: Category::Other,
-                level: u.meta.level.unwrap_or(Level::Medium),
+                level: u.meta.level.unwrap_or(default_level),
                 description: u
                     .meta
                     .description
@@ -102,10 +185,11 @@ pub fn rules(opts: &Options) -> Result<Vec<Box<dyn DynRule>>, String> {
                 runs_on_module: false,
             },
             types: u.meta.resource_types.clone(),
-            input: u.meta.input,
+            input,
             bundle: bundle.clone(),
             entry,
-            shape: opts.shape,
+            shape,
+            exception,
             trace: trace.clone(),
         }));
     }
@@ -146,11 +230,25 @@ struct RuleDef {
 }
 
 struct Bundle {
+    /// Unique per bundle (keys the per-thread working engines).
+    id: u64,
     engine: regorus::Engine,
+    /// Whether any policy can read `data.conftest` (see [`reads_conftest`]):
+    /// only then is `data.conftest.file` set per file, which costs a
+    /// re-prepared engine.
+    file_info: bool,
     packages: Vec<PackageDef>,
     rules: Vec<RuleDef>,
     annotations: Vec<Annotation>,
     shape: Shape,
+}
+
+/// The `exception` set that can suppress a Conftest rule, and the name it
+/// must contain.
+#[derive(Clone, Debug)]
+struct Exception {
+    rule: String,
+    name: String,
 }
 
 enum Fallback {
@@ -160,6 +258,7 @@ enum Fallback {
 
 struct Unit {
     path: Vec<String>,
+    kind: Option<RuleKind>,
     meta: Meta,
     fallback: Fallback,
 }
@@ -168,8 +267,18 @@ impl Bundle {
     fn load(opts: &Options) -> Result<Bundle, String> {
         let mut modules = Vec::new();
         let mut data = Json::Object(JsonMap::new());
+        // Conftest loads only `.rego` from policy paths; `opa eval -d`
+        // loads data next to the policies too.
+        let only = if opts.entries.is_empty() {
+            Some(Load::Rego)
+        } else {
+            None
+        };
         for root in opts.paths {
-            collect(root, root, &mut modules, &mut data)?;
+            collect(root, root, only, &mut modules, &mut data)?;
+        }
+        for root in opts.data {
+            collect(root, root, Some(Load::Data), &mut modules, &mut data)?;
         }
         if modules.is_empty() {
             return Err("no .rego files in the policy paths".into());
@@ -180,6 +289,9 @@ impl Bundle {
         // undefined. Without it, a builtin regorus gets wrong would be a
         // silent pass.
         engine.set_strict_builtin_errors(true);
+        if opts.entries.is_empty() {
+            conftest_builtins(&mut engine, &modules)?;
+        }
         for (path, source) in &modules {
             engine
                 .add_policy(path.display().to_string(), source.clone())
@@ -209,8 +321,12 @@ impl Bundle {
         for (path, source) in &modules {
             annotations.extend(parse_annotations(path, source, &packages, &rules)?);
         }
+        let file_info = modules.iter().any(|(_, src)| reads_conftest(src));
+        static IDS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         Ok(Bundle {
+            id: IDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             engine,
+            file_info,
             packages,
             rules,
             annotations,
@@ -218,8 +334,50 @@ impl Bundle {
         })
     }
 
-    fn unit(&self, entry: &str) -> Result<Unit, String> {
-        let path = parse_entry(entry)?;
+    /// The Conftest rules in the selected namespaces, in name order.
+    fn conftest_rules(&self, opts: &Options) -> Result<Vec<(Vec<String>, RuleKind)>, String> {
+        let mut namespaces: Vec<Vec<String>> = if opts.all_namespaces {
+            self.packages.iter().map(|p| p.path.clone()).collect()
+        } else if opts.namespaces.is_empty() {
+            vec![vec!["main".to_string()]]
+        } else {
+            opts.namespaces
+                .iter()
+                .map(|n| n.split('.').map(str::to_string).collect())
+                .collect()
+        };
+        namespaces.sort();
+        namespaces.dedup();
+        let mut out = Vec::new();
+        for ns in &namespaces {
+            if !self.packages.iter().any(|p| &p.path == ns) {
+                return Err(format!(
+                    "no policy declares package {} (select namespaces with --namespace or --all-namespaces)",
+                    ns.join(".")
+                ));
+            }
+            let mut names: Vec<(&str, RuleKind)> = self
+                .rules
+                .iter()
+                .filter(|r| r.path.len() == ns.len() + 1 && r.path.starts_with(ns))
+                .filter_map(|r| {
+                    let name = r.path.last().expect("nonempty").as_str();
+                    conftest_kind(name).map(|k| (name, k))
+                })
+                .collect();
+            names.sort();
+            names.dedup();
+            for (name, kind) in names {
+                let mut path = ns.clone();
+                path.push(name.to_string());
+                out.push((path, kind));
+            }
+        }
+        Ok(out)
+    }
+
+    fn unit(&self, path: Vec<String>, kind: Option<RuleKind>) -> Result<Unit, String> {
+        let entry = &format!("data.{}", path.join("."));
         let defs: Vec<&RuleDef> = self.rules.iter().filter(|r| r.path == path).collect();
         let Some(first) = defs.first() else {
             return Err(format!("entry rule {entry} is not defined by any policy"));
@@ -232,8 +390,9 @@ impl Bundle {
             .max_by_key(|p| p.len())
             .expect("a rule belongs to a package")
             .clone();
+        let meta = self.meta(&path, &package)?;
         // The entry must produce violations (or nothing) on an empty document.
-        let empty = match self.shape {
+        let empty = match meta.shape.unwrap_or(self.shape) {
             Shape::Hcl => json!({"resource": {}}),
             Shape::Plan => {
                 json!({"format_version": "1.2", "resource_changes": [], "planned_values": {"root_module": {"resources": []}}})
@@ -241,7 +400,6 @@ impl Bundle {
         };
         let result = eval(&self.engine, empty, entry).map_err(|e| format!("{entry}: {e}"))?;
         violations(&result).map_err(|e| format!("{entry}: {e}"))?;
-        let meta = self.meta(&path, &package)?;
         let fallback = if defs.iter().all(|d| d.file == first.file) {
             Fallback::Stem(
                 first
@@ -256,6 +414,7 @@ impl Bundle {
         };
         Ok(Unit {
             path,
+            kind,
             meta,
             fallback,
         })
@@ -311,12 +470,249 @@ impl Bundle {
     }
 }
 
+/// A configuration in one of the formats `parse_config` reproduces.
+fn parse_with(parser: &str, text: &str) -> anyhow::Result<Json> {
+    Ok(match parser {
+        "hcl2" => {
+            let alloc = tf_allocator::Allocator::new();
+            let parsed = tf_parser::parse(&alloc, text);
+            if !parsed.errors.is_empty() {
+                anyhow::bail!("parse_config: hcl2: the configuration does not parse");
+            }
+            let file = alloc.alloc(parsed.file);
+            crate::hcl2json::raw(file, text).map_err(|e| anyhow::anyhow!("parse_config: {e}"))?
+        }
+        "json" => {
+            serde_json::from_str(text).map_err(|e| anyhow::anyhow!("parse_config: json: {e}"))?
+        }
+        other => anyhow::bail!("parse_config: parser {other:?} is not supported (hcl2, json)"),
+    })
+}
+
+/// Conftest's own builtins, as far as they can be reproduced exactly:
+///
+/// - `parse_config` for the `hcl2` parser (hcl2json,
+///   [`crate::hcl2json::raw`]) and `json`;
+/// - `parse_config_file`, which resolves its path against the directory of
+///   the calling policy file. An extension does not see its caller, so each
+///   string literal passed to it in the bundle is mapped to the directories
+///   of the files that pass it; a path with exactly one such directory
+///   resolves, any other is an error;
+/// - `parse_combined_config_files` fails: Conftest's combined document is
+///   not reproduced.
+fn conftest_builtins(
+    engine: &mut regorus::Engine,
+    modules: &[(PathBuf, String)],
+) -> Result<(), String> {
+    let parse_config = |args: Vec<regorus::Value>| -> anyhow::Result<regorus::Value> {
+        let (Ok(parser), Ok(text)) = (args[0].as_string(), args[1].as_string()) else {
+            anyhow::bail!("parse_config: expected (parser, configuration) strings");
+        };
+        Ok(regorus::Value::from(parse_with(parser, text)?))
+    };
+    let mut callers: HashMap<String, std::collections::BTreeSet<PathBuf>> = HashMap::new();
+    for (path, source) in modules {
+        let mut rest = source.as_str();
+        while let Some(i) = rest.find("parse_config_file(") {
+            rest = &rest[i + "parse_config_file(".len()..];
+            let arg = rest.trim_start();
+            if let Some(lit) = arg
+                .strip_prefix('"')
+                .and_then(|a| a.split_once('"'))
+                .map(|(l, _)| l)
+            {
+                callers
+                    .entry(lit.to_string())
+                    .or_default()
+                    .insert(path.parent().unwrap_or(Path::new(".")).to_path_buf());
+            }
+        }
+    }
+    let parse_config_file = move |args: Vec<regorus::Value>| -> anyhow::Result<regorus::Value> {
+        let Ok(arg) = args[0].as_string() else {
+            anyhow::bail!("parse_config_file: expected a path string");
+        };
+        let dirs = callers
+            .get(&**arg)
+            .map(|d| d.iter().collect::<Vec<_>>())
+            .unwrap_or_default();
+        let [dir] = dirs.as_slice() else {
+            anyhow::bail!(
+                "parse_config_file({arg:?}): the calling policy file cannot be determined (pass a string literal from one directory)"
+            );
+        };
+        let path = dir.join(&**arg);
+        let parser = match path.extension().and_then(|e| e.to_str()) {
+            Some("tf" | "hcl") => "hcl2",
+            Some("json") => "json",
+            _ => anyhow::bail!(
+                "parse_config_file: {}: unsupported file type",
+                path.display()
+            ),
+        };
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| anyhow::anyhow!("read config file {}: {e}", path.display()))?;
+        Ok(regorus::Value::from(parse_with(parser, &text)?))
+    };
+    let unsupported = |name: &'static str| {
+        move |_: Vec<regorus::Value>| -> anyhow::Result<regorus::Value> {
+            anyhow::bail!("{name} is not supported: Conftest's combined document is not reproduced")
+        }
+    };
+    engine
+        .add_extension("parse_config".into(), 2, Box::new(parse_config))
+        .and_then(|_| {
+            engine.add_extension("parse_config_file".into(), 1, Box::new(parse_config_file))
+        })
+        .and_then(|_| {
+            engine.add_extension(
+                "parse_combined_config_files".into(),
+                1,
+                Box::new(unsupported("parse_combined_config_files")),
+            )
+        })
+        .map_err(|e| e.to_string())
+}
+
+/// One `test_*` rule's outcome (`oxtf rules test`, Conftest's `verify`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct TestOutcome {
+    /// `data.<package>.<rule>`.
+    pub rule: String,
+    pub file: PathBuf,
+    pub result: TestResult,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum TestResult {
+    Pass,
+    Fail,
+    /// `todo_test_*`.
+    Skip,
+    Error(String),
+}
+
+/// Run the bundle's tests as `conftest verify` does (OPA's tester): every
+/// rule named `test_*` passes when it evaluates to `true`; `todo_test_*`
+/// is skipped. `namespaces` narrows the packages reported.
+pub fn verify(opts: &Options) -> Result<Vec<TestOutcome>, String> {
+    let bundle = Bundle::load(opts)?;
+    let mut seen = std::collections::BTreeSet::new();
+    let mut out = Vec::new();
+    for r in &bundle.rules {
+        let (name, package) = r.path.split_last().expect("a rule path");
+        let skip = name.starts_with("todo_test_");
+        if !(name.starts_with("test_") || skip) || !seen.insert(r.path.clone()) {
+            continue;
+        }
+        let ns = package.join(".");
+        if !opts.namespaces.is_empty() && !opts.namespaces.iter().any(|n| glob(n, &ns)) {
+            continue;
+        }
+        let rule = format!("data.{}", r.path.join("."));
+        let result = if skip {
+            TestResult::Skip
+        } else {
+            match eval(&bundle.engine, json!({}), &rule) {
+                Ok(v) if v == regorus::Value::from(true) => TestResult::Pass,
+                Ok(_) => TestResult::Fail,
+                Err(e) => TestResult::Error(e),
+            }
+        };
+        out.push(TestOutcome {
+            rule,
+            file: r.file.clone(),
+            result,
+        });
+    }
+    Ok(out)
+}
+
+/// Conftest's namespace patterns: literal, or with `*` wildcards.
+fn glob(pattern: &str, s: &str) -> bool {
+    match pattern.split_once('*') {
+        None => pattern == s,
+        Some((head, tail)) => {
+            s.starts_with(head)
+                && (0..=s.len() - head.len())
+                    .any(|i| s.is_char_boundary(head.len() + i) && glob(tail, &s[head.len() + i..]))
+        }
+    }
+}
+
+/// Whether a module can read `data.conftest`: it names it, or reads `data`
+/// other than through a static `data.<name>` path (`data[x]`, `walk(data)`).
+/// Conservative: a false positive only costs time.
+fn reads_conftest(src: &str) -> bool {
+    let b = src.as_bytes();
+    let ident = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+    let mut i = 0;
+    while let Some(off) = src[i..].find("data") {
+        let at = i + off;
+        i = at + 4;
+        if at > 0 && ident(b[at - 1]) || b.get(at + 4).is_some_and(|&c| ident(c)) {
+            continue;
+        }
+        if b.get(at + 4) != Some(&b'.') {
+            return true;
+        }
+        let rest = &src[at + 5..];
+        let name: String = rest
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+            .collect();
+        if name == "conftest" {
+            return true;
+        }
+    }
+    false
+}
+
+/// Per-root work shared by every rule of a bundle: each file's rendered
+/// document, engine and exception results. Rules run one
+/// after another per root on one thread, so the cache lives in a
+/// thread-local keyed by (bundle, analysis) and is replaced per root.
+#[derive(Default)]
+struct RootCache {
+    /// The bundle and [`ConfigFile::run`] the entries belong to.
+    key: (usize, u64),
+    documents: HashMap<(usize, tf_span::FileId), Arc<CachedDocument>>,
+    /// Per-file engines (with `data.conftest.file`), reused in place.
+    engines: HashMap<PathBuf, regorus::Engine>,
+    /// By (exception rule, rule name, file).
+    exceptions: HashMap<(String, String, PathBuf), bool>,
+}
+
+/// A rendered file document without borrows: instances by index into the
+/// module's resources.
+struct CachedDocument {
+    doc: regorus::Value,
+    abstractions: Vec<Abstraction>,
+    instances: Vec<(usize, regorus::Value)>,
+}
+
+thread_local! {
+    static ROOT_CACHE: std::cell::RefCell<RootCache> = std::cell::RefCell::new(RootCache::default());
+    /// Working copies of bundle engines, by bundle id. regorus engines are
+    /// reusable: `set_input` replaces the input and `eval_rule` clears the
+    /// previous evaluation's state.
+    static WORK: std::cell::RefCell<HashMap<u64, regorus::Engine>> = std::cell::RefCell::new(HashMap::new());
+}
+
+/// What a path may contribute; `None` in [`collect`] is both.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Load {
+    Rego,
+    Data,
+}
+
 /// Collect modules and data below `root` (a file or directory), in name
 /// order, as OPA's loader does: hidden files included, other extensions
 /// ignored.
 fn collect(
     root: &Path,
     path: &Path,
+    only: Option<Load>,
     modules: &mut Vec<(PathBuf, String)>,
     data: &mut Json,
 ) -> Result<(), String> {
@@ -329,12 +725,31 @@ fn collect(
             .map_err(|e| format!("{}: {e}", path.display()))?;
         children.sort();
         for child in children {
-            collect(root, &child, modules, data)?;
+            collect(root, &child, only, modules, data)?;
         }
         return Ok(());
     }
     let read = || std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()));
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let wanted = match ext {
+        "rego" => Load::Rego,
+        "json" | "yaml" | "yml" => Load::Data,
+        _ => Load::Rego,
+    };
+    if only.is_some_and(|o| o != wanted) && ["rego", "json", "yaml", "yml"].contains(&ext) {
+        if path == root {
+            return Err(format!(
+                "{}: expected {}",
+                path.display(),
+                if wanted == Load::Rego {
+                    "data (.json, .yaml)"
+                } else {
+                    "a .rego file"
+                }
+            ));
+        }
+        return Ok(());
+    }
     let doc = match ext {
         "rego" => {
             modules.push((path.to_path_buf(), read()?));
@@ -624,6 +1039,10 @@ enum Input {
     #[default]
     Resource,
     Module,
+    /// Conftest's unit: a whole document (a `.tf` file in the HCL shape,
+    /// the root's plan in the plan shape), with results attributed by
+    /// ablation.
+    Document,
 }
 
 /// The metadata oxtf reads; `None` until some annotation sets it.
@@ -635,6 +1054,7 @@ struct Meta {
     resource_types: Option<Vec<String>>,
     input: Input,
     input_set: bool,
+    shape: Option<Shape>,
 }
 
 fn level(s: &str, at: &str) -> Result<Level, String> {
@@ -684,7 +1104,7 @@ impl Meta {
             .as_object()
             .ok_or_else(|| format!("{at}: METADATA custom.oxtf must be a mapping"))?;
         for key in oxtf.keys() {
-            if !matches!(key.as_str(), "resource_types" | "input") {
+            if !matches!(key.as_str(), "resource_types" | "input" | "shape") {
                 return Err(format!("{at}: unknown METADATA field custom.oxtf.{key}"));
             }
         }
@@ -700,15 +1120,23 @@ impl Meta {
                 })?;
             self.resource_types = Some(types);
         }
+        if self.shape.is_none()
+            && let Some(v) = oxtf.get("shape")
+        {
+            self.shape = Some(v.as_str().and_then(|s| s.parse().ok()).ok_or_else(|| {
+                format!("{at}: METADATA custom.oxtf.shape must be `plan` or `hcl`")
+            })?);
+        }
         if !self.input_set
             && let Some(v) = oxtf.get("input")
         {
             self.input = match v.as_str() {
                 Some("resource") => Input::Resource,
                 Some("module") => Input::Module,
+                Some("document") => Input::Document,
                 _ => {
                     return Err(format!(
-                        "{at}: METADATA custom.oxtf.input must be `resource` or `module`"
+                        "{at}: METADATA custom.oxtf.input must be `resource`, `module` or `document`"
                     ));
                 }
             };
@@ -751,8 +1179,16 @@ pub(crate) fn eval(
     input: Json,
     rule: &str,
 ) -> Result<regorus::Value, String> {
+    eval_value(engine, regorus::Value::from(input), rule)
+}
+
+fn eval_value(
+    engine: &regorus::Engine,
+    input: regorus::Value,
+    rule: &str,
+) -> Result<regorus::Value, String> {
     let mut engine = engine.clone();
-    engine.set_input(regorus::Value::from(input));
+    engine.set_input(input);
     engine
         .eval_rule(rule.to_string())
         .map_err(|e| e.to_string())
@@ -760,6 +1196,37 @@ pub(crate) fn eval(
 
 fn to_serde(v: &regorus::Value) -> Result<Json, String> {
     serde_json::from_str(&v.to_json_str().map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+}
+
+/// Conftest's exception query, `data.<ns>.exception[_][_] == "<name>"`:
+/// when it holds, every result of the rule on this input is suppressed.
+#[cfg(test)]
+fn excepted(
+    engine: &regorus::Engine,
+    input: &regorus::Value,
+    e: &Exception,
+) -> Result<bool, String> {
+    exception_names(&eval_value(engine, input.clone(), &e.rule)?, e)
+}
+
+/// Whether an `exception` set's value names the rule.
+fn exception_names(v: &regorus::Value, e: &Exception) -> Result<bool, String> {
+    if matches!(v, regorus::Value::Undefined) {
+        return Ok(false);
+    }
+    Ok(match to_serde(v)? {
+        Json::Array(items) => items.iter().any(|inner| match inner {
+            Json::Array(names) => names.iter().any(|n| n.as_str() == Some(&e.name)),
+            Json::Object(m) => m.values().any(|n| n.as_str() == Some(&e.name)),
+            _ => false,
+        }),
+        Json::Object(m) => m.values().any(|inner| match inner {
+            Json::Array(names) => names.iter().any(|n| n.as_str() == Some(&e.name)),
+            Json::Object(m) => m.values().any(|n| n.as_str() == Some(&e.name)),
+            _ => false,
+        }),
+        _ => false,
+    })
 }
 
 /// One violation an entry rule produced.
@@ -770,6 +1237,8 @@ pub(crate) struct Violation {
     pub address: Option<String>,
     /// The attribute it is about (`path`): `a.b[0].c` or `["a", "b", 0, "c"]`.
     pub path: Option<Vec<Segment>>,
+    /// A mechanical fix (`fix`): set top-level `attribute` to `value`.
+    pub fix: Option<(String, Json)>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -778,8 +1247,11 @@ pub(crate) enum Segment {
     Index(usize),
 }
 
-/// The violations an entry rule produced: a set or array of strings, or of
-/// objects with a `msg` string and optional `address` and `path`.
+/// The violations an entry rule produced, read as Conftest reads them: a
+/// set or array whose strings are messages and whose objects need a `msg`
+/// string (optional `address`, `path`, `fix`; other keys are metadata).
+/// An empty message is a pass and other values are ignored, as in
+/// Conftest.
 pub(crate) fn violations(result: &regorus::Value) -> Result<Vec<Violation>, String> {
     if matches!(result, regorus::Value::Undefined) {
         return Ok(Vec::new());
@@ -793,24 +1265,38 @@ pub(crate) fn violations(result: &regorus::Value) -> Result<Vec<Violation>, Stri
             ));
         }
     };
-    items.into_iter().map(violation).collect()
+    let mut out = Vec::new();
+    for item in items {
+        if let Some(v) = violation(item)?
+            && !v.msg.is_empty()
+        {
+            out.push(v);
+        }
+    }
+    Ok(out)
 }
 
-fn violation(item: Json) -> Result<Violation, String> {
-    let Json::Object(o) = &item else {
-        let msg = match item {
-            Json::String(s) => s,
-            other => other.to_string(),
-        };
-        return Ok(Violation {
-            msg,
-            address: None,
-            path: None,
-        });
+fn violation(item: Json) -> Result<Option<Violation>, String> {
+    let o = match item {
+        Json::String(msg) => {
+            return Ok(Some(Violation {
+                msg,
+                address: None,
+                path: None,
+                fix: None,
+            }));
+        }
+        Json::Object(o) => o,
+        _ => return Ok(None),
     };
     let msg = match o.get("msg") {
         Some(Json::String(s)) => s.clone(),
-        _ => item.to_string(),
+        _ => {
+            return Err(format!(
+                "\"msg\" field must be present and a string in {}",
+                Json::Object(o)
+            ));
+        }
     };
     let address = match o.get("address") {
         None | Some(Json::Null) => None,
@@ -839,7 +1325,27 @@ fn violation(item: Json) -> Result<Violation, String> {
             ));
         }
     };
-    Ok(Violation { msg, address, path })
+    let fix = match o.get("fix") {
+        None | Some(Json::Null) => None,
+        Some(Json::Object(f)) => match (f.get("attribute"), f.get("value")) {
+            (Some(Json::String(a)), Some(v)) if !a.is_empty() && !a.contains(['.', '[']) => {
+                Some((a.clone(), v.clone()))
+            }
+            _ => {
+                return Err(format!(
+                    "violation fix must be {{\"attribute\": <top-level name>, \"value\": <literal>}}, got {}",
+                    Json::Object(f.clone())
+                ));
+            }
+        },
+        Some(other) => return Err(format!("violation fix must be an object, got {other}")),
+    };
+    Ok(Some(Violation {
+        msg,
+        address,
+        path,
+        fix,
+    }))
 }
 
 /// `a.b[0].c`
@@ -914,11 +1420,21 @@ impl Trace {
         Ok(Some(Trace(Arc::new(Mutex::new(file)))))
     }
 
-    fn record(&self, entry: &str, input: &Json, result: &Result<regorus::Value, String>) {
-        let line = match result {
+    fn record(
+        &self,
+        entry: &str,
+        input: &Json,
+        file: Option<(&Path, bool)>,
+        result: &Result<regorus::Value, String>,
+    ) {
+        let mut line = match result {
             Ok(v) => json!({"entry": entry, "input": input, "result": to_serde(v).ok()}),
             Err(e) => json!({"entry": entry, "input": input, "error": e}),
         };
+        if let Some((f, whole)) = file {
+            line["file"] = json!(f.display().to_string());
+            line["whole_file"] = json!(whole);
+        }
         let mut f = self.0.lock().expect("trace lock");
         let _ = writeln!(f, "{line}");
     }
@@ -931,19 +1447,187 @@ struct ForeignPolicy {
     bundle: Arc<Bundle>,
     entry: String,
     shape: Shape,
+    exception: Option<Exception>,
     trace: Option<Trace>,
 }
 
 impl ForeignPolicy {
     fn run(&self, input: Json) -> Result<Vec<Violation>, String> {
-        let result = eval(&self.bundle.engine, input.clone(), &self.entry);
+        self.run_on(regorus::Value::from(input), None, true)
+    }
+
+    /// [`ForeignPolicy::run`] with Conftest's `data.conftest.file` set to
+    /// the file under evaluation.
+    /// A file document (`whole`) or one instance alone (ablation, which
+    /// asks only whether the instance produces the violation: exceptions
+    /// were already decided on the whole file).
+    fn run_file(
+        &self,
+        input: regorus::Value,
+        file: &Path,
+        whole: bool,
+    ) -> Result<Vec<Violation>, String> {
+        self.run_on(input, Some((file, whole)), whole)
+    }
+
+    /// Evaluate `rule` on a reused working copy of the bundle's engine,
+    /// or, for a file when a policy can read `data.conftest.file`, on that
+    /// file's engine (the bundle's with the file's data added, prepared once
+    /// per root and shared by the bundle's rules).
+    fn evaluate(
+        &self,
+        file: Option<&Path>,
+        input: regorus::Value,
+        rule: &str,
+    ) -> Result<regorus::Value, String> {
+        let run = |e: &mut regorus::Engine| {
+            e.set_input(input);
+            e.eval_rule(rule.to_string()).map_err(|e| e.to_string())
+        };
+        match file.filter(|_| self.bundle.file_info) {
+            None => WORK.with(|w| {
+                // Taken out while evaluating: an extension may evaluate too.
+                let mut engine = w
+                    .borrow_mut()
+                    .remove(&self.bundle.id)
+                    .unwrap_or_else(|| self.bundle.engine.clone());
+                let result = run(&mut engine);
+                w.borrow_mut().insert(self.bundle.id, engine);
+                result
+            }),
+            Some(file) => {
+                let cached = ROOT_CACHE.with(|c| c.borrow_mut().engines.remove(file));
+                let mut engine = match cached {
+                    Some(e) => e,
+                    None => {
+                        let abs = std::path::absolute(file).unwrap_or_else(|_| file.to_path_buf());
+                        let mut engine = self.bundle.engine.clone();
+                        engine
+                            .add_data(regorus::Value::from(json!({"conftest": {"file": {
+                                "name": abs.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+                                "dir": abs.parent().map(|d| d.display().to_string()).unwrap_or_default(),
+                            }}})))
+                            .map_err(|e| format!("data.conftest.file: {e}"))?;
+                        engine
+                    }
+                };
+                let result = run(&mut engine);
+                ROOT_CACHE.with(|c| c.borrow_mut().engines.insert(file.to_path_buf(), engine));
+                result
+            }
+        }
+    }
+
+    /// Start (or keep) the per-root cache for `run`.
+    fn enter_root(&self, run: u64) {
+        let key = (Arc::as_ptr(&self.bundle) as usize, run);
+        ROOT_CACHE.with(|c| {
+            let mut c = c.borrow_mut();
+            if c.key != key {
+                *c = RootCache {
+                    key,
+                    ..RootCache::default()
+                };
+            }
+        });
+    }
+
+    /// The file's rendered document, shared by the bundle's rules for this
+    /// root.
+    fn document(&self, cf: &ConfigFile<'_>) -> Result<Arc<CachedDocument>, String> {
+        let key = (std::ptr::from_ref(cf.module) as usize, cf.source.id);
+        if let Some(d) = ROOT_CACHE.with(|c| c.borrow().documents.get(&key).cloned()) {
+            return Ok(d);
+        }
+        let fd = crate::hcl2json::evaluated(cf)?;
+        let instances = fd
+            .instances
+            .into_iter()
+            .map(|i| {
+                let index = cf
+                    .module
+                    .resources
+                    .iter()
+                    .position(|r| std::ptr::eq(r, i.resource))
+                    .expect("an instance of this module");
+                (index, regorus::Value::from(i.doc))
+            })
+            .collect();
+        let d = Arc::new(CachedDocument {
+            doc: regorus::Value::from(fd.doc),
+            abstractions: fd.abstractions,
+            instances,
+        });
+        ROOT_CACHE.with(|c| c.borrow_mut().documents.insert(key, d.clone()));
+        Ok(d)
+    }
+
+    /// `file`: the document's file, and whether this is the whole file (not
+    /// one instance alone, for ablation); for the trace only.
+    fn run_on(
+        &self,
+        input: regorus::Value,
+        file: Option<(&Path, bool)>,
+        exceptions: bool,
+    ) -> Result<Vec<Violation>, String> {
+        let path = file.map(|(f, _)| f);
+        if exceptions
+            && let Some(e) = &self.exception
+            && self.is_excepted(&input, path, e)?
+        {
+            return Ok(Vec::new());
+        }
+        let result = self.evaluate(path, input.clone(), &self.entry);
         if let Some(t) = &self.trace {
-            t.record(&self.entry, &input, &result);
+            t.record(
+                &self.entry,
+                &to_serde(&input).unwrap_or(Json::Null),
+                file,
+                &result,
+            );
         }
         violations(&result?)
     }
 
+    /// The exception check, cached per (exception rule, rule name, file)
+    /// for a root.
+    fn is_excepted(
+        &self,
+        input: &regorus::Value,
+        file: Option<&Path>,
+        e: &Exception,
+    ) -> Result<bool, String> {
+        let check = || exception_names(&self.evaluate(file, input.clone(), &e.rule)?, e);
+        let Some(file) = file else {
+            return check();
+        };
+        // The answer depends on the asking rule's name, not only the set.
+        let key = (e.rule.clone(), e.name.clone(), file.to_path_buf());
+        if let Some(&hit) = ROOT_CACHE
+            .with(|c| c.borrow().exceptions.get(&key).copied())
+            .as_ref()
+        {
+            return Ok(hit);
+        }
+        let hit = check()?;
+        ROOT_CACHE.with(|c| c.borrow_mut().exceptions.insert(key, hit));
+        Ok(hit)
+    }
+
     fn judgement(&self, r: &Resource, v: &Violation, abstractions: &[Abstraction]) -> Judgement {
+        let mut j = self.judgement_on(Some(r), v, abstractions);
+        if j.witness.is_none() && j.severity == Severity::Definite {
+            j.witness = v.path.as_deref().and_then(|path| locate(&r.body, path));
+        }
+        j
+    }
+
+    fn judgement_on(
+        &self,
+        r: Option<&Resource>,
+        v: &Violation,
+        abstractions: &[Abstraction],
+    ) -> Judgement {
         let p = Projection {
             attributes: JsonMap::new(),
             abstractions: abstractions.to_vec(),
@@ -951,7 +1635,7 @@ impl ForeignPolicy {
         let severity = p.certainty();
         let witness = match (severity, p.deciding()) {
             (Severity::Definite, _) | (_, None) => {
-                v.path.as_deref().and_then(|path| locate(&r.body, path))
+                r.and_then(|r| v.path.as_deref().and_then(|path| locate(&r.body, path)))
             }
             (_, Some(a)) => Some(a.value.clone()),
         };
@@ -976,7 +1660,15 @@ impl ForeignPolicy {
                     truth: a.truth,
                 })
                 .collect(),
-            fix_hint: None,
+            fix_hint: r
+                .zip(v.fix.as_ref())
+                .map(|(r, (attribute, value))| tf_linter::FixHint {
+                    resource: r.id.clone(),
+                    attribute: attribute.clone(),
+                    action: tf_linter::FixAction::Set,
+                    value: value.clone(),
+                    site: r.attr(attribute).map(|a| a.span),
+                }),
         }
     }
 
@@ -996,27 +1688,23 @@ impl ForeignPolicy {
             .collect()
     }
 
-    /// Module input: every managed instance of the root in one plan
-    /// document, results attributed by `address`.
-    fn judge_root<'a>(
-        &self,
-        resources: &[&'a Resource],
-    ) -> Result<Vec<(&'a Resource, Judgement)>, String> {
-        let selected: Vec<&'a Resource> = resources
+    /// Every managed instance of the root (of the declared types) in one
+    /// plan document, and each instance alone.
+    fn plan_document<'a>(&self, resources: &[&'a Resource]) -> PlanDocument<'a> {
+        let selected = resources
             .iter()
             .copied()
-            .filter(|r| r.mode == tf_semantic::Mode::Managed)
+            .filter(|r| r.mode == tf_semantic::Mode::Managed && r.existence != Truth::False)
             .filter(|r| {
                 self.types
                     .as_ref()
                     .is_none_or(|t| t.iter().any(|t| *t == *r.ty))
-            })
-            .collect();
+            });
         let mut changes = Vec::new();
         let mut planned = Vec::new();
         let mut abstractions = Vec::new();
-        let mut by_address: HashMap<&str, &'a Resource> = HashMap::new();
-        for r in &selected {
+        let mut instances = Vec::new();
+        for r in selected {
             let p = projection::project(r, Shape::Plan);
             let doc = projection::input(r, &p, Shape::Plan);
             changes.extend(
@@ -1046,27 +1734,167 @@ impl ForeignPolicy {
                     value: Value::other("resource existence"),
                 });
             }
-            by_address.insert(&r.address, r);
+            instances.push((r, doc));
         }
-        let input = json!({
-            "format_version": "1.2",
-            "resource_changes": changes,
-            "planned_values": {"root_module": {"resources": planned}},
-        });
-        let found = self.run(input)?;
+        PlanDocument {
+            doc: json!({
+                "format_version": "1.2",
+                "resource_changes": changes,
+                "planned_values": {"root_module": {"resources": planned}},
+            }),
+            abstractions,
+            instances,
+        }
+    }
+
+    /// Module input: results attributed by `address`.
+    fn judge_root<'a>(
+        &self,
+        resources: &[&'a Resource],
+    ) -> Result<Vec<(&'a Resource, Judgement)>, String> {
+        let pd = self.plan_document(resources);
+        let found = self.run(pd.doc)?;
         found
             .iter()
             .map(|v| {
                 let a = v.address.as_deref().ok_or_else(|| {
                     format!("module-input violation without an address: {}", v.msg)
                 })?;
-                let r = by_address
-                    .get(a)
+                let r = pd
+                    .instances
+                    .iter()
+                    .find(|(r, _)| *r.address == *a)
+                    .map(|(r, _)| *r)
                     .ok_or_else(|| format!("violation names {a}, which is not in the input"))?;
-                Ok((*r, self.judgement(r, v, &abstractions)))
+                Ok((r, self.judgement(r, v, &pd.abstractions)))
             })
             .collect()
     }
+
+    /// Ablation: the owners of each violation of a whole document are the
+    /// instances that reproduce it alone (the one its `address` names, when
+    /// it names one).
+    fn attribute<'a, D: Clone>(
+        &self,
+        found: Vec<Violation>,
+        instances: &[(&'a Resource, D)],
+        run: impl Fn(D) -> Result<Vec<Violation>, String>,
+    ) -> Result<Vec<(Violation, Vec<&'a Resource>)>, String> {
+        if found.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut alone: Vec<Vec<String>> = Vec::new();
+        for (_, doc) in instances {
+            alone.push(run(doc.clone())?.into_iter().map(|v| v.msg).collect());
+        }
+        found
+            .into_iter()
+            .map(|v| {
+                let owners: Vec<&'a Resource> = match &v.address {
+                    Some(a) => vec![
+                        instances
+                            .iter()
+                            .find(|(r, _)| *r.address == **a)
+                            .map(|(r, _)| *r)
+                            .ok_or_else(|| {
+                                format!("violation names {a}, which is not in the input")
+                            })?,
+                    ],
+                    None => instances
+                        .iter()
+                        .zip(&alone)
+                        .filter(|(_, msgs)| msgs.contains(&v.msg))
+                        .map(|((r, _), _)| *r)
+                        .collect(),
+                };
+                Ok((v, owners))
+            })
+            .collect()
+    }
+
+    /// Document input: per file (HCL shape) or per root (plan shape).
+    fn judge_documents<'a>(
+        &self,
+        analysis: &'a tf_semantic::Analysis,
+        files: &[ConfigFile<'a>],
+    ) -> Result<Vec<(Subject<'a>, Judgement)>, String> {
+        let mut out = Vec::new();
+        match self.shape {
+            Shape::Hcl => {
+                if files.is_empty() && analysis.modules.iter().any(|m| !m.resources.is_empty()) {
+                    return Err(
+                        "the HCL input shape needs source files; scan a plan with the plan shape"
+                            .into(),
+                    );
+                }
+                if let Some(first) = files.first() {
+                    self.enter_root(first.run);
+                }
+                for cf in files {
+                    let path = &cf.source.path;
+                    let at = |e: String| format!("{}: {e}", path.display());
+                    let fd = self.document(cf).map_err(at)?;
+                    let found = self.run_file(fd.doc.clone(), path, true).map_err(at)?;
+                    let instances: Vec<(&'a Resource, regorus::Value)> = fd
+                        .instances
+                        .iter()
+                        .map(|(i, doc)| (&cf.module.resources[*i], doc.clone()))
+                        .collect();
+                    for (v, owners) in self
+                        .attribute(found, &instances, |d| self.run_file(d, path, false))
+                        .map_err(at)?
+                    {
+                        if owners.is_empty() {
+                            out.push((
+                                Subject::File {
+                                    module: cf.module,
+                                    file: cf.source.id,
+                                },
+                                self.judgement_on(None, &v, &fd.abstractions),
+                            ));
+                        }
+                        for r in owners {
+                            out.push((
+                                Subject::Resource(r),
+                                self.judgement(r, &v, &fd.abstractions),
+                            ));
+                        }
+                    }
+                }
+            }
+            Shape::Plan => {
+                let resources: Vec<&'a Resource> =
+                    analysis.modules.iter().flat_map(|m| &m.resources).collect();
+                let pd = self.plan_document(&resources);
+                let found = self.run(pd.doc)?;
+                let mut lost = Vec::new();
+                for (v, owners) in self.attribute(found, &pd.instances, |d| self.run(d))? {
+                    if owners.is_empty() {
+                        lost.push(v.msg.clone());
+                    }
+                    for r in owners {
+                        out.push((
+                            Subject::Resource(r),
+                            self.judgement(r, &v, &pd.abstractions),
+                        ));
+                    }
+                }
+                if !lost.is_empty() {
+                    return Err(format!(
+                        "no single resource reproduces these plan violations (a plan has no file to report them on): {}",
+                        lost.join("; ")
+                    ));
+                }
+            }
+        }
+        Ok(out)
+    }
+}
+
+struct PlanDocument<'a> {
+    doc: Json,
+    abstractions: Vec<Abstraction>,
+    instances: Vec<(&'a Resource, Json)>,
 }
 
 impl DynRule for ForeignPolicy {
@@ -1076,6 +1904,16 @@ impl DynRule for ForeignPolicy {
     fn needs_graph(&self) -> bool {
         self.input == Input::Module
     }
+    fn needs_files(&self) -> bool {
+        self.input == Input::Document
+    }
+    fn judge_files<'a>(
+        &self,
+        analysis: &'a tf_semantic::Analysis,
+        files: &[ConfigFile<'a>],
+    ) -> Result<Vec<(Subject<'a>, Judgement)>, RuleFailure> {
+        self.judge_documents(analysis, files)
+    }
     fn judge_graph<'a>(
         &self,
         graph: &tf_semantic::graph::ResourceGraph<'a>,
@@ -1083,7 +1921,7 @@ impl DynRule for ForeignPolicy {
         self.judge_root(&graph.resources)
     }
     fn judge_resource(&self, r: &Resource) -> Result<Vec<Judgement>, RuleFailure> {
-        if self.input == Input::Module {
+        if self.input != Input::Resource {
             return Ok(Vec::new());
         }
         self.judge(r)
@@ -1143,6 +1981,9 @@ mod tests {
         let entries: Vec<String> = entries.iter().map(|s| s.to_string()).collect();
         rules(&Options {
             paths: &paths,
+            data: &[],
+            namespaces: &[],
+            all_namespaces: false,
             entries: &entries,
             shape: Shape::Plan,
             rego_v0: false,
@@ -1168,17 +2009,119 @@ mod tests {
         // Defined in two files: the fallback ID is the rule path.
         assert_eq!(&*infos[0].name, "rego:main.deny");
         let paths = [d.path().to_path_buf()];
+        // OPA mode (an entry is named): data next to the policies loads, as
+        // with `opa eval -d`.
+        let opa = Bundle::load(&Options {
+            paths: &paths,
+            data: &[],
+            namespaces: &[],
+            all_namespaces: false,
+            entries: &[DEFAULT_ENTRY.into()],
+            shape: Shape::Plan,
+            rego_v0: false,
+        })
+        .unwrap();
+        let msgs = |bundle: &Bundle| {
+            let v = violations(&eval(&bundle.engine, json!({}), DEFAULT_ENTRY).unwrap()).unwrap();
+            let mut msgs: Vec<_> = v.into_iter().map(|v| v.msg).collect();
+            msgs.sort();
+            msgs
+        };
+        assert_eq!(msgs(&opa), ["b", "from data"]);
+        // Conftest mode: policy paths load `.rego` only; data comes from
+        // `data` paths.
+        let conftest = |data: &[PathBuf]| {
+            Bundle::load(&Options {
+                paths: &paths,
+                data,
+                namespaces: &[],
+                all_namespaces: false,
+                entries: &[],
+                shape: Shape::Plan,
+                rego_v0: false,
+            })
+            .unwrap()
+        };
+        assert_eq!(msgs(&conftest(&[])), ["b"]);
+        // Data sits at its directory's path below the data root, so the
+        // root is the parent of `lib`; `.rego` files there are not data.
+        assert_eq!(
+            msgs(&conftest(&[d.path().to_path_buf()])),
+            ["b", "from data"]
+        );
+    }
+
+    #[test]
+    fn conftest_rules_namespaces_and_exceptions() {
+        let d = dir(&[
+            (
+                "main.rego",
+                "package main\nimport rego.v1\ndeny contains \"d\" if true\nviolation_tags contains {\"msg\": \"v\"} if true\nwarn_old contains \"w\" if true\ndenyx contains \"not a rule\" if true\ndeny_ contains \"not a rule\" if true\nexception contains [\"old\"] if input.skip_old\n",
+            ),
+            (
+                "other.rego",
+                "package other.ns\nimport rego.v1\ndeny_x contains \"o\" if true\n",
+            ),
+        ]);
+        let paths = [d.path().to_path_buf()];
+        let load = |namespaces: &[String], all: bool| {
+            rules(&Options {
+                paths: &paths,
+                data: &[],
+                namespaces,
+                all_namespaces: all,
+                entries: &[],
+                shape: Shape::Plan,
+                rego_v0: false,
+            })
+        };
+        let names = |rs: Vec<Box<dyn DynRule>>| -> Vec<(String, Level)> {
+            rs.iter()
+                .map(|r| (r.info().name.to_string(), r.info().level))
+                .collect()
+        };
+        assert_eq!(
+            names(load(&[], false).unwrap()),
+            [
+                ("rego:main.deny".to_string(), Level::Medium),
+                ("rego:main.violation_tags".to_string(), Level::Medium),
+                ("rego:main.warn_old".to_string(), Level::Low),
+            ]
+        );
+        assert_eq!(
+            names(load(&["other.ns".into()], false).unwrap()),
+            [("rego:other".to_string(), Level::Medium)]
+        );
+        assert_eq!(names(load(&[], true).unwrap()).len(), 4);
+        assert!(
+            load(&["nope".into()], false)
+                .err()
+                .unwrap()
+                .contains("package nope")
+        );
+        assert_eq!(conftest_kind("deny_a_B1"), Some(RuleKind::Failure));
+        assert_eq!(conftest_kind("deny__a"), None);
+        assert_eq!(conftest_kind("warning"), None);
+        assert_eq!(exception_name("violation_tags"), "tags");
+        assert_eq!(exception_name("deny"), "");
+        // The exception set suppresses `warn_old` on inputs that ask for it.
         let bundle = Bundle::load(&Options {
             paths: &paths,
+            data: &[],
+            namespaces: &[],
+            all_namespaces: false,
             entries: &[],
             shape: Shape::Plan,
             rego_v0: false,
         })
         .unwrap();
-        let v = violations(&eval(&bundle.engine, json!({}), "data.main.deny").unwrap()).unwrap();
-        let mut msgs: Vec<_> = v.into_iter().map(|v| v.msg).collect();
-        msgs.sort();
-        assert_eq!(msgs, ["b", "from data"]);
+        let e = Exception {
+            rule: "data.main.exception".into(),
+            name: "old".into(),
+        };
+        let v = |j: Json| regorus::Value::from(j);
+        assert!(excepted(&bundle.engine, &v(json!({"skip_old": true})), &e).unwrap());
+        assert!(!excepted(&bundle.engine, &v(json!({})), &e).unwrap());
     }
 
     #[test]
@@ -1187,7 +2130,16 @@ mod tests {
             "a.rego",
             "package other\nimport rego.v1\ndeny contains 1 if true\n",
         )]);
-        assert!(load(&missing, &[]).unwrap_err().contains("not defined"));
+        assert!(
+            load(&missing, &[])
+                .unwrap_err()
+                .contains("no policy declares package main")
+        );
+        assert!(
+            load(&missing, &[DEFAULT_ENTRY])
+                .unwrap_err()
+                .contains("not defined")
+        );
         let conflict = dir(&[
             (
                 "a.rego",
@@ -1196,13 +2148,24 @@ mod tests {
             ("x.json", "{\"k\": 1}"),
             ("y.json", "{\"k\": 2}"),
         ]);
-        assert!(load(&conflict, &[]).unwrap_err().contains("merge error"));
+        assert!(
+            load(&conflict, &[DEFAULT_ENTRY])
+                .unwrap_err()
+                .contains("merge error")
+        );
+        assert!(
+            load(&conflict, &[]).is_ok(),
+            "Conftest mode ignores data next to policies"
+        );
         let v0 = dir(&[("a.rego", "package main\ndeny[msg] { msg := \"x\" }\n")]);
         assert!(load(&v0, &[]).is_err(), "v0 syntax is an error in v1 mode");
         let paths = [v0.path().to_path_buf()];
         assert!(
             rules(&Options {
                 paths: &paths,
+                data: &[],
+                namespaces: &[],
+                all_namespaces: false,
                 entries: &[],
                 shape: Shape::Plan,
                 rego_v0: true
@@ -1278,16 +2241,19 @@ mod tests {
     #[test]
     fn structured_violations() {
         let v = regorus::Value::from_json_str(
-            r#"["a", {"msg": "b", "x": 1}, 3, {"msg": "c", "address": "aws_s3_bucket.b", "path": "versioning[0].enabled"}, {"msg": "d", "path": ["tags", "env"]}]"#,
+            r#"["a", {"msg": "b", "x": 1}, 3, "", {"msg": "c", "address": "aws_s3_bucket.b", "path": "versioning[0].enabled", "fix": {"attribute": "acl", "value": "private"}}, {"msg": "d", "path": ["tags", "env"]}]"#,
         )
         .unwrap();
+        // As Conftest reads results: non-string, non-object values and empty
+        // messages are not violations.
         let got = violations(&v).unwrap();
-        assert_eq!(got[0].msg, "a");
-        assert_eq!(got[1].msg, "b");
-        assert_eq!(got[2].msg, "3");
-        assert_eq!(got[3].address.as_deref(), Some("aws_s3_bucket.b"));
+        let msgs: Vec<_> = got.iter().map(|v| v.msg.as_str()).collect();
+        assert_eq!(msgs, ["a", "b", "c", "d"]);
+        let got = &got[1..];
+        assert_eq!(got[1].fix, Some(("acl".into(), json!("private"))));
+        assert_eq!(got[1].address.as_deref(), Some("aws_s3_bucket.b"));
         assert_eq!(
-            got[3].path,
+            got[1].path,
             Some(vec![
                 Segment::Key("versioning".into()),
                 Segment::Index(0),
@@ -1295,7 +2261,7 @@ mod tests {
             ])
         );
         assert_eq!(
-            got[4].path,
+            got[2].path,
             Some(vec![
                 Segment::Key("tags".into()),
                 Segment::Key("env".into())
@@ -1303,10 +2269,16 @@ mod tests {
         );
         assert!(violations(&regorus::Value::Undefined).unwrap().is_empty());
         assert!(violations(&regorus::Value::from_json_str("\"x\"").unwrap()).is_err());
-        assert!(
-            violations(&regorus::Value::from_json_str(r#"[{"msg": "x", "address": 1}]"#).unwrap())
-                .is_err()
-        );
+        for bad in [
+            r#"[{"msg": "x", "address": 1}]"#,
+            r#"[{"message": "no msg"}]"#,
+            r#"[{"msg": "x", "fix": {"attribute": "a.b", "value": 1}}]"#,
+        ] {
+            assert!(
+                violations(&regorus::Value::from_json_str(bad).unwrap()).is_err(),
+                "{bad}"
+            );
+        }
         assert_eq!(
             parse_path("a[0][1].b"),
             Some(vec![
@@ -1331,6 +2303,9 @@ mod tests {
             let paths = [d.path().to_path_buf()];
             let bundle = Bundle::load(&Options {
                 paths: &paths,
+                data: &[],
+                namespaces: &[],
+                all_namespaces: false,
                 entries: &[],
                 shape: Shape::Plan,
                 rego_v0: false,
@@ -1370,6 +2345,9 @@ mod tests {
         let paths = [d.path().to_path_buf()];
         let err = Bundle::load(&Options {
             paths: &paths,
+            data: &[],
+            namespaces: &[],
+            all_namespaces: false,
             entries: &[],
             shape: Shape::Plan,
             rego_v0: true,

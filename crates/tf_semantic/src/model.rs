@@ -204,6 +204,9 @@ pub struct ModuleCallInfo {
     pub source: String,
     pub remote: bool,
     pub span: FileSpan,
+    /// Evaluated arguments (all but `providers` and `depends_on`), when
+    /// analysed with `AnalyzeOptions::whole_files`; else empty.
+    pub arguments: Vec<(Arc<str>, Value)>,
 }
 
 #[derive(Clone, Debug)]
@@ -223,6 +226,13 @@ pub struct Module {
     pub resources: Vec<Resource>,
     pub variables: Vec<VariableInfo>,
     pub outputs: Vec<VariableInfo>,
+    /// Evaluated `locals`, when analysed with
+    /// `AnalyzeOptions::whole_files`; else empty.
+    pub locals: Vec<VariableInfo>,
+    /// Attribute values of the other top-level blocks (`provider`,
+    /// `terraform`, `check`, ...), by the expression's span, when analysed
+    /// with `AnalyzeOptions::whole_files`; else empty.
+    pub block_values: std::collections::HashMap<FileSpan, Value>,
     pub module_calls: Vec<ModuleCallInfo>,
     pub symbols: Vec<SymbolInfo>,
     /// The definition's reference edges, shared by its instances.

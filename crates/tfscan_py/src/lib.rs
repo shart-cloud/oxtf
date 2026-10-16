@@ -557,8 +557,8 @@ impl Finding {
         &self.f().address
     }
     #[getter]
-    fn resource_type(&self) -> &str {
-        &self.f().resource_type
+    fn resource_type(&self) -> Option<&str> {
+        self.f().resource_type.as_deref()
     }
     #[getter]
     fn module(&self) -> &str {
@@ -611,10 +611,17 @@ impl Finding {
     fn hidden(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.record_field(py, "hidden")
     }
-    /// The resource instance's identity, structured.
+    /// The resource instance's identity, structured; None for a finding on
+    /// a file.
     #[getter]
     fn resource(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.record_field(py, "resource")
+    }
+    /// What the finding is about: `{"kind": "resource", "address"}` or
+    /// `{"kind": "file", "file", "module"}`.
+    #[getter]
+    fn subject(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.record_field(py, "subject")
     }
     /// The whole finding record (`docs/FINDING_SCHEMA.md`) as a dict.
     fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
@@ -1024,7 +1031,7 @@ fn build_catalog(
             foreign: policies,
             shape,
             entries: policy_entry.into_iter().collect(),
-            rego_v0: false,
+            ..Default::default()
         },
     };
     let error = Arc::new(Mutex::new(None));

@@ -37,6 +37,8 @@ const USAGE: &str = "usage:
                                   back to .tf spans in DIR (default: the plan's directory
                                   if it has .tf files, else locations point into the JSON)
   oxtf rules [--rule-file PATH]... list built-in and imported rules
+  oxtf rules test --policy PATH... [--data PATH]... [--namespace NS]... [--rego-v0]
+                                  run the policies' test_* rules (as `conftest verify`)
 
 scan options:
   -r, --recursive         every directory under PATH containing .tf files is a root module
@@ -49,13 +51,18 @@ scan options:
                           policy, or a directory of them (searched recursively)
       --rego-native       run the seed rules that have a bundled native-tier Rego
                           policy (RDS encryption, GCS uniform access) as Rego
-      --policy PATH       also run foreign Rego policies (repeatable): .rego files and
-                          .json/.yaml data, or directories of them, loaded as one bundle
-                          as `opa eval -d PATH` loads them; run unchanged
+      --policy PATH       also run foreign Rego policies (repeatable): .rego files or
+                          directories of them, loaded as one bundle and run unchanged.
+                          By default they follow Conftest: every deny/violation/warn
+                          rule (and deny_*, ...) in the selected namespaces is a rule,
+                          and `exception` sets suppress them
+      --namespace NS      Conftest namespace to run (repeatable; default: main)
+      --all-namespaces    run every namespace
+      --data PATH         .json/.yaml data documents for --policy (repeatable)
+      --policy-entry R    OPA mode instead: run these entry rules (repeatable), and load
+                          data next to the policies as `opa eval -d PATH` does
       --policy-shape S    input document shape for --policy: plan (default) or hcl
-      --policy-entry R    entry rule read for violations, one rule each (repeatable;
-                          default: data.main.deny)
-      --rego-v0           parse --policy files as Rego v0 (`opa eval --v0-compatible`)
+      --rego-v0           parse --policy files as Rego v0 (`--v0-compatible`)
       --overlay PATH=FILE scan FILE's contents as if it were at PATH (repeatable;
                           FILE `-` reads stdin). PATH may be a file that does not exist,
                           in a directory that does not exist. Unsaved buffers, patches.
@@ -119,6 +126,15 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
                 .entries
                 .push(it.next().ok_or("--policy-entry needs a value")?),
             "--rego-v0" => catalog.policies.rego_v0 = true,
+            "--namespace" => catalog
+                .policies
+                .namespaces
+                .push(it.next().ok_or("--namespace needs a value")?),
+            "--all-namespaces" => catalog.policies.all_namespaces = true,
+            "--data" => catalog
+                .policies
+                .data
+                .push(it.next().ok_or("--data needs a value")?.into()),
             "--plan" => plan = Some(it.next().ok_or("--plan needs a value")?.into()),
             "--source" => source = Some(it.next().ok_or("--source needs a value")?.into()),
             "--overlay" => {
@@ -194,6 +210,11 @@ fn main() -> ExitCode {
             }
         },
         Some("rules") => {
+            let mut args = args.peekable();
+            if args.peek().map(String::as_str) == Some("test") {
+                args.next();
+                return rules_test(args);
+            }
             let rules = match parse_args(args)
                 .and_then(|a| a.request.catalog.resolve().map_err(|e| e.to_string()))
             {
@@ -229,6 +250,62 @@ fn main() -> ExitCode {
             eprintln!("{USAGE}");
             ExitCode::from(2)
         }
+    }
+}
+
+/// `oxtf rules test`: run the policies' `test_*` rules as `conftest
+/// verify` does. Exit codes: 0 all passed, 1 a test failed or errored,
+/// 2 the policies could not load.
+fn rules_test(args: impl Iterator<Item = String>) -> ExitCode {
+    let policies = match parse_args(args) {
+        Ok(a) => a.request.catalog.policies,
+        Err(e) => {
+            eprintln!("error: {e}\n\n{USAGE}");
+            return ExitCode::from(2);
+        }
+    };
+    if policies.foreign.is_empty() {
+        eprintln!("error: rules test needs --policy PATH");
+        return ExitCode::from(2);
+    }
+    let outcomes = match tf_scan::verify_policies(&policies) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    use tf_scan::TestResult;
+    let (mut passed, mut failed, mut skipped, mut errors) = (0, 0, 0, 0);
+    for o in &outcomes {
+        let (tag, detail) = match &o.result {
+            TestResult::Pass => {
+                passed += 1;
+                ("PASS", String::new())
+            }
+            TestResult::Fail => {
+                failed += 1;
+                ("FAIL", String::new())
+            }
+            TestResult::Skip => {
+                skipped += 1;
+                ("SKIP", String::new())
+            }
+            TestResult::Error(e) => {
+                errors += 1;
+                ("ERROR", format!("\n{e}"))
+            }
+        };
+        println!("{tag} - {} - {}{detail}", o.file.display(), o.rule);
+    }
+    println!(
+        "\n{} tests, {passed} passed, {failed} failures, {skipped} skipped, {errors} errors",
+        outcomes.len()
+    );
+    if failed + errors > 0 {
+        ExitCode::from(1)
+    } else {
+        ExitCode::SUCCESS
     }
 }
 

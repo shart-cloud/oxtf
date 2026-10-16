@@ -24,6 +24,21 @@ use tf_semantic::source::normalize;
 use tf_semantic::{Analysis, DiagSeverity, Diagnostic, FileTable};
 
 pub use tf_rego::Shape;
+pub use tf_rego::foreign::{TestOutcome, TestResult};
+
+/// Run the `test_*` rules of `policies.foreign` as `conftest verify` does.
+pub fn verify_policies(policies: &Policies) -> Result<Vec<TestOutcome>, ScanError> {
+    tf_rego::foreign::verify(&tf_rego::foreign::Options {
+        paths: &policies.foreign,
+        data: &policies.data,
+        entries: &[],
+        namespaces: &policies.namespaces,
+        all_namespaces: true,
+        shape: Shape::Hcl,
+        rego_v0: policies.rego_v0,
+    })
+    .map_err(|e| ScanError::Policy(PolicyError(e)))
+}
 
 /// What to scan.
 #[derive(Clone, Debug)]
@@ -242,7 +257,16 @@ impl From<PlanError> for ScanError {
 
 /// Run one request. The catalog is resolved and the selection validated
 /// before any input is read, so a bad rule id never costs a parse.
-pub fn scan(req: ScanRequest) -> Result<ScanOutput, ScanError> {
+pub fn scan(mut req: ScanRequest) -> Result<ScanOutput, ScanError> {
+    // Conftest-mode policies see what Conftest would be given: a `.tf`
+    // file (HCL shape) when scanning directories, the plan for a plan.
+    let policies = &mut req.catalog.policies;
+    if policies.shape.is_none() && policies.entries.is_empty() {
+        policies.shape = Some(match req.input {
+            ScanInput::Dirs { .. } => Shape::Hcl,
+            ScanInput::Plan { .. } => Shape::Plan,
+        });
+    }
     let resolved = req.catalog.resolve()?;
     let skipped: Vec<Diagnostic> = resolved.diagnostics().collect();
     let linter = match &req.selection {

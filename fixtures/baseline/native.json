@@ -36,12 +36,16 @@
             "id": "aws-s3-public-access-block",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_s3_bucket.b[\"b\"]",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -91,8 +95,12 @@
             "id": "aws-s3-public-access-block",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_s3_bucket.b[\"b\"]",
+            "kind": "resource"
+          }
         },
         {
           "attribute": null,
@@ -126,12 +134,16 @@
             "id": "aws-s3-public-access-block",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_s3_bucket.b[\"a\"]",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 2,
@@ -216,12 +228,16 @@
             "id": "aws-iam-wildcard-policy",
             "level": "critical"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_iam_policy.dyn",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -293,12 +309,16 @@
             "id": "aws-iam-wildcard-policy",
             "level": "critical"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_iam_user_policy.admin",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -370,12 +390,16 @@
             "id": "aws-iam-wildcard-policy",
             "level": "critical"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_iam_policy.admin",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -460,12 +484,16 @@
             "id": "aws-iam-wildcard-policy",
             "level": "critical"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_iam_role_policy.admin",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -550,12 +578,16 @@
             "id": "aws-iam-wildcard-policy",
             "level": "critical"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_iam_policy.admin",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -574,7 +606,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -591,7 +623,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -694,12 +726,16 @@
             "id": "aws-rds-unencrypted",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_db_instance.db",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -718,7 +754,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -808,12 +844,16 @@
             "id": "aws-rds-unencrypted",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_db_instance.db",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -905,12 +945,16 @@
             "id": "aws-rds-unencrypted",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_db_instance.db",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -1015,12 +1059,16 @@
             "id": "aws-rds-unencrypted",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_db_instance.db",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -1039,7 +1087,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -1134,12 +1182,16 @@
             "id": "aws-s3-public-access-block",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_s3_bucket.data",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -1158,7 +1210,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -1240,12 +1292,16 @@
             "id": "aws-s3-public-access-block",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_s3_bucket.data",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -1295,12 +1351,16 @@
             "id": "aws-s3-public-access-block",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_s3_bucket.b",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -1350,12 +1410,16 @@
             "id": "aws-s3-public-access-block",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_s3_bucket.logs",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -1439,12 +1503,16 @@
             "id": "aws-s3-public-access-block",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_s3_bucket.data",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -1463,7 +1531,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -1480,7 +1548,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -1591,12 +1659,16 @@
             "id": "aws-sg-open-ssh",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_security_group.maybe",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -1615,7 +1687,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -1739,12 +1811,16 @@
             "id": "aws-sg-open-ssh",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_security_group.dyn",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -1846,12 +1922,16 @@
             "id": "aws-sg-open-ssh",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_security_group.web",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -1951,8 +2031,12 @@
             "id": "aws-sg-open-ssh",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_security_group.wide",
+            "kind": "resource"
+          }
         },
         {
           "attribute": "ingress",
@@ -2036,12 +2120,16 @@
             "id": "aws-sg-open-ssh",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_security_group.all",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 2,
@@ -2154,12 +2242,16 @@
             "id": "aws-sg-open-ssh",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_security_group.admin",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -2231,12 +2323,16 @@
             "id": "aws-sg-open-ssh",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_vpc_security_group_ingress_rule.ssh",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -2255,7 +2351,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -2272,7 +2368,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -2289,7 +2385,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -2369,12 +2465,16 @@
             "id": "gcp-storage-uniform-access",
             "level": "medium"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "google_storage_bucket.b",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -2479,12 +2579,16 @@
             "id": "gcp-storage-uniform-access",
             "level": "medium"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "google_storage_bucket.b",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -2503,7 +2607,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -2551,12 +2655,16 @@
             "id": "aws-s3-public-access-block",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_s3_bucket.b[\"b\"]",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -2606,12 +2714,16 @@
             "id": "aws-s3-public-access-block",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_s3_bucket.b[\"b\"]",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -2661,12 +2773,16 @@
             "id": "aws-s3-public-access-block",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_s3_bucket.b[\"b\"]",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -2716,8 +2832,12 @@
             "id": "aws-s3-public-access-block",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_s3_bucket.b[\"b\"]",
+            "kind": "resource"
+          }
         },
         {
           "attribute": null,
@@ -2751,12 +2871,16 @@
             "id": "aws-s3-public-access-block",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_s3_bucket.b[\"a\"]",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 2,
@@ -2885,12 +3009,16 @@
             "id": "aws-iam-wildcard-policy",
             "level": "critical"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_iam_policy.dyn",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -2962,12 +3090,16 @@
             "id": "aws-iam-wildcard-policy",
             "level": "critical"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_iam_user_policy.admin",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -3057,12 +3189,16 @@
             "id": "aws-iam-wildcard-policy",
             "level": "critical"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_iam_policy.admin",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -3175,12 +3311,16 @@
             "id": "aws-iam-wildcard-policy",
             "level": "critical"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_iam_role_policy.admin",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -3324,12 +3464,16 @@
             "id": "aws-iam-wildcard-policy",
             "level": "critical"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_iam_policy.admin",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -3497,12 +3641,16 @@
             "id": "aws-iam-wildcard-policy",
             "level": "critical"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_iam_policy.dyn",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -3521,7 +3669,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -3538,7 +3686,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -3628,12 +3776,16 @@
             "id": "aws-rds-unencrypted",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "conditional"
+          "schema": 2,
+          "severity": "conditional",
+          "subject": {
+            "address": "aws_db_instance.db",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 1,
         "definite": 0,
@@ -3738,12 +3890,16 @@
             "id": "aws-rds-unencrypted",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "conditional"
+          "schema": 2,
+          "severity": "conditional",
+          "subject": {
+            "address": "aws_db_instance.db",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 1,
         "definite": 0,
@@ -3825,12 +3981,16 @@
             "id": "aws-rds-unencrypted",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_db_instance.db",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -3922,12 +4082,16 @@
             "id": "aws-rds-unencrypted",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_db_instance.db",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -4032,12 +4196,16 @@
             "id": "aws-rds-unencrypted",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_db_instance.db",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -4056,7 +4224,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -4151,12 +4319,16 @@
             "id": "aws-s3-public-access-block",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "conditional"
+          "schema": 2,
+          "severity": "conditional",
+          "subject": {
+            "address": "aws_s3_bucket.data",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 1,
         "definite": 0,
@@ -4234,12 +4406,16 @@
             "id": "aws-s3-public-access-block",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_s3_bucket.data",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -4289,12 +4465,16 @@
             "id": "aws-s3-public-access-block",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_s3_bucket.b",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -4344,12 +4524,16 @@
             "id": "aws-s3-public-access-block",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_s3_bucket.logs",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -4433,12 +4617,16 @@
             "id": "aws-s3-public-access-block",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_s3_bucket.data",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -4457,7 +4645,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -4474,7 +4662,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -4491,7 +4679,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -4574,12 +4762,16 @@
             "id": "aws-sg-open-ssh",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "conditional"
+          "schema": 2,
+          "severity": "conditional",
+          "subject": {
+            "address": "aws_security_group.maybe",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 1,
         "definite": 0,
@@ -4711,12 +4903,16 @@
             "id": "aws-sg-open-ssh",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_security_group.dyn",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -4808,12 +5004,16 @@
             "id": "aws-sg-open-ssh",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_security_group.web",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -4903,8 +5103,12 @@
             "id": "aws-sg-open-ssh",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_security_group.wide",
+            "kind": "resource"
+          }
         },
         {
           "attribute": "ingress.ipv6_cidr_blocks",
@@ -4978,12 +5182,16 @@
             "id": "aws-sg-open-ssh",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_security_group.all",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 2,
@@ -5112,12 +5320,16 @@
             "id": "aws-sg-open-ssh",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_security_group.admin",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -5189,12 +5401,16 @@
             "id": "aws-sg-open-ssh",
             "level": "high"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "aws_vpc_security_group_ingress_rule.ssh",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -5213,7 +5429,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -5230,7 +5446,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -5247,7 +5463,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,
@@ -5350,12 +5566,16 @@
             "id": "gcp-storage-uniform-access",
             "level": "medium"
           },
-          "schema": 1,
-          "severity": "conditional"
+          "schema": 2,
+          "severity": "conditional",
+          "subject": {
+            "address": "google_storage_bucket.b",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 1,
         "definite": 0,
@@ -5437,12 +5657,16 @@
             "id": "gcp-storage-uniform-access",
             "level": "medium"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "google_storage_bucket.b",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -5547,12 +5771,16 @@
             "id": "gcp-storage-uniform-access",
             "level": "medium"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "google_storage_bucket.b",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -5670,12 +5898,16 @@
             "id": "gcp-storage-uniform-access",
             "level": "medium"
           },
-          "schema": 1,
-          "severity": "definite"
+          "schema": 2,
+          "severity": "definite",
+          "subject": {
+            "address": "google_storage_bucket.b",
+            "kind": "resource"
+          }
         }
       ],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 1,
@@ -5694,7 +5926,7 @@
       "diagnostics": [],
       "findings": [],
       "rule_errors": [],
-      "schema": 1,
+      "schema": 2,
       "stats": {
         "conditional": 0,
         "definite": 0,

@@ -1,4 +1,4 @@
-//! The finding record: its field set is the contract (schema 1), it survives
+//! The finding record: its field set is the contract (schema 2), it survives
 //! a JSON round trip, and fix hints say what the plan promised.
 
 use std::collections::BTreeSet;
@@ -21,8 +21,8 @@ fn keys(v: &serde_json::Value) -> Vec<String> {
 /// Adding, removing or renaming a field here is a schema change: bump
 /// `SCHEMA` and `docs/FINDING_SCHEMA.md` together with this list.
 #[test]
-fn schema_1_field_set_is_pinned() {
-    assert_eq!(SCHEMA, 1);
+fn schema_2_field_set_is_pinned() {
+    assert_eq!(SCHEMA, 2);
     let r = scan("aws-rds-unencrypted/fail_absent_uses_default");
     let json = serde_json::to_value(&r).unwrap();
     assert_eq!(
@@ -61,8 +61,13 @@ fn schema_1_field_set_is_pinned() {
             "root",
             "rule",
             "schema",
-            "severity"
+            "severity",
+            "subject"
         ]
+    );
+    assert_eq!(
+        f["subject"],
+        serde_json::json!({"kind": "resource", "address": "aws_db_instance.db"})
     );
     assert_eq!(keys(&f["rule"]), ["category", "description", "id", "level"]);
     assert_eq!(
@@ -125,7 +130,11 @@ fn fingerprints_are_unique_within_a_scan_and_ignore_presentation() {
     let f = &r.findings[0];
     assert_eq!(
         f.fingerprint,
-        tf_linter::record::fingerprint(&f.rule.id, &f.resource.address, f.attribute.as_deref())
+        tf_linter::record::fingerprint(
+            &f.rule.id,
+            &f.resource.as_ref().unwrap().address,
+            f.attribute.as_deref()
+        )
     );
 }
 
@@ -140,7 +149,10 @@ fn fix_hints_name_the_edit_and_its_site() {
     );
     assert_eq!(h.value, serde_json::json!(true));
     assert!(h.site.is_none());
-    assert_eq!(h.resource.address, r.findings[0].resource.address);
+    assert_eq!(
+        h.resource.address,
+        r.findings[0].resource.as_ref().unwrap().address
+    );
     assert!(r.findings[0].configured.is_none());
     assert_eq!(
         r.findings[0].effective.as_ref().unwrap().value,
@@ -162,7 +174,7 @@ fn fix_hints_name_the_edit_and_its_site() {
     let f = &r.findings[0];
     let h = f.fix_hint.as_ref().unwrap();
     assert_eq!(h.resource.ty, "aws_s3_bucket_public_access_block");
-    assert_ne!(h.resource.address, f.resource.address);
+    assert_ne!(h.resource.address, f.resource.as_ref().unwrap().address);
     assert!(
         f.attribute.is_none(),
         "the deciding value is not on the bucket"
