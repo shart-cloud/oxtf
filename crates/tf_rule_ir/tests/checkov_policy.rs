@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value as Json, json};
-use tf_rule_ir::checkov_policy::{self, Blocker, PolicySource};
+use tf_rule_ir::checkov_policy::{self, PolicySource};
 use tf_rule_ir::{Expr, RuleSpec, load_rules_file};
 
 fn translate_yaml(text: &str) -> Result<RuleSpec, String> {
@@ -59,7 +59,7 @@ fn pinned_catalog_matches_python_importer() {
 
     let mut paths = Vec::new();
     files(Path::new(&checks), &mut paths);
-    let (mut translated, mut rejected) = (0, 0);
+    let mut translated = 0;
     for path in paths {
         let text = std::fs::read_to_string(&path).unwrap();
         let source = PolicySource::parse(&path, &text).unwrap();
@@ -67,7 +67,13 @@ fn pinned_catalog_matches_python_importer() {
         match checkov_policy::translate(&source.value) {
             Ok(rule) => {
                 translated += 1;
-                let expected = &golden[&id];
+                let Some(expected) = golden.get(&id) else {
+                    assert!(
+                        unsupported.contains_key(id.as_str()),
+                        "{id}: not in the golden pack"
+                    );
+                    continue;
+                };
                 let graph: Vec<_> = expected
                     .clauses
                     .iter()
@@ -80,20 +86,15 @@ fn pinned_catalog_matches_python_importer() {
                     assert_eq!(&rule, expected, "{id}: rule differs");
                 }
             }
-            Err(blockers) => {
-                rejected += 1;
-                let expected = unsupported
-                    .get(id.as_str())
-                    .unwrap_or_else(|| panic!("{id}: unexpectedly rejected: {blockers:?}"));
-                let ours: Vec<Json> = blockers
-                    .iter()
-                    .map(|b: &Blocker| json!({"path": b.path, "code": b.code, "reason": b.reason}))
-                    .collect();
-                assert_eq!(&Json::Array(ours), *expected, "{id}: blockers differ");
-            }
+            Err(blockers) => panic!("{id}: rejected: {blockers:?}"),
         }
     }
-    assert_eq!((translated, rejected), (184, 2));
+    // Every policy the importer rejected is now translated natively; their
+    // behavior is checked by the graph conformance harness instead.
+    let mut newly: Vec<&str> = unsupported.keys().copied().collect();
+    newly.sort();
+    assert_eq!(newly, ["CKV2_AWS_69", "CKV2_OCI_4"]);
+    assert_eq!(translated, 186);
 }
 
 #[test]
@@ -148,16 +149,49 @@ definition:
 #[test]
 fn unsupported_policies_fail_with_positions() {
     let err = translate_yaml(
-        "metadata:\n  id: X\n  name: n\n  category: c\ndefinition:\n  cond_type: attribute\n  resource_types: all\n  attribute: tags\n  operator: regex_match\n  value: x\n",
+        "metadata:\n  id: X\n  name: n\n  category: c\ndefinition:\n  cond_type: connection\n  resource_types: [a]\n  connected_resource_types: aws_lb_listener\n  operator: frobnicate\n",
     )
     .unwrap_err();
     assert_eq!(
         err,
-        "policy.yaml:9:13: X: unsupported graph operator: regex_match [attribute_operator] at /definition/operator\n\
-         policy.yaml:7:19: X: graph resource type `all` expands from Checkov's provider table, which is not supported [resource_selector] at /definition/resource_types"
+        "policy.yaml:9:13: X: unsupported connection operator: frobnicate [connection_operator] at /definition/operator\n\
+         policy.yaml:8:29: X: Checkov matches a string connected_resource_types by substring; use a list [resource_types] at /definition/connected_resource_types"
     );
+    let err = translate_yaml(
+        "metadata: {id: X, name: n, category: c}\ndefinition: {cond_type: attribute, resource_types: [a], attribute: a, operator: regex_match, value: '(?=x)'}\n",
+    )
+    .unwrap_err();
+    assert!(err.contains("lookaround"), "{err}");
     let err = translate_yaml("metadata:\n  id: X\n  name: n\ndefinition: {}\n").unwrap_err();
     assert!(err.contains("requires metadata.category"), "{err}");
+}
+
+/// `all` follows Checkov's registry: the provider table for a known
+/// `scope.provider`, otherwise every vertex.
+#[test]
+fn resource_types_all() {
+    let types = |scope: &str, types: &str| {
+        let rule = translate_yaml(&format!(
+            "metadata: {{id: X, name: n, category: c}}\n{scope}definition: {{cond_type: attribute, {types} attribute: a, operator: exists}}\n"
+        ))
+        .unwrap();
+        rule.clauses[0].resource_types.clone()
+    };
+    assert_eq!(types("", "resource_types: all,"), ["*"]);
+    assert_eq!(types("", ""), ["*"]);
+    assert_eq!(
+        types("scope: {provider: oci}\n", "resource_types: [ALL, x],"),
+        ["*"]
+    );
+    let aws = types("scope: {provider: AWS}\n", "resource_types: all,");
+    assert!(
+        aws.len() > 500 && aws.iter().any(|t| t == "aws_s3_bucket"),
+        "{}",
+        aws.len()
+    );
+    assert!(!aws.iter().any(|t| t.starts_with("google_")));
+    // Only a leading `all` expands; elsewhere it is a (nonexistent) type.
+    assert_eq!(types("", "resource_types: [x, all],"), ["all", "x"]);
 }
 
 #[test]
@@ -195,7 +229,7 @@ fn rule_files_detect_format_and_walk_directories() {
     std::fs::write(dir.join("bad.yaml"), "metadata: [\n").unwrap();
     std::fs::write(
         dir.join("regex.yaml"),
-        "metadata: {id: CKV2_RE, name: n, category: c}\ndefinition: {cond_type: attribute, resource_types: [x], attribute: a, operator: regex_match, value: v}\n",
+        "metadata: {id: CKV2_RE, name: n, category: c}\ndefinition: {cond_type: attribute, resource_types: [x], attribute: a, operator: frobnicate, value: v}\n",
     )
     .unwrap();
     let loaded = load_rules_file(&dir).unwrap();
@@ -224,4 +258,66 @@ fn rule_files_detect_format_and_walk_directories() {
     // A file named directly still fails.
     assert!(load_rules_file(&dir.join("regex.yaml")).is_err());
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// The attribute operators registered by the pinned Checkov 3.2.328
+/// (`checks_parser.operators_to_attributes_solver_classes`). Each is
+/// implemented; `bench/checkov/graph_compare.py` checks them against
+/// Checkov's solvers, plain and as `jsonpath_<operator>`.
+const CHECKOV_ATTRIBUTE_OPERATORS: [&str; 45] = [
+    "any",
+    "cidr_range_not_subset",
+    "cidr_range_subset",
+    "contains",
+    "ending_with",
+    "equals",
+    "equals_ignore_case",
+    "exists",
+    "greater_than",
+    "greater_than_or_equal",
+    "intersects",
+    "is_empty",
+    "is_false",
+    "is_not_empty",
+    "is_true",
+    "length_equals",
+    "length_greater_than",
+    "length_greater_than_or_equal",
+    "length_less_than",
+    "length_less_than_or_equal",
+    "length_not_equals",
+    "less_than",
+    "less_than_or_equal",
+    "not_contains",
+    "not_ending_with",
+    "not_equals",
+    "not_equals_ignore_case",
+    "not_exists",
+    "not_intersects",
+    "not_regex_match",
+    "not_starting_with",
+    "not_subset",
+    "not_within",
+    "number_of_words_equals",
+    "number_of_words_greater_than",
+    "number_of_words_greater_than_or_equal",
+    "number_of_words_less_than",
+    "number_of_words_less_than_or_equal",
+    "number_of_words_not_equals",
+    "range_includes",
+    "range_not_includes",
+    "regex_match",
+    "starting_with",
+    "subset",
+    "within",
+];
+
+#[test]
+fn every_registry_operator_is_implemented() {
+    use tf_rule_ir::checkov::AttributeOp;
+    for name in CHECKOV_ATTRIBUTE_OPERATORS {
+        let op: AttributeOp = serde_json::from_value(json!(name))
+            .unwrap_or_else(|e| panic!("{name}: not an AttributeOp: {e}"));
+        assert_eq!(serde_json::to_value(op).unwrap(), json!(name));
+    }
 }

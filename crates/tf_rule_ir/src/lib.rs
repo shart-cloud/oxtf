@@ -55,6 +55,8 @@ pub mod checkov;
 pub mod checkov_policy;
 pub mod graph;
 pub mod jsonpath;
+pub mod py;
+pub mod pyre;
 pub mod pyyaml;
 
 /// Current IR version. Versions 1 and 2 remain readable; graph policies need 3.

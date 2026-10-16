@@ -9,9 +9,10 @@
 //! JSON Pointer paths. YAML is read as Checkov reads it ([`crate::pyyaml`]).
 //!
 //! Where Checkov's own loader and the old importer disagree, this follows
-//! Checkov: `resource_types: all` and `*` (which the importer treated as
-//! "any type", but Checkov expands from a provider table or matches
-//! literally) are rejected until they can be reproduced exactly.
+//! Checkov: `resource_types: all` (which the importer treated as "any
+//! type") expands from Checkov's provider table for `scope.provider`, and
+//! `*` (which Checkov matches literally) is rejected. Beyond the importer,
+//! every attribute operator in the pinned registry is admitted.
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
@@ -19,6 +20,7 @@ use std::path::Path;
 use serde_json::{Value as Json, json};
 
 use crate::RuleSpec;
+use crate::checkov::{AttributeCheck, AttributeOp};
 use crate::jsonpath::field_name;
 use crate::pyyaml::{self, Position};
 
@@ -47,44 +49,6 @@ fn py_str(v: Option<&Json>) -> String {
     }
 }
 
-const ATTRIBUTE_OPERATORS: &[&str] = &[
-    "exists",
-    "not_exists",
-    "equals",
-    "not_equals",
-    "equals_ignore_case",
-    "not_equals_ignore_case",
-    "within",
-    "not_within",
-    "contains",
-    "not_contains",
-    "starting_with",
-    "not_starting_with",
-    "greater_than",
-    "greater_than_or_equal",
-    "less_than",
-    "less_than_or_equal",
-    "is_empty",
-    "is_not_empty",
-    "is_true",
-    "is_false",
-    "number_of_words_not_equals",
-    "length_greater_than",
-    "length_less_than_or_equal",
-    "subset",
-];
-const SIZE_OPERATORS: &[&str] = &[
-    "number_of_words_not_equals",
-    "length_greater_than",
-    "length_less_than_or_equal",
-];
-const JSONPATH_OPERATORS: &[&str] = &[
-    "jsonpath_exists",
-    "jsonpath_not_exists",
-    "jsonpath_equals",
-    "jsonpath_not_equals",
-    "jsonpath_not_contains",
-];
 const META_ARGS: &[&str] = &[
     "lifecycle",
     "provisioner",
@@ -147,6 +111,7 @@ enum Tok {
     At,
     And,
     Op(&'static str),
+    Number(i64),
 }
 
 /// The tokens of bc_jsonpath_ng's extended lexer that the admitted grammar
@@ -181,20 +146,39 @@ fn lex(s: &str) -> Option<Vec<Tok>> {
                 i += if b.get(i + 1) == Some(&b'&') { 2 } else { 1 };
                 out.push(Tok::And);
             }
-            b'=' | b'!' => {
-                let two = b.get(i + 1) == Some(&b'=');
-                if c == b'!' && !two {
+            b'=' | b'!' | b'<' | b'>' => {
+                // FILTER_OP: =~ | ==? | <= | >= | != | < | >
+                let next = b.get(i + 1).copied();
+                let (op, len) = match (c, next) {
+                    (b'=', Some(b'~')) => ("=~", 2),
+                    (b'=', Some(b'=')) => ("==", 2),
+                    (b'=', _) => ("=", 1),
+                    (b'!', Some(b'=')) => ("!=", 2),
+                    (b'<', Some(b'=')) => ("<=", 2),
+                    (b'>', Some(b'=')) => (">=", 2),
+                    (b'<', _) => ("<", 1),
+                    (b'>', _) => (">", 1),
+                    _ => return None,
+                };
+                out.push(Tok::Op(op));
+                i += len;
+            }
+            b'0'..=b'9' | b'-' => {
+                // NUMBER (-?\d+); a FLOAT (-?\d+\.\d+) is not admitted.
+                let start = i;
+                if c == b'-' {
+                    i += 1;
+                    if !b.get(i).is_some_and(u8::is_ascii_digit) {
+                        return None;
+                    }
+                }
+                while i < b.len() && b[i].is_ascii_digit() {
+                    i += 1;
+                }
+                if b.get(i) == Some(&b'.') && b.get(i + 1).is_some_and(u8::is_ascii_digit) {
                     return None;
                 }
-                if c == b'=' && b.get(i + 1) == Some(&b'~') {
-                    return None;
-                }
-                out.push(Tok::Op(match (c, two) {
-                    (b'!', _) => "!=",
-                    (_, true) => "==",
-                    _ => "=",
-                }));
-                i += if two { 2 } else { 1 };
+                out.push(Tok::Number(s[start..i].parse().ok()?));
             }
             b'\'' | b'"' => {
                 let mut v = String::new();
@@ -322,11 +306,26 @@ impl JsonPathParser {
         };
         self.i += 1;
         let value = match self.peek() {
-            Some(Tok::Id(s) | Tok::Quoted(s)) => s.clone(),
+            Some(Tok::Id(s) | Tok::Quoted(s)) => json!(s),
+            Some(Tok::Number(n)) => json!(n),
             _ => return None,
         };
         self.i += 1;
-        let operator = if op == "!=" { "not_equals" } else { "equals" };
+        let operator = match (op, value.is_string()) {
+            ("==" | "=", _) => "equals",
+            ("!=", _) => "not_equals",
+            ("=~", true) => "regex",
+            ("<", false) => "less_than",
+            ("<=", false) => "less_than_or_equal",
+            (">", false) => "greater_than",
+            (">=", false) => "greater_than_or_equal",
+            _ => return None,
+        };
+        if operator == "regex"
+            && crate::pyre::compile(value.as_str()?, crate::pyre::Mode::Search).is_err()
+        {
+            return None;
+        }
         Some(vec![
             json!({"path": path, "operator": operator, "value": value}),
         ])
@@ -360,6 +359,35 @@ pub fn compile_jsonpath(attribute: &str) -> Option<Vec<Json>> {
 
 struct Translator {
     blockers: Vec<Blocker>,
+    /// What `resource_types: all` expands to for this policy's scope.
+    all_types: Vec<String>,
+}
+
+/// Checkov's provider table (`checks_infra/resources_types.py`), generated
+/// from the pinned version by `scripts/gen_checkov_resource_types.py`.
+fn provider_types(provider: &str) -> Option<Vec<String>> {
+    static TABLE: std::sync::OnceLock<HashMap<String, Vec<String>>> = std::sync::OnceLock::new();
+    TABLE
+        .get_or_init(|| {
+            let doc: Json =
+                serde_json::from_str(include_str!("../data/checkov_resource_types.json"))
+                    .expect("generated table is JSON");
+            serde_json::from_value(doc["providers"].clone()).expect("provider table shape")
+        })
+        .get(provider)
+        .cloned()
+}
+
+/// Python truthiness of a JSON value.
+fn falsy(v: Option<&Json>) -> bool {
+    match v {
+        None | Some(Json::Null) => true,
+        Some(Json::Bool(b)) => !b,
+        Some(Json::Number(n)) => n.as_f64() == Some(0.0),
+        Some(Json::String(s)) => s.is_empty(),
+        Some(Json::Array(a)) => a.is_empty(),
+        Some(Json::Object(o)) => o.is_empty(),
+    }
 }
 
 fn kind(node: &Option<Json>) -> Option<&str> {
@@ -408,14 +436,11 @@ impl Translator {
             );
             return Vec::new();
         }
-        if strings
-            .iter()
-            .any(|t| t.eq_ignore_ascii_case("all") || t == "*")
-        {
+        if strings.iter().any(|t| t == "*") {
             self.reject(
                 path,
                 "resource_selector",
-                "graph resource type `all` expands from Checkov's provider table, which is not supported",
+                "graph resource type `*` is matched literally by Checkov; use `all`",
             );
         }
         if strings
@@ -433,6 +458,63 @@ impl Translator {
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect()
+    }
+
+    /// An attribute or connection condition's `resource_types`, as
+    /// Checkov's parser reads it: missing, empty, `all` or a list starting
+    /// with `all` expands from the provider table, or matches every vertex.
+    fn leaf_types(&mut self, value: Option<&Json>, path: &str) -> Vec<String> {
+        let first_all = match value {
+            Some(Json::String(s)) => s.to_lowercase() == "all",
+            Some(Json::Array(a)) => match a.first() {
+                Some(Json::String(s)) => s.to_lowercase() == "all",
+                Some(_) => {
+                    self.reject(
+                        path,
+                        "resource_types",
+                        "graph resource types must be strings",
+                    );
+                    return Vec::new();
+                }
+                None => false,
+            },
+            _ => false,
+        };
+        if falsy(value) || first_all {
+            return self.all_types.clone();
+        }
+        let provider = match value {
+            Some(Json::String(s)) => s.contains("provider"),
+            Some(Json::Array(a)) => a.iter().any(|t| t.as_str() == Some("provider")),
+            _ => false,
+        };
+        if provider {
+            // Checkov selects provider blocks here (a substring match for a
+            // string), which oxtf does not evaluate.
+            self.reject(path, "resource_selector", "graph provider-block selector");
+            return Vec::new();
+        }
+        self.types(value, path)
+    }
+
+    /// `connected_resource_types`: only `"all"` or `["All"]` expand; a
+    /// missing or empty value matches every vertex. Checkov keeps any other
+    /// string as a string and matches substrings of it, which is rejected.
+    fn connected_types(&mut self, value: Option<&Json>, path: &str) -> Vec<String> {
+        match value {
+            Some(Json::String(s)) if s == "all" => self.all_types.clone(),
+            Some(Json::Array(a)) if a.len() == 1 && a[0] == "All" => self.all_types.clone(),
+            v if falsy(v) => vec!["*".to_string()],
+            Some(Json::String(_)) => {
+                self.reject(
+                    path,
+                    "resource_types",
+                    "Checkov matches a string connected_resource_types by substring; use a list",
+                );
+                Vec::new()
+            }
+            v => self.types(v, path),
+        }
     }
 
     fn expression(&mut self, node: Option<&Json>, path: &str) -> Option<Json> {
@@ -518,8 +600,8 @@ impl Translator {
                     self.reject(path, "fields", "unknown graph connection fields");
                 }
                 let resource_types =
-                    self.types(obj.get("resource_types"), &format!("{path}/resource_types"));
-                let connected = self.types(
+                    self.leaf_types(obj.get("resource_types"), &format!("{path}/resource_types"));
+                let connected = self.connected_types(
                     obj.get("connected_resource_types"),
                     &format!("{path}/connected_resource_types"),
                 );
@@ -605,8 +687,11 @@ impl Translator {
                 return None;
             }
         }
-        let jsonpath = op_str.is_some_and(|o| JSONPATH_OPERATORS.contains(&o));
-        if !jsonpath && !op_str.is_some_and(|o| ATTRIBUTE_OPERATORS.contains(&o)) {
+        let jsonpath = op_str.is_some_and(|o| o.starts_with("jsonpath_"));
+        let base_op = op_str.map(|o| o.strip_prefix("jsonpath_").unwrap_or(o));
+        let parsed: Option<AttributeOp> =
+            base_op.and_then(|o| serde_json::from_value(json!(o)).ok());
+        if parsed.is_none() {
             self.reject(
                 format!("{path}/operator"),
                 "attribute_operator",
@@ -624,36 +709,20 @@ impl Translator {
                     "graph requires a nonempty attribute path",
                 );
             }
-            Some(a) if jsonpath => {
-                match compile_jsonpath(a) {
-                    Some(p) => compiled = p,
-                    None => self.reject(
-                        &attr_path,
-                        "jsonpath",
-                        "unsupported JSONPath syntax or filter predicate",
-                    ),
-                }
-                if a.contains("=~") {
-                    self.reject(
-                        &attr_path,
-                        "jsonpath_regex",
-                        "graph JSONPath predicate requires regex support",
-                    );
-                }
-            }
+            Some(a) if jsonpath => match compile_jsonpath(a) {
+                Some(p) => compiled = p,
+                None => self.reject(
+                    &attr_path,
+                    "jsonpath",
+                    "unsupported JSONPath syntax or filter predicate",
+                ),
+            },
             Some(a) if a.contains(['[', ']', '/']) => {
                 self.reject(
                     &attr_path,
                     "jsonpath",
                     "graph predicate requires JSONPath support",
                 );
-                if a.contains("=~") {
-                    self.reject(
-                        &attr_path,
-                        "jsonpath_regex",
-                        "graph JSONPath predicate requires regex support",
-                    );
-                }
             }
             Some(a)
                 if a.split('.')
@@ -682,20 +751,24 @@ impl Translator {
         }
         let mut value = obj.get("value").cloned().unwrap_or(Json::Null);
         let value_path = format!("{path}/value");
-        match op_str {
-            Some(op @ ("within" | "not_within" | "subset")) => {
-                let scalar_list = value
-                    .as_array()
-                    .is_some_and(|l| l.iter().all(|v| !v.is_array() && !v.is_object()));
-                if !scalar_list {
-                    self.reject(
-                        &value_path,
-                        "scalar_list",
-                        format!("graph {op} requires scalar list"),
-                    );
-                }
+        let scalar_list = |v: &Json| {
+            v.as_array()
+                .is_some_and(|l| l.iter().all(|v| !v.is_array() && !v.is_object()))
+        };
+        match parsed {
+            Some(
+                AttributeOp::Within
+                | AttributeOp::NotWithin
+                | AttributeOp::Subset
+                | AttributeOp::NotSubset,
+            ) if !scalar_list(&value) => {
+                self.reject(
+                    &value_path,
+                    "scalar_list",
+                    format!("graph {} requires scalar list", base_op.unwrap_or_default()),
+                );
             }
-            Some(op) if SIZE_OPERATORS.contains(&op) => {
+            Some(op) if op.is_size() => {
                 // Match Checkov's force_int at export time; native operands are
                 // canonical integers, with no Python coercion needed at runtime.
                 match py_int(&value) {
@@ -707,14 +780,31 @@ impl Translator {
                     ),
                 }
             }
-            _ if value.is_array() || value.is_object() => {
-                self.reject(
-                    &value_path,
-                    "composite_comparison",
-                    "graph composite comparison",
-                );
+            Some(op) => {
+                let check = AttributeCheck {
+                    attribute: String::new(),
+                    operator: op,
+                    value: value.clone(),
+                    prepared: Default::default(),
+                };
+                if let Err(e) = check.validate_operand() {
+                    if value.is_array() || value.is_object() {
+                        self.reject(
+                            &value_path,
+                            "composite_comparison",
+                            "graph composite comparison",
+                        );
+                    } else {
+                        let reason = e.trim_start_matches("checkov_attribute: ");
+                        self.reject(
+                            &value_path,
+                            "operand",
+                            format!("graph {}: {reason}", base_op.unwrap_or_default()),
+                        );
+                    }
+                }
             }
-            _ => {}
+            None => {}
         }
         if unknown_fields(&[
             "cond_type",
@@ -726,7 +816,7 @@ impl Translator {
             self.reject(path, "fields", "unknown graph predicate fields");
         }
         let resource_types =
-            self.types(obj.get("resource_types"), &format!("{path}/resource_types"));
+            self.leaf_types(obj.get("resource_types"), &format!("{path}/resource_types"));
         let operator = operator.cloned().unwrap_or(Json::Null);
         Some(if jsonpath {
             let op = op_str.unwrap_or("").trim_start_matches("jsonpath_");
@@ -789,10 +879,30 @@ fn level(metadata: &serde_json::Map<String, Json>) -> Result<&'static str, Block
 pub fn translate(doc: &Json) -> Result<RuleSpec, Vec<Blocker>> {
     let mut t = Translator {
         blockers: Vec::new(),
+        all_types: vec!["*".to_string()],
     };
     if !doc.is_object() {
         t.reject("", "structure", "policy document must be a mapping");
         return Err(t.blockers);
+    }
+    // Checkov's registry lowercases `scope.provider` to pick the table for
+    // `resource_types: all`; without a table entry, `all` matches everything.
+    match doc.get("scope") {
+        None => {}
+        Some(Json::Object(scope)) => match scope.get("provider") {
+            None => {}
+            Some(Json::String(p)) => {
+                if let Some(types) = provider_types(&p.to_lowercase()) {
+                    t.all_types = types;
+                }
+            }
+            Some(_) => t.reject(
+                "/scope/provider",
+                "scope",
+                "scope.provider must be a string",
+            ),
+        },
+        Some(_) => t.reject("/scope", "scope", "scope must be a mapping"),
     }
     // Checkov's validate_check_config: these fields are required.
     let metadata = doc.get("metadata").and_then(Json::as_object);
@@ -1068,8 +1178,8 @@ mod tests {
             "$.a",
             "a[0]",
             "[*].a",
-            "a[?(@.k =~ 'v')]",
-            "a[?(@.k == 1)]",
+            "a[?(@.k =~ 1)]",
+            "a[?(@.k > 'v')]",
             "true_x.a",
             "a.where",
         ] {

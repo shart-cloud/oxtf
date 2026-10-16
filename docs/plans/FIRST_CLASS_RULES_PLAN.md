@@ -141,10 +141,10 @@ are involved. The code is in `tf_rule_ir`: `pyyaml.rs` (loading) and
 **Deliberate divergences from the old importer** (each follows Checkov
 instead):
 
-- `resource_types: all` (or a missing value, or `*`) is rejected. The
-  importer treated it as "any type". Checkov expands it from a provider table
-  keyed by `scope.provider` (or matches nothing without one). No built-in
-  policy uses it. Reproducing the table is an F2 item.
+- `resource_types: all` (or a missing value) expands from Checkov's
+  provider table keyed by `scope.provider`, as Checkov does (F2). The
+  importer treated it as "any type". `*` is rejected: Checkov matches it
+  literally.
 - `resource_types: provider` (Checkov's provider-block selector) is rejected.
 
 **Still open from F1:**
@@ -152,11 +152,12 @@ instead):
 - `tfscan` still loads Checkov packs through the Python importer; switching
   it to these paths and deleting the graph half of the importer is F5.
 
-### F2. Full Checkov operator coverage
+### F2. Full Checkov operator coverage (implemented 2026-10-16)
 
 User policies can use any operator, not only the ones the built-in catalog
 happens to use. The pinned 3.2.328 attribute-solver registry has 45
-operators; `AttributeOp` covers 24. Missing:
+operators. `AttributeOp` had 24 and now covers all 45, plain and as
+`jsonpath_<operator>`. The 21 added:
 
 | Group | Operators |
 | --- | --- |
@@ -166,26 +167,45 @@ operators; `AttributeOp` covers 24. Missing:
 | Word count | `number_of_words_equals`, `_greater_than`, `_greater_than_or_equal`, `_less_than`, `_less_than_or_equal` |
 | Network / range | `cidr_range_subset`, `cidr_range_not_subset`, `range_includes`, `range_not_includes` |
 
-- [ ] `resource_types: all` / `connected_resource_types: all`: Checkov's
-  per-provider resource-type table, with `scope.provider`, generated from
-  the pinned version (see F1 divergences).
+- [x] `resource_types: all` / `connected_resource_types: all` expand from
+  Checkov's per-provider table (`data/checkov_resource_types.json`, written
+  by `scripts/gen_checkov_resource_types.py` from the pinned version) and
+  `scope.provider`.
+- [x] Operator inventory: all 45 registry operators are implemented, so
+  there is no reject list. `every_registry_operator_is_implemented` in
+  `tests/checkov_policy.rs` pins the registry's names. A name outside it is
+  still a load error (`attribute_operator`), as it is for Checkov.
+- [x] Python semantics are ported, not approximated. `py.rs` covers `str()`,
+  `int()`/`force_int` and `ipaddress.ip_network(strict=False)`. `pyre.rs`
+  translates `re.match`/`re.search` patterns into the `regex` crate (new
+  dependency, `=1.13.1`) and admits only constructs with identical meaning
+  in both. Everything else (backreferences, lookaround, `\b`, flags other
+  than `i`, a non-final `$`) is a load error. Fixture tests check `\s`/`\w`/`\d`
+  over every code point, plus `str()`/`int()`/`ip_network`, against Python.
+- [x] Both remaining built-in blockers are closed (`CKV2_AWS_69`,
+  `CKV2_OCI_4`: regex filters and numeric filter comparisons). 186/186.
+- [x] The graph conformance generator (`bench/checkov/graph_compare.py`) now
+  loads every policy through the native front-end (`--rule-file DIR`) and
+  adds 211 synthetic policies (`synthetic_policies.py`). They put every
+  operator in a plain attribute, under a wildcard path and as `jsonpath_*`,
+  and selected ones in connection trees and `resource_types: all` scopes.
+  Operand pools per operator family cover missing, null, empty, mistyped and
+  malformed values.
 
-- [ ] Generate the operator inventory from the pinned registry, including the
-  `jsonpath_*` variants, and commit it as a table; the loader rejects any
-  operator not in it with a pointer to that table.
-- [ ] Implement each group with pass/fail fixtures, missing/null/empty and
-  unknown cases, and differential checks against the pinned solver. Regex
-  follows Python `re` semantics for the subset the pinned solver uses; any
-  construct the Rust engine can't match exactly is a load error, not an
-  approximation.
-- [ ] Close the two remaining built-in blockers (`CKV2_AWS_69`, `CKV2_OCI_4`:
-  regex predicates/filters and numeric filter comparisons). This reaches 186/186.
-- [ ] Extend the graph conformance generator to produce cases for operators
-  the built-in catalog doesn't use, from synthetic policies.
+**Gate results.**
 
-**Gate:** every registry operator is either implemented with zero
-differential disagreements or listed as unsupported with a reason;
-186/186 built-in graph policies.
+- *Differential:* `graph_compare.py` against Checkov 3.2.328's parser and
+  solvers: 397 policies (186 built-in, 211 synthetic), 41,208 cases (17,000
+  built-in, 24,208 synthetic), **0 disagreements, 0 skipped, 0 reference
+  errors**. It takes about 5 minutes.
+- *IR equality:* the 184 policies the importer translated still produce
+  identical `RuleSpec`s. The importer's 2 rejects now translate natively.
+- *Unknowns* (Checkov has none, so the harness cannot see them): each of
+  the 21 new operators on an attribute bound to an unset variable yields a
+  `conditional` finding, never a `definite` one. `any` yields no finding,
+  because it never fails.
+- Regenerating `checkov_frontend.json` with PyYAML 6.0.3 changes only the
+  version stamp. The committed file stays pinned to 6.0.2.
 
 ### F3. Rego / OPA as a first-class format
 

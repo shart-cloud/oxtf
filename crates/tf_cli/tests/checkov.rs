@@ -193,7 +193,7 @@ resource "aws_s3_bucket" "good" { acl = "private" }
     // points into the policy file; the rest of the directory still runs.
     std::fs::write(
         dir.join("policies/regex.yaml"),
-        "metadata: {id: CKV2_RE, name: n, category: c}\ndefinition:\n  cond_type: attribute\n  resource_types: [aws_s3_bucket]\n  attribute: acl\n  operator: regex_match\n  value: '^p'\n",
+        "metadata: {id: CKV2_RE, name: n, category: c}\ndefinition:\n  cond_type: attribute\n  resource_types: [aws_s3_bucket]\n  attribute: acl\n  operator: frobnicate\n  value: '^p'\n",
     )
     .unwrap();
     let scan = Command::new(env!("CARGO_BIN_EXE_oxtf"))
@@ -207,7 +207,7 @@ resource "aws_s3_bucket" "good" { acl = "private" }
     let stderr = String::from_utf8_lossy(&scan.stderr);
     assert!(stderr.contains("warning: skipped rule file"), "{stderr}");
     assert!(
-        stderr.contains("regex.yaml:6:13: CKV2_RE: unsupported graph operator: regex_match"),
+        stderr.contains("regex.yaml:6:13: CKV2_RE: unsupported graph operator: frobnicate"),
         "{stderr}"
     );
     let result: serde_json::Value = serde_json::from_slice(&scan.stdout).unwrap();

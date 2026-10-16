@@ -3,10 +3,15 @@
 //! The projection retains abstract values and provenance, and the common
 //! truth lattice lifts the predicate over alternatives.
 
+use std::sync::OnceLock;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 use tf_eval::{Kind, Known, Map, Truth, Value, Verdict, truth};
 use tf_semantic::{Body, Resource};
+
+use crate::py::{self, Network};
+use crate::pyre;
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -35,6 +40,148 @@ pub enum AttributeOp {
     LengthGreaterThan,
     LengthLessThanOrEqual,
     Subset,
+    EndingWith,
+    NotEndingWith,
+    RegexMatch,
+    NotRegexMatch,
+    Intersects,
+    NotIntersects,
+    NotSubset,
+    Any,
+    LengthEquals,
+    LengthNotEquals,
+    LengthGreaterThanOrEqual,
+    LengthLessThan,
+    NumberOfWordsEquals,
+    NumberOfWordsGreaterThan,
+    NumberOfWordsGreaterThanOrEqual,
+    NumberOfWordsLessThan,
+    NumberOfWordsLessThanOrEqual,
+    CidrRangeSubset,
+    CidrRangeNotSubset,
+    RangeIncludes,
+    RangeNotIncludes,
+}
+
+impl AttributeOp {
+    /// Operators whose operand is an integer threshold (Checkov `force_int`).
+    pub fn is_size(self) -> bool {
+        use AttributeOp::*;
+        matches!(
+            self,
+            NumberOfWordsNotEquals
+                | LengthGreaterThan
+                | LengthLessThanOrEqual
+                | LengthEquals
+                | LengthNotEquals
+                | LengthGreaterThanOrEqual
+                | LengthLessThan
+                | NumberOfWordsEquals
+                | NumberOfWordsGreaterThan
+                | NumberOfWordsGreaterThanOrEqual
+                | NumberOfWordsLessThan
+                | NumberOfWordsLessThanOrEqual
+        )
+    }
+}
+
+/// An operand prepared once, at load time.
+#[derive(Debug)]
+pub enum Operand {
+    Regex(regex::Regex),
+    Cidr(Vec<Network>),
+    /// Inclusive integer intervals (single values are one-wide).
+    Ranges(Vec<(i128, i128)>),
+}
+
+/// A value derived from IR fields once, at load time, and not itself part
+/// of the IR: ignored by equality, skipped by serde.
+#[derive(Clone)]
+pub struct Cache<T>(OnceLock<T>);
+
+impl<T> Default for Cache<T> {
+    fn default() -> Self {
+        Cache(OnceLock::new())
+    }
+}
+
+impl<T> Cache<T> {
+    pub fn get_or_init(&self, f: impl FnOnce() -> T) -> &T {
+        self.0.get_or_init(f)
+    }
+}
+
+impl<T> std::fmt::Debug for Cache<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Cache")
+    }
+}
+
+impl<T> PartialEq for Cache<T> {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+/// The prepared operand of a check, derived from `operator` and `value`.
+pub type Prepared = Cache<std::sync::Arc<Operand>>;
+
+fn prepare(operator: AttributeOp, value: &Json) -> Result<Option<Operand>, String> {
+    use AttributeOp::*;
+    Ok(match operator {
+        RegexMatch | NotRegexMatch => {
+            if value.is_array() || value.is_object() {
+                return Err("regex_match expects a scalar pattern".into());
+            }
+            let pattern = py::str(value).ok_or("regex_match pattern cannot be rendered")?;
+            Some(Operand::Regex(pyre::compile(&pattern, pyre::Mode::Match)?))
+        }
+        CidrRangeSubset | CidrRangeNotSubset => {
+            let items = match value {
+                Json::String(_) => vec![value.clone()],
+                Json::Array(items) => items.clone(),
+                _ => return Err("cidr_range_subset expects a CIDR string or list of CIDRs".into()),
+            };
+            let nets = items
+                .iter()
+                .map(|v| py::network(v).ok_or_else(|| format!("{v} is not an IP network")))
+                .collect::<Result<_, _>>()?;
+            Some(Operand::Cidr(nets))
+        }
+        RangeIncludes | RangeNotIncludes => {
+            let items = match value {
+                Json::Array(items) => items.clone(),
+                other => vec![other.clone()],
+            };
+            let mut ranges = Vec::new();
+            for v in &items {
+                let bad = || {
+                    format!("range operand {v} must be an integer or an \"a-b\" string of integers")
+                };
+                match v {
+                    Json::String(s) if s.contains('-') => {
+                        let parts: Vec<&str> = s.split('-').collect();
+                        let [a, b] = parts[..] else { return Err(bad()) };
+                        let (a, b) = py::int_str(a).zip(py::int_str(b)).ok_or_else(bad)?;
+                        if a <= b {
+                            ranges.push((a, b));
+                        }
+                    }
+                    Json::String(_) | Json::Bool(_) => {
+                        let n = py::force_int(v).ok_or_else(bad)?;
+                        ranges.push((n, n));
+                    }
+                    Json::Number(n) if n.is_i64() || n.is_u64() => {
+                        let n = py::force_int(v).ok_or_else(bad)?;
+                        ranges.push((n, n));
+                    }
+                    _ => return Err(bad()),
+                }
+            }
+            Some(Operand::Ranges(ranges))
+        }
+        _ => None,
+    })
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -44,6 +191,8 @@ pub struct AttributeCheck {
     pub operator: AttributeOp,
     #[serde(default)]
     pub value: Json,
+    #[serde(skip)]
+    pub prepared: Prepared,
 }
 
 /// Checkov's result filter: Python truthiness followed by `value in operand`.
@@ -132,27 +281,51 @@ impl AttributeCheck {
                 "checkov_attribute: expected dotted path with literal or '*' segments".into(),
             );
         }
-        if matches!(
-            self.operator,
-            AttributeOp::Within | AttributeOp::NotWithin | AttributeOp::Subset
-        ) {
-            if !matches!(&self.value, Json::Array(v) if v.iter().all(|x| !x.is_array() && !x.is_object()))
-            {
-                return Err("checkov_attribute: membership expects a list of scalars".into());
+        self.validate_operand()
+    }
+
+    /// The operand's shape for the operator, preparing it for evaluation.
+    pub fn validate_operand(&self) -> Result<(), String> {
+        use AttributeOp::*;
+        let scalar_list = |v: &Json| matches!(v, Json::Array(v) if v.iter().all(|x| !x.is_array() && !x.is_object()));
+        match self.operator {
+            Within | NotWithin | Subset | NotSubset => {
+                if !scalar_list(&self.value) {
+                    return Err("checkov_attribute: membership expects a list of scalars".into());
+                }
             }
-        } else if matches!(
-            self.operator,
-            AttributeOp::NumberOfWordsNotEquals
-                | AttributeOp::LengthGreaterThan
-                | AttributeOp::LengthLessThanOrEqual
-        ) {
-            if self.value.as_i64().is_none() {
-                return Err(
-                    "checkov_attribute: size comparison expects an integer threshold".into(),
-                );
+            op if op.is_size() => {
+                if self.value.as_i64().is_none() {
+                    return Err(
+                        "checkov_attribute: size comparison expects an integer threshold".into(),
+                    );
+                }
             }
-        } else if self.value.is_array() || self.value.is_object() {
-            return Err("checkov_attribute: comparison expects a scalar".into());
+            Intersects | NotIntersects => {
+                if !self.value.is_string() && !scalar_list(&self.value) {
+                    return Err(
+                        "checkov_attribute: intersects expects a string or a list of scalars"
+                            .into(),
+                    );
+                }
+            }
+            EndingWith | NotEndingWith => {
+                if !self.value.is_string() {
+                    return Err("checkov_attribute: ending_with expects a string".into());
+                }
+            }
+            Any | CidrRangeSubset | CidrRangeNotSubset | RangeIncludes | RangeNotIncludes => {}
+            _ => {
+                if self.value.is_array() || self.value.is_object() {
+                    return Err("checkov_attribute: comparison expects a scalar".into());
+                }
+            }
+        }
+        if let Some(operand) =
+            prepare(self.operator, &self.value).map_err(|e| format!("checkov_attribute: {e}"))?
+        {
+            let operand = std::sync::Arc::new(operand);
+            self.prepared.get_or_init(|| operand);
         }
         Ok(())
     }
@@ -177,8 +350,25 @@ impl AttributeCheck {
             .expect("nonempty attribute matches")
     }
 
+    fn operand(&self) -> &Operand {
+        self.prepared
+            .get_or_init(|| {
+                std::sync::Arc::new(
+                    prepare(self.operator, &self.value)
+                        .ok()
+                        .flatten()
+                        .expect("operand validated before evaluation"),
+                )
+            })
+            .as_ref()
+    }
+
     pub(crate) fn evaluate_value(&self, value: &Value) -> Verdict {
         use AttributeOp::*;
+        if self.operator == Any {
+            // AnyResourceSolver: every vertex of the resource types passes.
+            return Verdict::new(Truth::True, Some(value.clone()));
+        }
         truth::map(value, &|v| {
             let yes = match self.operator {
                 Exists | NotExists => !v.is_null(),
@@ -194,8 +384,52 @@ impl AttributeCheck {
                     .as_str()
                     .zip(self.value.as_str())
                     .is_some_and(|(a, b)| a.starts_with(b)),
-                IsTrue => matches!(v.as_known(), Some(Known::Bool(true))),
-                IsFalse => matches!(v.as_known(), Some(Known::Bool(false))),
+                EndingWith | NotEndingWith => v
+                    .as_str()
+                    .zip(self.value.as_str())
+                    .is_some_and(|(a, b)| a.ends_with(b)),
+                RegexMatch | NotRegexMatch => {
+                    let Operand::Regex(rx) = self.operand() else {
+                        unreachable!()
+                    };
+                    let Some(text) = python_str(v) else {
+                        return unresolved(v);
+                    };
+                    rx.is_match(&text)
+                }
+                Intersects | NotIntersects => {
+                    let result = intersects(v, &self.value);
+                    return if self.operator == NotIntersects {
+                        result.negate()
+                    } else {
+                        result
+                    };
+                }
+                NotSubset => return subset(v, self.value.as_array().expect("validated")).negate(),
+                CidrRangeSubset | CidrRangeNotSubset => {
+                    let Operand::Cidr(allowed) = self.operand() else {
+                        unreachable!()
+                    };
+                    let result = cidr_subset(v, allowed);
+                    return if self.operator == CidrRangeNotSubset {
+                        result.negate()
+                    } else {
+                        result
+                    };
+                }
+                RangeIncludes | RangeNotIncludes => {
+                    let Operand::Ranges(ranges) = self.operand() else {
+                        unreachable!()
+                    };
+                    let result = range_includes(v, ranges);
+                    return if self.operator == RangeNotIncludes {
+                        result.negate()
+                    } else {
+                        result
+                    };
+                }
+                // IsFalseAttributeSolver is `not (attr is True)`.
+                IsTrue | IsFalse => matches!(v.as_known(), Some(Known::Bool(true))),
                 IsEmpty | IsNotEmpty => match v.as_known() {
                     Some(Known::List(l)) => l.is_empty(),
                     Some(Known::Object(o)) => o.is_empty(),
@@ -235,7 +469,7 @@ impl AttributeCheck {
                         verdict
                     };
                 }
-                NumberOfWordsNotEquals | LengthGreaterThan | LengthLessThanOrEqual => {
+                op if op.is_size() => {
                     return measure(v, self.operator, self.value.as_i64().expect("validated"));
                 }
                 Subset => return subset(v, self.value.as_array().expect("validated")),
@@ -257,7 +491,14 @@ impl AttributeCheck {
             };
             let invert = matches!(
                 self.operator,
-                NotExists | NotEquals | NotEqualsIgnoreCase | NotStartingWith | IsNotEmpty
+                NotExists
+                    | NotEquals
+                    | NotEqualsIgnoreCase
+                    | NotStartingWith
+                    | IsNotEmpty
+                    | NotEndingWith
+                    | NotRegexMatch
+                    | IsFalse
             );
             Verdict::new(Truth::from_bool(yes != invert), Some(v.clone()))
         })
@@ -272,26 +513,154 @@ fn measure(value: &Value, operator: AttributeOp, threshold: i64) -> Verdict {
             None => unresolved(value),
         };
     }
-    let size = match (operator, value.as_known()) {
-        (NumberOfWordsNotEquals, Some(Known::String(s))) => Some(
+    let words = matches!(
+        operator,
+        NumberOfWordsNotEquals
+            | NumberOfWordsEquals
+            | NumberOfWordsGreaterThan
+            | NumberOfWordsGreaterThanOrEqual
+            | NumberOfWordsLessThan
+            | NumberOfWordsLessThanOrEqual
+    );
+    let size = match (words, value.as_known()) {
+        (true, Some(Known::String(s))) => Some(
             s.split(|c: char| c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c))
                 .filter(|word| !word.is_empty())
                 .count(),
         ),
-        (NumberOfWordsNotEquals, _) => None,
+        (true, _) => None,
         (_, Some(Known::String(s))) => Some(s.chars().count()),
         (_, Some(Known::List(items))) => Some(items.len()),
         // Checkov treats every dict, including an empty one, as one block.
         (_, Some(Known::Object(_))) => Some(1),
         _ => None,
     };
+    let size = size.map(|n| n as i128);
+    let t = threshold as i128;
+    // A value that is not measurable fails every comparison, so the
+    // not-equals operators (negations of equals) pass it.
     let yes = match operator {
-        NumberOfWordsNotEquals => size.map(|n| n as i128) != Some(threshold as i128),
-        LengthGreaterThan => size.is_some_and(|n| n as i128 > threshold as i128),
-        LengthLessThanOrEqual => size.is_some_and(|n| n as i128 <= threshold as i128),
+        NumberOfWordsNotEquals | LengthNotEquals => size != Some(t),
+        NumberOfWordsEquals | LengthEquals => size == Some(t),
+        LengthGreaterThan | NumberOfWordsGreaterThan => size.is_some_and(|n| n > t),
+        LengthGreaterThanOrEqual | NumberOfWordsGreaterThanOrEqual => size.is_some_and(|n| n >= t),
+        LengthLessThan | NumberOfWordsLessThan => size.is_some_and(|n| n < t),
+        LengthLessThanOrEqual | NumberOfWordsLessThanOrEqual => size.is_some_and(|n| n <= t),
         _ => unreachable!(),
     };
     Verdict::new(Truth::from_bool(yes), Some(value.clone()))
+}
+
+/// Python's `str()` of a known value, as Checkov's regex solver renders it.
+fn python_str(v: &Value) -> Option<String> {
+    match v.as_known()? {
+        Known::String(s) => Some(s.to_string()),
+        Known::Number(n) => Some(py::number_str(*n)),
+        Known::Json(_) => None,
+        _ => py::str(&tf_eval::value::to_json(v)?),
+    }
+}
+
+/// `IntersectsAttributeSolver`: a string operand is `value in attr`; a list
+/// operand is `any(i in value for i in attr)`. Non-iterables never intersect.
+fn intersects(v: &Value, operand: &Json) -> Verdict {
+    let no = || Verdict::new(Truth::False, Some(v.clone()));
+    match (v.as_known(), operand) {
+        (Some(Known::String(s)), Json::String(o)) => {
+            Verdict::new(Truth::from_bool(s.contains(o.as_str())), Some(v.clone()))
+        }
+        (Some(Known::String(s)), Json::Array(o)) => Verdict::new(
+            Truth::from_bool(s.chars().any(|c| {
+                o.iter()
+                    .any(|x| x.as_str() == Some(c.encode_utf8(&mut [0; 4])))
+            })),
+            Some(v.clone()),
+        ),
+        (Some(Known::List(_)), Json::String(_)) => truth::exists(v, &|x| equal(x, operand)),
+        (Some(Known::List(_)), Json::Array(o)) => truth::exists(v, &|x| matches(x, o)),
+        (Some(Known::Object(m)), Json::String(o)) => Verdict::new(
+            Truth::from_bool(m.contains_key(o.as_str())),
+            Some(v.clone()),
+        ),
+        (Some(Known::Object(m)), Json::Array(o)) => Verdict::new(
+            Truth::from_bool(
+                m.keys()
+                    .any(|k| o.iter().any(|x| x.as_str() == Some(k.as_ref()))),
+            ),
+            Some(v.clone()),
+        ),
+        (Some(Known::Json(_)), _) => unresolved(v),
+        _ => no(),
+    }
+}
+
+/// `CIDRRangeSubsetAttributeSolver`. A falsy value fails; a value Python's
+/// `ip_network` would raise on leaves the result unresolved.
+fn cidr_subset(v: &Value, allowed: &[Network]) -> Verdict {
+    let Some(json) = tf_eval::value::to_json(v) else {
+        return unresolved(v);
+    };
+    let falsy = match &json {
+        Json::Null => true,
+        Json::Bool(b) => !b,
+        Json::Number(n) => n.as_f64() == Some(0.0),
+        Json::String(s) => s.is_empty(),
+        Json::Array(a) => a.is_empty(),
+        Json::Object(o) => o.is_empty(),
+    };
+    if falsy {
+        return Verdict::new(Truth::False, Some(v.clone()));
+    }
+    let nets: Option<Vec<Network>> = match (&json, v.as_known()) {
+        (_, Some(Known::Json(_))) => None,
+        (Json::String(s), _) => py::network_str(s).map(|n| vec![n]),
+        (Json::Array(items), _) => items.iter().map(py::network).collect(),
+        _ => None,
+    };
+    let Some(nets) = nets else {
+        return unresolved(v);
+    };
+    let yes = nets.iter().all(|n| allowed.iter().any(|a| n.subnet_of(a)));
+    Verdict::new(Truth::from_bool(yes), Some(v.clone()))
+}
+
+/// `RangeIncludesAttributeSolver` against prepared integer intervals.
+fn range_includes(v: &Value, ranges: &[(i128, i128)]) -> Verdict {
+    let check = |x: &Value| {
+        truth::map(x, &|x| {
+            let hit = match x.as_known() {
+                Some(Known::String(s)) if s.as_ref() == "*" => !ranges.is_empty(),
+                Some(Known::String(s)) if s.matches('-').count() == 1 => {
+                    let (a, b) = s.split_once('-').expect("one dash");
+                    match (py::int_str(a), py::int_str(b)) {
+                        (Some(a), Some(b)) => {
+                            ranges.iter().any(|(lo, hi)| a.max(*lo) <= b.min(*hi))
+                        }
+                        _ => false,
+                    }
+                }
+                Some(Known::String(s)) => py::int_str(s)
+                    .is_some_and(|n| ranges.iter().any(|(lo, hi)| (*lo..=*hi).contains(&n))),
+                Some(Known::Number(n)) => {
+                    n.is_finite() && {
+                        let n = n.trunc() as i128;
+                        ranges.iter().any(|(lo, hi)| (*lo..=*hi).contains(&n))
+                    }
+                }
+                Some(Known::Bool(b)) => ranges
+                    .iter()
+                    .any(|(lo, hi)| (*lo..=*hi).contains(&(*b as i128))),
+                Some(Known::Json(_)) => return unresolved(x),
+                _ => false,
+            };
+            Verdict::new(Truth::from_bool(hit), Some(x.clone()))
+        })
+    };
+    match v.as_known() {
+        Some(Known::Null) => Verdict::new(Truth::False, Some(v.clone())),
+        Some(Known::List(_)) => truth::exists(v, &check),
+        _ => check(v),
+    }
 }
 
 fn subset(value: &Value, expected: &[Json]) -> Verdict {
@@ -323,38 +692,61 @@ fn subset(value: &Value, expected: &[Json]) -> Verdict {
     }
 }
 
+/// `ContainsAttributeSolver`. A configured string is first JSON-decoded
+/// (quotes normalized); a dict matches a key, or `value in v` for its string,
+/// list and dict values. Wherever Python's `in` raises (a non-string operand
+/// against a string, any operand against a number, bool or decoded `null`),
+/// the vertex gets no result, so the verdict is unresolved.
 fn contains(value: &Value, expected: &Json) -> Verdict {
     truth::map(value, &|v| match v.as_known() {
-        Some(Known::List(_)) => truth::exists(v, &|x| equal(x, expected)),
+        Some(Known::String(s)) => {
+            let normalized = s.replace('\'', "\"");
+            if matches!(normalized.trim(), "NaN" | "Infinity" | "-Infinity") {
+                return unresolved(v);
+            }
+            match serde_json::from_str::<Json>(&normalized) {
+                Ok(json @ (Json::Array(_) | Json::Object(_))) => {
+                    contains(&tf_eval::value::from_json(&json, &v.prov), expected)
+                }
+                Ok(Json::String(decoded)) => substring(v, &decoded, expected),
+                Ok(_) => unresolved(v),
+                Err(_) => substring(v, s, expected),
+            }
+        }
         Some(Known::Object(m)) => {
             let mut result = Verdict::new(
                 Truth::from_bool(expected.as_str().is_some_and(|s| m.contains_key(s))),
                 Some(v.clone()),
             );
             for child in m.values() {
-                if !matches!(
-                    child.as_known(),
-                    Some(Known::Null | Known::Bool(_) | Known::Number(_))
-                ) {
-                    result = result.or(contains(&child.child_of(v), expected));
-                }
+                let child = child.child_of(v);
+                result = result.or(truth::map(&child, &|c| match c.as_known() {
+                    Some(Known::String(s)) => substring(c, s, expected),
+                    Some(Known::List(_)) => truth::exists(c, &|x| equal(x, expected)),
+                    Some(Known::Object(m)) => Verdict::new(
+                        Truth::from_bool(expected.as_str().is_some_and(|s| m.contains_key(s))),
+                        Some(c.clone()),
+                    ),
+                    Some(Known::Json(_)) => unresolved(c),
+                    _ => Verdict::new(Truth::False, Some(c.clone())),
+                }));
             }
             result
         }
-        Some(Known::String(s)) => {
-            if let Ok(json) = serde_json::from_str::<Json>(&s.replace('\'', "\""))
-                && (json.is_array() || json.is_object())
-            {
-                return contains(&tf_eval::value::from_json(&json, &v.prov), expected);
-            }
-            Verdict::new(
-                Truth::from_bool(expected.as_str().is_some_and(|e| s.contains(e))),
-                Some(v.clone()),
-            )
-        }
+        Some(Known::List(_)) => truth::exists(v, &|x| equal(x, expected)),
         Some(Known::Json(inner)) => contains(&inner.child_of(v), expected),
-        _ => Verdict::new(Truth::False, Some(v.clone())),
+        // A missing attribute reads as "{}", which contains nothing.
+        Some(Known::Null) => Verdict::new(Truth::False, Some(v.clone())),
+        _ => unresolved(v),
     })
+}
+
+/// `expected in s` for a string `s`; a non-string operand raises.
+fn substring(v: &Value, s: &str, expected: &Json) -> Verdict {
+    match expected.as_str() {
+        Some(e) => Verdict::new(Truth::from_bool(s.contains(e)), Some(v.clone())),
+        None => unresolved(v),
+    }
 }
 
 /// Graph vertices unwrap parser lists; blocks still retain their cardinality.

@@ -96,13 +96,167 @@ ATTRIBUTES = [
     "a[?(!@.k)]", "a[?(@.k == 'v')", "a[?(@.k == '')]", "a[?(@.k == 'v w')]", "a[?(@.k == @v)]",
     "a[?(@.k == 'v')].lifecycle", "lifecycle[*]", "a[?(@.true == 'v')]", "a[?(@.k-1 == 'v')]",
     "a[?(@.k == where)]", "a[?(@.k == truthy)]", "a[?(@.k == 1.5)]", "a\t.b[*]", "a\n.b[*]", "a\r.b[*]",
+    "export_options[?(@.identity_squash =~ '(?i)^ROOT$')]",
+    "export_options[?(@.identity_squash =~ '(?i)^ROOT$' & @.anonymous_gid == 65534 & @.anonymous_uid == 65534)]",
+    "a[?(@.k > 5)]", "a[?(@.k >= 5)]", "a[?(@.k < 5)]", "a[?(@.k <= 5)]", "a[?(@.k != 5)]", "a[?(@.k > 'v')]",
+    "a[?(@.k =~ 5)]", "a[?(@.k =~ '(')]", "a[?(@.k =~ '\\bx')]", "a[?(@.k == -5)]", "a[?(@.k == 05)]",
 ]
+
+
+def compile_jsonpath(attribute):
+    """The importer's compiler over the pinned bc_jsonpath_ng AST, extended
+    with the filter forms the native front-end admits: `=~` with a string,
+    and integer comparisons."""
+    import re as _re
+    from bc_jsonpath_ng.ext import parse
+    from bc_jsonpath_ng.ext.filter import Filter
+    from bc_jsonpath_ng.jsonpath import Child, Fields, Slice, This
+
+    def field(name):
+        if not _re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", name):
+            raise ValueError("nonliteral field")
+        return name
+
+    ops = {"==": "equals", "=": "equals", "!=": "not_equals", "=~": "regex", "<": "less_than",
+           "<=": "less_than_or_equal", ">": "greater_than", ">=": "greater_than_or_equal"}
+
+    def parts(query, relative=False):
+        if isinstance(query, Child):
+            return parts(query.left, relative) + parts(query.right, relative)
+        if isinstance(query, This) and relative:
+            return []
+        if isinstance(query, Fields) and len(query.fields) == 1:
+            return [field(query.fields[0])]
+        if not relative and isinstance(query, Slice) and query.start is None and query.end is None and query.step is None:
+            return [{"kind": "each"}]
+        if not relative and isinstance(query, Filter) and query.expressions:
+            predicates = []
+            for expression in query.expressions:
+                value = expression.value
+                if expression.op not in ops or isinstance(value, bool) or not isinstance(value, (str, int)):
+                    raise ValueError("unsupported filter")
+                if isinstance(value, str) and expression.op not in {"==", "=", "!=", "=~"}:
+                    raise ValueError("strings support equality and =~ only")
+                if isinstance(value, int) and expression.op == "=~":
+                    raise ValueError("=~ requires a string")
+                if expression.op == "=~":
+                    _re.compile(value)
+                path = parts(expression.target, True)
+                if not path:
+                    raise ValueError("filter requires fields")
+                predicates.append({"path": path, "operator": ops[expression.op], "value": value})
+            return [{"kind": "filter", "predicates": predicates}]
+        raise ValueError("unsupported JSONPath expression")
+
+    path = parts(parse(attribute))
+    if not path or not isinstance(path[0], str):
+        raise ValueError("path requires a configured field")
+    if all(isinstance(p, str) for p in path) and attribute != ".".join(path):
+        raise ValueError("noncanonical literal path")
+    return path
 
 
 def ref_jsonpath(attribute):
     try:
-        return importer._compile_jsonpath(attribute)
+        return compile_jsonpath(attribute)
     except Exception:  # noqa: BLE001 - every exception is a rejection
+        return None
+
+
+CLASSES = [r"\w", r"\s", r"\d"]
+
+PATTERNS = [
+    "(^postgres|.*sqlserver).*", "^(mariadb|mysql).*", ".*db2-ae.*", "(?i)^ROOT$", "abc", "abc$", "^a.c$",
+    "a{,2}b", "a{2,}b", "a{1,3}?b", "a{x", "a{}", "a}", "[]a]+", "[^]a]", "[a-c&&b]+", "[a\\-z]", "[\\w.-]+$",
+    "\\w+", "\\W", "\\s+", "\\S+", "\\d+", "\\D", "[\\d\\s]+", "[^\\w]", "(?i)[a-z]+", "(?i)straße",
+    "(?i:ab)c", "(?:a|b)+$", "(?P<x>a)b", "(?#note)ab", "a|b$", "(a$)", "a$b", "\\x41", "\\u00e9", "\\n", "\\.",
+    "\\-", "\\/", "\\ ", "\\%", "\\é", "[\\b]", "\\bword", "(?=a)", "(a)\\1", "a*+", "\\q", "[z-a]", "(", ")",
+    "[", "\\A\\d+\\Z", "^.*$", ".", "(?s).", "(?m)^a", "(?x)a b", "(?a)\\w", "tcp|udp", "^arn:aws:iam::\\d{12}:",
+    "^[0-9]{1,5}$", "^(?!x)", "^\\*$", "[+*?]", "\\{", "a{2}", "a{0}", "x{1,2}{3}", "a**",
+    "(?i)i", "(?i)I", "(?i)[a-z]", "(?i)[^a-z]", "(?i)[h-j]", "(?i)s", "(?i)k", "(?i)[r-t]", "(?i)\u00e9", "a*??",
+    "a??", "a{2}?", "a{2}?{3}", "(?i:i)x", "(?i:x)i",
+]
+INPUTS = ["", "a", "abc", "abc\n", "abc\n\n", "xabc", "aab", "a{x", "a{}", "a}", "]a]", "a&&b", "-", "é1_", "\u0301",
+          "\x1f", " ", "\u00a0", "\u2028", "root", "ROOT", "Root", "STRASSE", "straße", "abc def", "postgres14",
+          "sqlserver-ex-15", "mysql8.0", "mariadb10.6", "db2-ae-11", "x db2-ae", "tcp", "udp", "12345", "123456",
+          "arn:aws:iam::123456789012:role/x", "\u0661\u0662", "²", "\u2167", "_", "*", "+", "word", "a\nb", "{", "aa",
+          "\u0130", "\u212a", "k", "\u017f", "s", "\u0131", "i", "I", "S", "K", "\u00e5", "\u212b", "ix",
+          "Ix", "\u0130x", "xi", "xI", "x\u0130", "aaa"]
+
+IPS = ["10.0.0.0/8", "10.1.2.3/8", "10.0.0.0/255.0.0.0", "10.0.0.0/0.255.255.255", "10.0.0.0/08", "10.0.0.0/33",
+       "010.0.0.0/8", "1.2.3", "1.2.3.4.5", "256.0.0.0", "0.0.0.0/0", "0.0.0.0/0.0.0.0", "1.2.3.4/255.255.0.255",
+       "192.168.1.1", " 10.0.0.0/8", "10.0.0.0/ 8", "10.0.0.0/8/9", "::/0", "::", "::1", "1::", "1::2::3", ":1::2",
+       "1:2:3:4:5:6:7:8", "1:2:3:4:5:6:7:8:9", "1:2:3:4:5:6:7::", "::ffff:1.2.3.4", "::ffff:1.2.3.04", "2001:db8::/32",
+       "2001:DB8::/129", "2001:db8::/ff00::", "fe80::1%eth0", "12345::", "g::", "", "/8", "10.0.0.0/", "1:2:3:4:5:6:1.2.3.4",
+       "1:2:3:4:5:6:7:1.2.3.4", "::1.2.3.4", "1::2:3:4:5:6:7", "1::2:3:4:5:6:7:8", "1.2.3.4/32", "1.2.3.4/0"]
+
+STRS = [None, True, False, 0, -7, 1.5, 1e16, 1e-05, 0.0001, 100.0, "s", "", ["a", 1, True, None, 1.5],
+        {"k": "v", "n": [1, {"x": "it's"}]}, ["\\", "a\nb", "q'\"", "\t\x01"], [], {}, ["é"]]
+
+INTS = ["1", " 1 ", "-1", "+1", "1_0", "1__0", "_1", "1_", "0x10", "1.0", "", " ", "--1", "007", "١٢",
+        "99999999999999999999999999"]
+
+
+def class_ranges(pattern):
+    import re
+    rx = re.compile(pattern)
+    ranges, start = [], None
+    for cp in range(0x110000):
+        hit = 0xD800 <= cp <= 0xDFFF or bool(rx.match(chr(cp)))
+        if 0xD800 <= cp <= 0xDFFF:
+            hit = start is not None  # never split a range on surrogates
+        if hit and start is None:
+            start = cp
+        elif not hit and start is not None:
+            ranges.append([start, cp - 1])
+            start = None
+    if start is not None:
+        ranges.append([start, 0x10FFFF])
+    return ranges
+
+
+def unassigned_ranges():
+    import unicodedata
+    ranges, start = [], None
+    for cp in range(0x110000):
+        hit = unicodedata.category(chr(cp)) == "Cn"
+        if hit and start is None:
+            start = cp
+        elif not hit and start is not None:
+            ranges.append([start, cp - 1])
+            start = None
+    if start is not None:
+        ranges.append([start, 0x10FFFF])
+    return ranges
+
+
+def ref_regex():
+    import re
+    out = []
+    for p in PATTERNS:
+        try:
+            rx = re.compile(p)
+        except re.error:
+            out.append({"pattern": p, "error": True})
+            continue
+        out.append({"pattern": p, "match": {s: rx.match(s) is not None for s in INPUTS},
+                    "search": {s: rx.search(s) is not None for s in INPUTS}})
+    return out
+
+
+def ref_ip(s):
+    import ipaddress
+    try:
+        n = ipaddress.ip_network(s, strict=False)
+    except ValueError:
+        return None
+    return {"version": n.version, "first": str(int(n.network_address)), "last": str(int(n.broadcast_address))}
+
+
+def ref_int(s):
+    try:
+        return str(int(s))
+    except ValueError:
         return None
 
 
@@ -113,6 +267,14 @@ def main():
         "pyyaml": yaml.__version__,
         "yaml": [{"text": t, **ref_yaml(t)} for t in yaml_cases()],
         "jsonpath": [{"attribute": a, "path": ref_jsonpath(a)} for a in ATTRIBUTES],
+        "python": sys.version.split()[0],
+        "regex_classes": {c: class_ranges(c) for c in CLASSES},
+        "unicode_version": __import__("unicodedata").unidata_version,
+        "unassigned": unassigned_ranges(),
+        "regex": ref_regex(),
+        "ip": [{"text": s, "network": ref_ip(s)} for s in IPS],
+        "str": [{"value": v, "str": str(v)} for v in STRS],
+        "int": [{"text": s, "int": ref_int(s)} for s in INTS],
     }
     Path(sys.argv[1]).write_text(json.dumps(out, indent=1, sort_keys=True, ensure_ascii=False) + "\n")
 
