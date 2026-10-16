@@ -117,14 +117,14 @@ impl FileTable {
                         Err(_) => false,
                     }
                 })
-                .map(|e| e.path())
+                .map(|e| normalize(&e.path()))
                 .collect(),
             Err(_) => Vec::new(),
         };
         v.extend(
             self.overlay
                 .iter()
-                .filter(|p| p.parent() == Some(dir.as_path()))
+                .filter(|p| p.parent().is_some_and(|parent| normalize(parent) == dir))
                 .cloned(),
         );
         v.sort();
@@ -137,7 +137,15 @@ impl FileTable {
     /// Overlay files (any depth) under `dir`.
     pub fn overlay_under(&self, dir: &Path) -> impl Iterator<Item = &PathBuf> {
         let dir = normalize(dir);
-        self.overlay.iter().filter(move |p| p.starts_with(&dir))
+        self.overlay.iter().filter(move |p| {
+            if dir == Path::new(".") {
+                // Normalised relative paths have no leading `.` component.
+                // Absolute paths and paths starting with `..` are outside it.
+                matches!(p.components().next(), Some(Component::Normal(_)))
+            } else {
+                p.starts_with(&dir)
+            }
+        })
     }
 
     fn has_overlay_under(&self, dir: &Path) -> bool {
@@ -242,6 +250,47 @@ mod tests {
 #[cfg(test)]
 mod overlay_tests {
     use super::*;
+
+    #[test]
+    fn current_directory_lists_relative_overlays_and_excludes_outside_paths() {
+        let files = FileTable::with_overlay([
+            (PathBuf::from("./memory.tf"), Arc::from("new file")),
+            (
+                PathBuf::from("./nested/memory.tf"),
+                Arc::from("nested file"),
+            ),
+            (PathBuf::from("../outside/memory.tf"), Arc::from("outside")),
+            (
+                PathBuf::from("/nonexistent/absolute/memory.tf"),
+                Arc::from("absolute"),
+            ),
+        ]);
+        for dir in [".", "./", ""] {
+            let listing = files.read_dir(Path::new(dir));
+            assert!(
+                listing.contains(&PathBuf::from("memory.tf")),
+                "{dir:?}: {listing:?}"
+            );
+            assert!(!listing.contains(&PathBuf::from("nested/memory.tf")));
+            let under: Vec<_> = files.overlay_under(Path::new(dir)).cloned().collect();
+            assert_eq!(
+                under,
+                [
+                    PathBuf::from("memory.tf"),
+                    PathBuf::from("nested/memory.tf")
+                ],
+                "{dir:?}"
+            );
+        }
+        assert_eq!(
+            &*files.load(Path::new("memory.tf")).unwrap().text,
+            "new file"
+        );
+        assert_eq!(
+            files.read_dir(Path::new("nested")).as_slice(),
+            [PathBuf::from("nested/memory.tf")]
+        );
+    }
 
     #[test]
     fn overlay_shadows_disk_for_content_and_listing() {

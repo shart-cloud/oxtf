@@ -97,6 +97,11 @@ pub struct Resource {
     pub count: Option<Value>,
     pub for_each: Option<Value>,
     pub provider: Option<tf_schema::Provider>,
+    /// Dependencies retained outside evaluated attributes (e.g. depends_on or
+    /// plan configuration expressions). These describe graph edges, not identity.
+    pub dependencies: Vec<tf_eval::prov::ResourceDependency>,
+    /// False when a plan lacks configuration/source needed to recover edges.
+    pub dependencies_complete: bool,
 }
 
 impl Resource {
@@ -124,6 +129,8 @@ impl Resource {
             count,
             for_each,
             provider,
+            dependencies: Vec::new(),
+            dependencies_complete: true,
         }
     }
 

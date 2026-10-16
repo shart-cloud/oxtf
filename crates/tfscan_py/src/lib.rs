@@ -506,6 +506,10 @@ impl Resource {
     fn to_json(&self) -> String {
         body_json(&self.res().body).to_string()
     }
+    /// Configured values in Checkov's dict-of-lists shape, retaining unknowns.
+    fn checkov_configuration(&self) -> Value {
+        self.value(tf_rule_ir::checkov::configuration(&self.res().body))
+    }
     fn __repr__(&self) -> String {
         format!("Resource({})", self.res().address)
     }
@@ -816,12 +820,15 @@ struct CallbackRule {
     func: Py<PyAny>,
     error: Arc<Mutex<Option<PyErr>>>,
     calls: Arc<std::sync::atomic::AtomicU64>,
+    record_errors: bool,
 }
 
 struct Report {
     message: String,
     witness: Option<tf_eval::Value>,
     conditional: bool,
+    indeterminate: bool,
+    hidden: Vec<tf_linter::Hidden>,
 }
 
 fn parse_reports(ret: &Bound<'_, PyAny>, out: &mut Vec<Report>) -> PyResult<()> {
@@ -834,6 +841,8 @@ fn parse_reports(ret: &Bound<'_, PyAny>, out: &mut Vec<Report>) -> PyResult<()> 
                 message: String::new(),
                 witness: None,
                 conditional: false,
+                indeterminate: false,
+                hidden: Vec::new(),
             });
         }
         return Ok(());
@@ -844,6 +853,8 @@ fn parse_reports(ret: &Bound<'_, PyAny>, out: &mut Vec<Report>) -> PyResult<()> 
                 message: s,
                 witness: None,
                 conditional: false,
+                indeterminate: false,
+                hidden: Vec::new(),
             });
         }
         return Ok(());
@@ -857,6 +868,25 @@ fn parse_reports(ret: &Bound<'_, PyAny>, out: &mut Vec<Report>) -> PyResult<()> 
     // tfscan.Report(message, witness=None, conditional=False)
     let message: String = ret.getattr("message")?.extract()?;
     let conditional: bool = ret.getattr("conditional")?.extract()?;
+    let indeterminate: bool = ret
+        .getattr("indeterminate")
+        .map(|v| v.extract())
+        .unwrap_or(Ok(false))?;
+    let mut hidden = Vec::new();
+    if let Ok(items) = ret.getattr("hidden") {
+        for (path, kind) in items.extract::<Vec<(String, String)>>()? {
+            let truth = match kind.as_str() {
+                "tainted" => tf_eval::Truth::Tainted,
+                "unknown" => tf_eval::Truth::Unknown,
+                _ => {
+                    return Err(PyValueError::new_err(
+                        "hidden kind must be tainted or unknown",
+                    ));
+                }
+            };
+            hidden.push(tf_linter::Hidden { path, truth });
+        }
+    }
     let w = ret.getattr("witness")?;
     let witness = if w.is_none() {
         None
@@ -867,6 +897,8 @@ fn parse_reports(ret: &Bound<'_, PyAny>, out: &mut Vec<Report>) -> PyResult<()> 
         message,
         witness,
         conditional,
+        indeterminate,
+        hidden,
     });
     Ok(())
 }
@@ -898,24 +930,28 @@ impl DynRule for CallbackRule {
             Ok(reports) => Ok(reports
                 .into_iter()
                 .map(|rep| Judgement {
-                    severity: if rep.conditional {
+                    severity: if rep.indeterminate {
+                        tf_linter::Severity::Indeterminate
+                    } else if rep.conditional {
                         tf_linter::Severity::Conditional
                     } else {
                         tf_linter::Severity::Definite
                     },
                     witness: rep.witness,
                     message: rep.message,
-                    hidden: Vec::new(),
+                    hidden: rep.hidden,
                     fix_hint: None,
                 })
                 .collect()),
             Err(e) => {
-                // The exception itself is re-raised by `scan` once the pool
-                // drains; the engine's rule error carries its text.
+                // By default re-raise once the pool drains. Foreign adapters
+                // may instead retain the error in the scan result and continue.
                 let message = e.to_string();
-                let mut g = self.error.lock().unwrap();
-                if g.is_none() {
-                    *g = Some(e);
+                if !self.record_errors {
+                    let mut g = self.error.lock().unwrap();
+                    if g.is_none() {
+                        *g = Some(e);
+                    }
                 }
                 Err(message)
             }
@@ -1006,6 +1042,10 @@ fn build_catalog(
             func: cb.getattr("func")?.unbind(),
             error: error.clone(),
             calls: calls.clone(),
+            record_errors: cb
+                .getattr("record_errors")
+                .map(|v| v.extract())
+                .unwrap_or(Ok(false))?,
         }));
     }
     Ok(PyCatalog {
@@ -1090,6 +1130,7 @@ fn scan(
             .into_iter()
             .map(|(p, t)| (p, Arc::from(t)))
             .collect(),
+        keep_models: true,
     };
     let work = move || tf_scan::scan(request).map(|o| ScanData::new(o.result, o.analyses));
     let data = if _release_gil {
@@ -1144,7 +1185,10 @@ fn _rule_time(
         let mut n = 0;
         for _ in 0..repeat {
             let t = std::time::Instant::now();
-            n = analyses.iter().map(|a| linter.run(a).findings.len()).sum::<usize>();
+            n = analyses
+                .iter()
+                .map(|a| linter.run(a).findings.len())
+                .sum::<usize>();
             times.push(t.elapsed().as_secs_f64());
         }
         Ok((times, n))

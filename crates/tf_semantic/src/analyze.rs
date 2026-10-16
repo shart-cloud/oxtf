@@ -756,10 +756,15 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         };
         let mut i = 1;
         let mut key: Option<Arc<str>> = None;
+        let mut certainty = Truth::True;
         let mut splat = false;
         match ops.get(1) {
             Some(TraversalOperator::Index(ix)) => {
-                key = ev.eval(&ix.index, sc).to_str();
+                let index = ev.eval(&ix.index, sc);
+                key = index.to_str();
+                if key.is_none() {
+                    certainty = tf_eval::truth::uncertainty(&index);
+                }
                 i = 2;
             }
             Some(TraversalOperator::LegacyIndex(l)) => {
@@ -773,12 +778,40 @@ impl<'a, 'o> Analyzer<'a, 'o> {
             _ => {}
         }
         let base = Address::new(inst.address.clone(), mode, ty, name, None);
+        let whole = ops.get(i).and_then(|o| o.attr_name()).is_none();
+        let dependencies = if splat || (whole && key.is_none() && certainty == Truth::True) {
+            self.res_instances(inst_id, ri)
+                .0
+                .iter()
+                .map(|b| tf_eval::prov::ResourceDependency {
+                    resource: base.base_string().into(),
+                    key: b.key.clone(),
+                    certainty: b.existence,
+                })
+                .collect()
+        } else {
+            vec![tf_eval::prov::ResourceDependency {
+                resource: base.base_string().into(),
+                key: key.clone(),
+                certainty,
+            }]
+        };
+        let referenced = |mut value: Value| {
+            value.prov = value.prov.referencing(dependencies.clone());
+            value
+        };
         let Some(attr) = ops.get(i).and_then(|o| o.attr_name()) else {
             let instance = base.with_key(key.map(InstanceKey::Key));
-            return (Value::unknown(instance.computed("(whole object)")), i);
+            return (
+                referenced(Value::unknown(instance.computed("(whole object)"))),
+                i,
+            );
         };
         let v = self.resource_attr(inst_id, ri, key, attr, &base);
-        (if splat { Value::list(vec![v]) } else { v }, i + 1)
+        (
+            referenced(if splat { Value::list(vec![v]) } else { v }),
+            i + 1,
+        )
     }
 
     fn resource_attr(
@@ -1131,7 +1164,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                         true,
                     )
                 });
-                resources.push(model::Resource::new(
+                let mut resource = model::Resource::new(
                     id,
                     FileSpan::new(decl.file, header_span(decl.block)),
                     body,
@@ -1139,7 +1172,13 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                     insts.1.clone(),
                     insts.2.clone(),
                     decl.schema.map(|s| s.provider),
-                ));
+                );
+                if let Some(a) = decl.block.body.find_attribute("depends_on") {
+                    let value = Scope::EMPTY
+                        .with_all(&b.binds, |sc| self.eval(inst_id, decl.file, &a.value, sc));
+                    crate::graph::value_dependencies(&value, &mut resource.dependencies);
+                }
+                resources.push(resource);
             }
         }
         let variables = def

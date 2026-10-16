@@ -2,6 +2,296 @@
 
 Oct 14, 2026 · follows [`SPIKE_REPORT.md`](../../SPIKE_REPORT.md) (recommendation: go)
 
+## Checkov support implemented (2026-10-15)
+
+`scripts/import_checkov.py` and `tfscan.checkov` import the installed **Checkov
+3.2.328** Terraform catalog. The version is deliberately pinned to the existing
+parity pilot. A different version is rejected; the older 3.3.29 research counts
+below are not the inventory used by this implementation.
+
+The exported pack contains **691 native rules**: 508 resource value checks and
+184 graph policy files, with one shared ID merged into a single rule. All 910
+resource checks and 186 graph policy files are inventoried. The remaining
+**404 entries** (including two graph files) have an explicit unsupported reason. In particular, inheriting a value-check base class does not qualify a
+check when it overrides the predicate. Translation must account for the actual
+implementation, not just its inspected-key metadata.
+
+The importer writes `rules.json`, `manifest.json`, and `LICENSE.checkov` to a new
+directory. The manifest records IDs, source paths and hashes, translation status,
+missing severity defaults, and the generated rules' checksum. It performs no
+downloads. Unsupported graph entries also contain a `blockers` list with every
+rejected capability or shape, its `code`, `reason`, and JSON Pointer `path` into
+the policy definition. The original `reason` remains the first blocker for
+compatibility. Validation visits sibling branches and checks independent
+constraints within each leaf, including regex inside JSONPath predicates.
+Generated third-party packs live outside tracked source; the local
+output directory below is gitignored. Checkov is required to export the pack,
+but neither Python nor Checkov is needed by the Rust CLI to execute it.
+
+```sh
+# Use the interpreter in an environment containing checkov==3.2.328.
+CHECKOV_PYTHON=/path/to/checkov/venv/bin/python
+"$CHECKOV_PYTHON" scripts/import_checkov.py \
+  --output bench/results/out/checkov-3.2.328
+cargo build --release -p tf_cli
+target/release/oxtf rules --rule-file bench/results/out/checkov-3.2.328/rules.json
+target/release/oxtf scan path/to/terraform --recursive --format json \
+  --rule-file bench/results/out/checkov-3.2.328/rules.json
+
+# Select one imported ID through the shared catalog.
+target/release/oxtf scan path/to/terraform --rule CKV_AWS_16 \
+  --rule-file bench/results/out/checkov-3.2.328/rules.json
+```
+
+Portable packs also work through the Python API:
+
+```python
+import tfscan
+from tfscan import checkov
+
+rules = checkov.load_rules("bench/results/out/checkov-3.2.328")
+result = tfscan.scan("path/to/terraform", recursive=True, builtin=False, rules=rules)
+```
+
+`load_rules` verifies the pack checksum before compilation. CLI `--rule-file`
+loads the IR directly, as it does for other rule files. IR version 2 adds resource
+predicates; version 3 adds `checkov_graph` as a complete clause condition. Versions
+1 and 2 remain readable. Re-export old packs to include relationship checks.
+Original Checkov IDs are retained, so native seed rules and imported checks can
+coexist even where their scope overlaps. Missing impact levels default to medium;
+this does not change finding certainty.
+
+Value predicates use configured values in Checkov's dict-of-lists shape, preserve
+the upstream missing/null policy, and run through oxtf's abstract-value lattice.
+Provider defaults are not substituted into imported predicates.
+
+### Graph policies
+
+Graph policies run once per analysed root over a shared resource dependency graph,
+including data sources and local child modules. Source edges come from evaluated
+traversals (including locals, outputs, transformed values, nested blocks and
+`depends_on`), independently of the bounded human-readable provenance chain.
+Equal literal strings do not create edges. `for_each` keys are preserved;
+unresolved indices and conditional targets retain uncertainty. Source `count > 1`
+currently uses the existing representative-instance model, so an indexed edge to
+that representative is unknown. Plan instances retain their explicit keys.
+
+The importer supports connection `exists`, `not_exists`, and `one_exists`, nested
+`and`/`or`/`not`, and resource-type `within`/`not_within` filters. Connections work
+in either direction. Attribute conditions can constrain connected endpoints;
+filters restrict reported resources. `one_exists` follows the pinned Checkov
+solver's any-passing-connection behavior, not an exact cardinality of one.
+Dotted paths and `*` elements support existence, equality (including case-insensitive
+equality), membership, containment, prefixes, numeric ordering, empty values and
+boolean predicates. Negative containment checks every wildcard match.
+
+The first coverage extension adds `number_of_words_not_equals`,
+`length_greater_than`, `length_less_than_or_equal`, and `subset`. It enables
+`CKV2_AWS_49`, `CKV2_AZURE_27`, `CKV2_AZURE_28`, `CKV2_AZURE_35`,
+`CKV2_AZURE_36`, `CKV2_AZURE_39`, `CKV2_AZURE_41`, and `CKV2_OCI_3`.
+Size thresholds are normalized using Checkov's Python integer conversion during
+export and stored as signed 64-bit integers in native IR. Subset operands must be
+lists of scalars. Evaluation preserves the pinned solver's behavior: word counts
+use Python whitespace rules, nonstrings satisfy word-count inequality, strings
+are measured in Unicode code points, objects have length one, and object subsets
+compare keys. Unknown elements retain uncertainty when membership needs them;
+known collection lengths and object keys do not depend on unknown child values.
+
+The second extension adds attribute `within` filters to connection policies,
+enabling `CKV2_AWS_23`, `CKV2_AWS_27`, and `CKV2_AWS_30`. Filters restrict results
+after relationship evaluation in both `and` and `or` groups; they do not remove
+connected endpoints before joins. The pinned filter solver ignores its
+`resource_types` metadata. A string operand uses substring membership, while a
+list operand uses Python equality; missing/null and other falsy values are
+excluded. Unknown eligibility preserves uncertainty and source evidence when a
+policy would otherwise fail. This extension admits literal top-level configured
+attributes and string or scalar-list operands. Nested filter paths, other
+attribute-filter operators, and attribute filters outside connection groups
+remain explicit unsupported forms.
+
+The third extension adds literal-field JSONPath `exists`, `not_exists`, and
+`equals`, enabling `CKV2_GCP_27`, `CKV2_GCP_28`, `CKV2_GCP_32`, `CKV2_GCP_35`,
+and `CKV2_GCP_36`. Paths compile to field segments at export time, with the
+pinned parser validating the admitted grammar. The native evaluator preserves
+Checkov's object/block projection, singleton-list normalization, and flattened-key
+fallback. Literal JSONPath has at most one match and does not itself search lists
+or decode JSON strings. Missing/null values, unknown descendants, alternative
+values, and dynamic block cardinality retain their existing certainty semantics
+and source evidence. If a dotted map key collides with a nested field, the native
+map no longer has the source insertion order used by Checkov; evaluation retains
+both possible values and produces a conditional result when they disagree.
+The subsequent extension below adds array wildcards and filters; indices and
+recursive descent remain explicit unsupported forms.
+
+The fourth extension adds `[*]`, filters with string `==`/`!=` comparisons,
+compound filter conjunctions, and JSONPath `not_equals`/`not_contains`. It enables
+`CKV2_AWS_40`, `CKV2_AWS_68`, `CKV2_AWS_72`, and `CKV2_GCP_13`–`CKV2_GCP_17`.
+The pinned parser's AST compiles into native field, array, and filter operations;
+query strings are not interpreted at scan time. A filter accepts a single object
+or a list, and missing filter fields do not satisfy inequality. Final predicates
+must hold for every selected match; no matches use the operator's missing-value
+result. Unknown filter eligibility and matched values retain uncertainty, while
+known excluded candidates and decisive failures keep their definite outcomes.
+Filtered queries traverse symbolic `jsonencode` values and literal JSON strings
+as structured data, matching the Terraform renderer's policy representation.
+Containment follows Python's shallow object membership behavior; scalar operands
+that raise upstream remain indeterminate. Existing ordinary attribute wildcards
+also recognize Checkov's index-free paths for singleton blocks. Regex, numeric
+filter coercion, filter disjunction, slices, and other JSONPath constructs remain
+explicit unsupported forms.
+
+This implements the R4 graph execution path directly in native IR v3 instead of
+the originally proposed generated Rego. It reuses the evaluator's abstract-value
+lattice and deciding evidence, including conditional findings for unconstrained
+inputs. Both CLI and Python use the same graph hook and return ordinary findings,
+JSON/SARIF, and Arrow output. No Python or Checkov runtime is used during native
+execution.
+
+For example, `--rule CKV2_AWS_11` checks VPC flow-log connections,
+`--rule CKV2_AWS_6` checks connected S3 public-access blocks, and
+`--rule CKV2_GIT_1` checks repository branch protection, using the same
+`--rule-file` option shown above.
+
+Plan edges are retained from configuration expressions even when the planned
+values are known. Module inputs and outputs are followed; source with matching module/resource instances and root input values can supply
+references such as locals that plan JSON omits. If a relationship policy needs
+unavailable configuration/source dependencies, the scan records a rule error
+instead of claiming that a connection is absent. Attribute-only policies can
+still evaluate those plan values.
+
+### Original Python resource checks
+
+Custom resource checks can run through the existing Python callback dispatcher
+when Checkov 3.2.328 is installed in the Python environment:
+
+```python
+rules = checkov.custom_rules(["CKV_AWS_134", "CKV_AWS_24"])
+result = tfscan.scan("path/to/terraform", builtin=False, rules=rules)
+for error in result.rule_errors:
+    print(error)
+```
+
+Each invocation copies the upstream check and calls `scan_entity_conf` on the
+projected resource. Unknown inputs are omitted and recorded in `hidden`.
+Failures involving projected inputs are conditional or indeterminate; a passed
+result with hidden inputs, an upstream UNKNOWN/SKIPPED outcome, or an exception
+becomes a rule error. Unresolved checks therefore cannot appear as proven passes.
+This adapter is conservative about unrelated unknown fields. It retains deciding
+value evidence when the check supplies evaluated keys and otherwise points at the
+resource. Ordinary Python callbacks still propagate exceptions by default;
+`record_errors=True` enables the adapter's continue-and-record behavior.
+
+### Validation and limits
+
+`bench/checkov/compare.py` generates real HCL inputs and compares the native pack
+with the pinned resource implementations (and legacy v2 attribute-only solvers).
+`bench/checkov/graph_compare.py` separately exercises every translated v3 graph
+policy using Checkov's HCL vertex projection and graph solvers. It retains generated
+inputs, commands, executable/pack hashes, raw output, and per-case results. It
+exits nonzero for disagreements, reference exceptions, or execution errors.
+
+```sh
+"$CHECKOV_PYTHON" bench/checkov/compare.py \
+  --pack bench/results/out/checkov-3.2.328 \
+  --native target/release/oxtf \
+  --output bench/results/out/checkov-conformance
+"$CHECKOV_PYTHON" bench/checkov/graph_compare.py \
+  --native target/release/oxtf \
+  --output bench/results/out/checkov-graph-conformance
+cargo test --workspace
+# With tfscan's extension built and Checkov installed in the test environment:
+python -m pytest -q crates/tfscan_py/tests
+```
+
+The earlier v2 recorded run generated 7,474 cases: 7,462 comparable pass/fail outcomes with
+zero disagreements, plus 12 explicit upstream UNKNOWN outcomes with no native
+finding. These are generated predicate cases, not full-runner equivalence or
+security precision/recall. Regression tests separately exercise unknown values,
+provenance, nested blocks, dynamic cardinality, JSON-encoded unknowns, pack
+validation, CLI listing/selection, and custom callbacks.
+
+The expanded graph conformance run covers **184 policy files and 16,880 resource cases**,
+with zero disagreements and zero reference exceptions. Generated operands stay
+within the input types accepted by the upstream solvers. This tests policy trees,
+not full Terraform-runner equivalence. Python integration tests additionally
+compare actual Checkov runner findings for VPC flow logs, ALB WAF associations,
+GitHub branch protection, all eight policies in the first coverage extension,
+all three policies in the attribute-filter extension, and all five policies in
+the basic JSONPath extension, and all eight policies in the filtered JSONPath
+extension (27 full-runner fixtures in total).
+Operator-level tests compare 299 identical evaluated operands with the pinned
+solvers, including missing/null values, empty collections, Unicode strings,
+numeric threshold coercions, and Python boolean/number equality. These operand
+tests do not assert literal-source parser equivalence. An additional 90 filter
+cases compare string/list membership, Python truthiness, and result filtering
+in `and` and `or` groups. Another 365 JSONPath cases compare actual HCL vertex
+projection and the pinned solvers across missing/null/empty values, nested
+objects, blocks, and lists. Separate regressions cover ambiguous flattened-key
+collisions and abstract values. Rust/Python regressions cover cross-module edges,
+conditional targets, data sources, plan configuration, and provenance. Reproduction
+commands and hashes for the original graph implementation are recorded in
+`bench/results/checkov-graph-support.json`; the first extension's validation and
+blocker inventory are recorded in `bench/results/checkov-graph-operators.json`.
+The attribute-filter extension is recorded in `bench/results/checkov-graph-filters.json`.
+The basic JSONPath extension is recorded in `bench/results/checkov-graph-jsonpath.json`.
+The filtered JSONPath extension adds 2,016 comparable solver cases for wildcard
+aggregation, string filters, conjunctions, missing/null values, and containment.
+Separate Rust tests cover invalid operands, unknown match eligibility, symbolic
+JSON, dynamic cardinality, and deciding evidence. Its validation, regression
+rechecks, and remaining blockers are recorded in
+`bench/results/checkov-graph-jsonpath-filters.json`.
+
+The earlier [recorded release benchmark](../../bench/results/checkov-support.json) scans
+504 roots, 2,176 files, and 5,224 resources from the existing local corpus. Median
+wall time over five warm runs (one warmup, process startup and pack parsing
+included, quiet output) was:
+
+| Catalog | One thread | Eight threads |
+| --- | ---: | ---: |
+| Five seed rules | 273 ms | 84 ms |
+| Seeds plus 545 imported rules | 286 ms | 103 ms |
+
+The expanded catalog produced 634 findings (630 definite, four conditional), with
+zero diagnostics or rule errors. These timings exclude full JSON serialization
+and are not a speed comparison with the Checkov runner. The record includes
+individual timings, commands, corpus-lock and executable hashes, and unsupported
+reason counts.
+
+Runner context, suppression comments, external module downloading, and
+Checkov's other IaC frameworks are not implemented. The two unsupported graph
+files require regex (plus numeric filter comparisons for `CKV2_OCI_4`);
+their complete blocker lists remain in the manifest.
+The callback adapter supplies a resource configuration, not a Checkov runner;
+checks requiring graph/runner state may fail and are not certified compatible.
+The resource model omits some Terraform meta-arguments, and the native importer
+excludes predicates depending on them. Evaluation resolves Terraform expressions
+and normalizes numbers before policy execution, so literal-source behavior is
+not guaranteed to match the Checkov parser. Unsupported operators and Python
+overrides remain visible in the manifest. This completes the portable value-check
+slice of R3, adds native relationship-policy execution for R4, and provides an
+explicit resource-check adapter for R5. It does not claim all Checkov operators or
+full-corpus runner parity.
+
+### Remaining graph coverage
+
+The first four extensions are complete at 184/186 policy files. Remaining milestones
+are ordered by shared capabilities, with cumulative translation targets against
+the pinned catalog. A policy is admitted only after every blocker is addressed
+and differential checks pass.
+
+| Next capability | Policies | Target |
+| --- | --- | ---: |
+| Regex predicates, regex filters and numeric filter comparisons | `CKV2_AWS_69`, `CKV2_OCI_4` | 186/186 |
+
+Each milestone requires passing/failing fixtures for every admitted policy,
+comparison with the pinned solvers and runner, tests for missing/null/empty and
+unknown values, deciding source evidence, and regression coverage of existing
+policies. JSONPath should compile into native operations over abstract values;
+match aggregation and uncertainty must follow the pinned semantics. The 402
+unsupported resource checks remain a separate workstream: nine string-membership
+predicates, four meta-argument checks, one raw-expression comparison, and 388
+custom or overridden Python predicates requiring behavioral inspection.
+
 ## Execution baseline
 
 The first milestone prioritizes trustworthy native Rego and a small Checkov pilot.

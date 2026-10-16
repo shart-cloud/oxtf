@@ -36,7 +36,7 @@ const USAGE: &str = "usage:
                                   scan `terraform show -json` output; findings are mapped
                                   back to .tf spans in DIR (default: the plan's directory
                                   if it has .tf files, else locations point into the JSON)
-  oxtf rules                      list rules
+  oxtf rules [--rule-file FILE]... list built-in and imported rules
 
 scan options:
   -r, --recursive         every directory under PATH containing .tf files is a root module
@@ -45,7 +45,7 @@ scan options:
       --rule ID           only run this rule (repeatable); ids come from the whole
                           catalog: seed rules, --rule-file rules and Rego policies
       --rule-file FILE    also run rules from a JSON rule-IR file (repeatable; e.g. written
-                          by the tfscan Python expression API)
+                          by the tfscan Python expression API or Checkov importer)
       --rego-native       run the seed rules that have a bundled native-tier Rego
                           policy (RDS encryption, GCS uniform access) as Rego
       --policy FILE       also run a foreign Rego policy over every resource
@@ -188,7 +188,16 @@ fn main() -> ExitCode {
             }
         },
         Some("rules") => {
-            for r in Linter::with_seed_rules().rules() {
+            let rules = match parse_args(args)
+                .and_then(|a| a.request.catalog.resolve().map_err(|e| e.to_string()))
+            {
+                Ok(rules) => rules,
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    return ExitCode::from(2);
+                }
+            };
+            for r in Linter::new(rules).rules() {
                 let types = if r.runs_on_module {
                     "(module rule)".to_string()
                 } else {

@@ -83,6 +83,39 @@ impl Linter {
         let root = analysis.root_dir.as_path();
         let mut out = Vec::new();
         let mut rule_errors = Vec::new();
+        let graph = self
+            .rules
+            .iter()
+            .any(|r| r.needs_graph())
+            .then(|| tf_semantic::graph::ResourceGraph::new(analysis));
+        for (i, rule) in self
+            .rules
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| r.needs_graph())
+        {
+            match rule.judge_graph(graph.as_ref().expect("graph requested")) {
+                Ok(judgements) => {
+                    for (r, j) in judgements {
+                        out.extend(Finding::build(
+                            &self.infos[i],
+                            r,
+                            j.severity,
+                            j.witness.as_ref(),
+                            &j.message,
+                            root,
+                            j.hidden,
+                            j.fix_hint,
+                        ));
+                    }
+                }
+                Err(message) => rule_errors.push(RuleError {
+                    rule: self.infos[i].name.to_string(),
+                    resource: None,
+                    message,
+                }),
+            }
+        }
         for m in &analysis.modules {
             for &i in &self.module_rules {
                 let judged = match self.rules[i].judge_module(m) {

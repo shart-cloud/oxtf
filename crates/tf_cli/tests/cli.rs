@@ -78,6 +78,33 @@ fn var_file_wins_over_terraform_tfvars() {
     assert_eq!(run(&["--var-file", vf.to_str().unwrap()]), 1);
 }
 
+#[test]
+fn current_directory_scan_loads_terraform_tfvars() {
+    let dir = std::env::temp_dir().join(format!("oxtf-cli-cwd-tfvars-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("main.tf"), "variable \"encrypt\" { default = true }\nresource \"aws_db_instance\" \"db\" { storage_encrypted = var.encrypt }\n").unwrap();
+    std::fs::write(dir.join("terraform.tfvars"), "encrypt = false\n").unwrap();
+    for path in [None, Some("."), Some("./"), dir.to_str()] {
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_oxtf"));
+        cmd.current_dir(&dir).args(["scan", "--format", "json"]);
+        if let Some(path) = path {
+            cmd.arg(path);
+        }
+        let out = cmd.output().unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(v["stats"]["files"], 2, "{path:?}: {v}");
+        assert_eq!(v["findings"].as_array().unwrap().len(), 1, "{path:?}: {v}");
+        assert_eq!(v["findings"][0]["severity"], "definite");
+        assert_eq!(v["findings"][0]["effective"]["value"], false);
+    }
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
 /// `--rule-file`: a rule written with the Python expression API (rule IR
 /// JSON) runs with no Python runtime and matches the built-in rule.
 #[test]
@@ -212,9 +239,15 @@ fn rule_errors_exit_one_with_output() {
         .unwrap();
     assert_eq!(out.status.code(), Some(1));
     let err = String::from_utf8_lossy(&out.stderr);
-    assert!(err.contains("aws_security_group_rule.open") && err.contains("%q"), "{err}");
+    assert!(
+        err.contains("aws_security_group_rule.open") && err.contains("%q"),
+        "{err}"
+    );
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(v["rule_errors"][0]["resource"], "aws_security_group_rule.open");
+    assert_eq!(
+        v["rule_errors"][0]["resource"],
+        "aws_security_group_rule.open"
+    );
 }
 
 /// A policy that does not compile refuses the scan: exit 2, no output.
@@ -224,7 +257,11 @@ fn policy_compile_errors_exit_two() {
     let dir = std::env::temp_dir().join(format!("oxtf-cli-rego-bad-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let bad = dir.join("bad.rego");
-    std::fs::write(&bad, "package main\nimport rego.v1\ndeny contains msg if { msg := 1 / 0 }").unwrap();
+    std::fs::write(
+        &bad,
+        "package main\nimport rego.v1\ndeny contains msg if { msg := 1 / 0 }",
+    )
+    .unwrap();
     let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
         .args([
             "scan",
@@ -236,7 +273,12 @@ fn policy_compile_errors_exit_two() {
         ])
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(2), "{}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     assert!(String::from_utf8_lossy(&out.stderr).contains("bad"));
     assert!(out.stdout.is_empty());
     std::fs::remove_dir_all(dir).unwrap();
@@ -277,4 +319,63 @@ fn overlay_from_stdin_shadows_the_file() {
         .output()
         .unwrap();
     assert_eq!(bad.status.code(), Some(2));
+}
+
+#[test]
+fn current_directory_scan_discovers_new_overlay_files_once() {
+    let dir = std::env::temp_dir().join(format!("oxtf-cli-cwd-overlay-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("patch.txt"),
+        "resource \"aws_db_instance\" \"db\" { storage_encrypted = false }\n",
+    )
+    .unwrap();
+    for with_disk_root in [false, true] {
+        if with_disk_root {
+            std::fs::write(
+                dir.join("existing.tf"),
+                "resource \"aws_db_instance\" \"existing\" { storage_encrypted = true }\n",
+            )
+            .unwrap();
+        }
+        for path in [None, Some("."), Some("./"), dir.to_str()] {
+            for recursive in [false, true] {
+                let mut cmd = Command::new(env!("CARGO_BIN_EXE_oxtf"));
+                cmd.current_dir(&dir).args(["scan", "--format", "json"]);
+                if let Some(path) = path {
+                    cmd.arg(path);
+                }
+                if recursive {
+                    cmd.arg("--recursive");
+                }
+                let prefix = path.unwrap_or(".");
+                cmd.args(["--overlay", &format!("{prefix}/new.tf=patch.txt")]);
+                cmd.args(["--overlay", &format!("{prefix}/nested/new.tf=patch.txt")]);
+                let out = cmd.output().unwrap();
+                assert!(
+                    out.status.success(),
+                    "{}",
+                    String::from_utf8_lossy(&out.stderr)
+                );
+                let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+                let roots = if recursive { 2 } else { 1 };
+                assert_eq!(
+                    v["stats"]["roots"], roots,
+                    "{path:?}, recursive={recursive}, disk={with_disk_root}: {v}"
+                );
+                assert_eq!(
+                    v["stats"]["resources"],
+                    roots + usize::from(with_disk_root),
+                    "{v}"
+                );
+                assert_eq!(v["stats"]["findings"], roots, "{v}");
+                assert_eq!(v["stats"]["definite"], roots, "{v}");
+                assert_eq!(v["diagnostics"], serde_json::json!([]), "{v}");
+                assert_eq!(v["rule_errors"], serde_json::json!([]), "{v}");
+            }
+        }
+    }
+    assert!(!dir.join("new.tf").exists());
+    assert!(!dir.join("nested").exists());
+    std::fs::remove_dir_all(dir).unwrap();
 }

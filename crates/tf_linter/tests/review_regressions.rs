@@ -103,3 +103,26 @@ resource "aws_s3_bucket_public_access_block" "p" {{
         std::fs::remove_dir_all(d).unwrap();
     }
 }
+
+#[test]
+fn uncertain_filters_and_try_fallbacks_produce_conditional_findings() {
+    let d = temp_dir("conditional-evaluation");
+    for expression in [
+        "length([for x in [1] : x if var.enabled]) > 0",
+        "length([for x in [1] : x if var.enabled]) == 0",
+        "try((var.enabled ? { encrypted = true } : {}).encrypted, false)",
+    ] {
+        std::fs::write(d.join("main.tf"), format!(
+            "variable \"enabled\" {{ type = bool }}\nresource \"aws_db_instance\" \"db\" {{ storage_encrypted = {expression} }}\n"
+        )).unwrap();
+        let result = scan_dir(&d, &ScanOptions::default());
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert_eq!(result.findings.len(), 1, "{expression}");
+        assert_eq!(
+            result.findings[0].severity,
+            tf_linter::Severity::Conditional,
+            "{expression}"
+        );
+    }
+    std::fs::remove_dir_all(d).unwrap();
+}

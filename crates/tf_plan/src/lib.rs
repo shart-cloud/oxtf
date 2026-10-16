@@ -197,6 +197,9 @@ struct PlanRes<'p> {
 #[derive(Default)]
 struct ConfigModule<'p> {
     resources: HashMap<String, &'p serde_json::Map<String, J>>,
+    resource_blocks: HashMap<String, &'p J>,
+    outputs: HashMap<String, &'p J>,
+    inputs: HashMap<String, &'p J>,
 }
 
 struct Builder<'p> {
@@ -535,7 +538,7 @@ impl<'p> Builder<'p> {
             src.map(|s| &s.body),
             exprs,
         );
-        Resource::new(
+        let mut resource = Resource::new(
             id.clone(),
             span,
             body,
@@ -543,7 +546,184 @@ impl<'p> Builder<'p> {
             None,
             None,
             schema.map(|s| s.provider),
-        )
+        );
+        // Keep configuration edges even when planned values are already known.
+        // Plan JSON can omit dynamic indices; those edges remain uncertain.
+        let resource_config = self
+            .config
+            .get(&strip_keys(&pr.module))
+            .and_then(|c| c.resource_blocks.get(&local));
+        // A representative source instance can supply display spans, but must
+        // not supply a sibling instance's graph edges. Prefer plan references.
+        let source_inputs_match = self
+            .plan
+            .get("variables")
+            .and_then(J::as_object)
+            .is_none_or(|variables| {
+                self.source
+                    .and_then(|a| a.modules.first())
+                    .is_some_and(|root| {
+                        variables.iter().all(|(name, planned)| {
+                            root.variables
+                                .iter()
+                                .find(|v| v.name.as_ref() == name)
+                                .and_then(|v| tf_eval::value::to_json(&v.value))
+                                .as_ref()
+                                == planned.get("value")
+                        })
+                    })
+            });
+        let graph_source = self
+            .source
+            .filter(|_| source_inputs_match)
+            .and_then(|a| a.modules.iter().find(|m| m.address.as_ref() == pr.module))
+            .and_then(|m| {
+                m.resources.iter().find(|r| {
+                    r.mode == pr.mode
+                        && r.ty.as_ref() == pr.ty
+                        && r.name.as_ref() == pr.name
+                        && r.key.as_deref() == pr.key.as_deref()
+                })
+            });
+        resource.dependencies_complete = resource_config.is_some();
+        if let Some(config) = resource_config {
+            let mut refs = Vec::new();
+            collect_refs(config, &mut refs);
+            if let Some(dependencies) = config.get("depends_on").and_then(J::as_array) {
+                refs.extend(
+                    dependencies
+                        .iter()
+                        .filter_map(J::as_str)
+                        .map(str::to_string),
+                );
+            }
+            resource.dependencies_complete = self.graph_dependencies(
+                &pr.module,
+                refs,
+                Truth::True,
+                0,
+                &mut resource.dependencies,
+            );
+        }
+        if !resource.dependencies_complete
+            && let Some(source) = graph_source
+        {
+            resource
+                .dependencies
+                .extend(source.dependencies.iter().cloned());
+            tf_semantic::graph::body_dependencies(&source.body, &mut resource.dependencies);
+            for value in source.count.iter().chain(source.for_each.iter()) {
+                tf_semantic::graph::value_dependencies(value, &mut resource.dependencies);
+            }
+            resource.dependencies_complete = source.dependencies_complete;
+        }
+        resource
+    }
+
+    /// Follow configuration references through module outputs and arguments.
+    /// Plan JSON does not contain local definitions; source is required there.
+    fn graph_dependencies(
+        &self,
+        module: &str,
+        refs: Vec<String>,
+        certainty: Truth,
+        depth: usize,
+        out: &mut Vec<tf_eval::prov::ResourceDependency>,
+    ) -> bool {
+        if depth > 64 {
+            return false;
+        }
+        let mut complete = true;
+        for reference in &refs {
+            // Terraform includes traversal prefixes in the references array.
+            if refs.iter().any(|r| {
+                r.len() > reference.len()
+                    && r.starts_with(reference)
+                    && matches!(r.as_bytes()[reference.len()], b'.' | b'[')
+            }) {
+                continue;
+            }
+            match classify(reference) {
+                Ref::Resource { local, key, .. } => {
+                    if let Ok(target) = Address::parse_local(module, &local) {
+                        out.push(tf_eval::prov::ResourceDependency {
+                            resource: target.base_string().into(),
+                            key: key.map(Into::into),
+                            certainty,
+                        });
+                    }
+                }
+                Ref::Local(_) => complete = false,
+                Ref::Var(name) => {
+                    if let Some(parent) = parent_module(module)
+                        && let Some(expr) = self
+                            .config
+                            .get(&strip_keys(module))
+                            .and_then(|c| c.inputs.get(&name))
+                    {
+                        let mut refs = Vec::new();
+                        collect_refs(expr, &mut refs);
+                        complete &=
+                            self.graph_dependencies(&parent, refs, certainty, depth + 1, out);
+                    }
+                }
+                Ref::Module(name) => {
+                    use crate::refs::{Seg, segments};
+                    let segments = segments(reference);
+                    let (key, output) = match segments.get(2) {
+                        Some(Seg::Index(key)) => (Some(key.as_str()), segments.get(3)),
+                        output => (None, output),
+                    };
+                    let child = if module.is_empty() {
+                        format!("module.{name}")
+                    } else {
+                        format!("{module}.module.{name}")
+                    };
+                    let candidates: BTreeSet<_> = self
+                        .collect()
+                        .into_iter()
+                        .map(|r| r.module)
+                        .filter(|m| {
+                            parent_module(m).as_deref() == Some(module)
+                                && strip_keys(m) == strip_keys(&child)
+                                && key.is_none_or(|k| *m == format!("{child}[{k}]"))
+                        })
+                        .collect();
+                    if candidates.is_empty() {
+                        complete = false;
+                    }
+                    for target in candidates {
+                        let certainty = if key.is_none() && target != child {
+                            Truth::Unknown
+                        } else {
+                            certainty
+                        };
+                        if let Some(config) = self.config.get(&strip_keys(&target)) {
+                            for (name, expr) in &config.outputs {
+                                if let Some(Seg::Name(want)) = output
+                                    && want != name
+                                {
+                                    continue;
+                                }
+                                let mut refs = Vec::new();
+                                collect_refs(expr, &mut refs);
+                                complete &= self.graph_dependencies(
+                                    &target,
+                                    refs,
+                                    certainty,
+                                    depth + 1,
+                                    out,
+                                );
+                            }
+                        } else {
+                            complete = false;
+                        }
+                    }
+                }
+                Ref::Other => {}
+            }
+        }
+        complete
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -682,13 +862,9 @@ impl<'p> Builder<'p> {
                 String::new()
             };
             prov = prov.push(
-                Step::new(
-                    StepKind::Attribute,
-                    at,
-                    format!("{} {full}{what}", ctx.id),
-                )
-                .with_resource(ctx.id.base_string().into())
-                .with_attribute(full.as_str()),
+                Step::new(StepKind::Attribute, at, format!("{} {full}{what}", ctx.id))
+                    .with_resource(ctx.id.base_string().into())
+                    .with_attribute(full.as_str()),
             );
             out.attrs.push(Attr {
                 name: name.into(),
@@ -834,7 +1010,12 @@ impl<'p> Builder<'p> {
                     };
                     let target: Arc<str> = referenced.base_string().into();
                     let span = self
-                        .src_resource(ctx.module, referenced.mode, &referenced.ty, &referenced.name)
+                        .src_resource(
+                            ctx.module,
+                            referenced.mode,
+                            &referenced.ty,
+                            &referenced.name,
+                        )
                         .map(|r| r.attr(attr).map(|a| a.span).unwrap_or(r.span))
                         .unwrap_or(ctx.header);
                     steps.push(
@@ -887,6 +1068,11 @@ fn plan_res<'p>(r: &'p J, after: &'p J, unknown: &'p J, sensitive: &'p J) -> Opt
 
 fn index_config<'p>(m: &'p J, prefix: String, out: &mut HashMap<String, ConfigModule<'p>>) {
     let entry = out.entry(prefix.clone()).or_default();
+    if let Some(outputs) = m.get("outputs").and_then(J::as_object) {
+        entry
+            .outputs
+            .extend(outputs.iter().map(|(name, expr)| (name.clone(), expr)));
+    }
     for r in m
         .get("resources")
         .and_then(J::as_array)
@@ -896,6 +1082,7 @@ fn index_config<'p>(m: &'p J, prefix: String, out: &mut HashMap<String, ConfigMo
         let Some(addr) = r.get("address").and_then(J::as_str) else {
             continue;
         };
+        entry.resource_blocks.insert(addr.to_string(), r);
         if let Some(e) = r.get("expressions").and_then(J::as_object) {
             entry.resources.insert(addr.to_string(), e);
         }
@@ -908,7 +1095,13 @@ fn index_config<'p>(m: &'p J, prefix: String, out: &mut HashMap<String, ConfigMo
                 } else {
                     format!("{prefix}.module.{name}")
                 };
-                index_config(child, p, out);
+                index_config(child, p.clone(), out);
+                if let Some(inputs) = call.get("expressions").and_then(J::as_object) {
+                    out.entry(p)
+                        .or_default()
+                        .inputs
+                        .extend(inputs.iter().map(|(name, expr)| (name.clone(), expr)));
+                }
             }
         }
     }

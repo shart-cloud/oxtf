@@ -156,7 +156,25 @@ impl Value {
         }
     }
     pub fn known(k: Known) -> Self {
-        Value::new(Kind::Known(k))
+        let mut prov = Prov::EMPTY;
+        match &k {
+            Known::List(items) => {
+                for value in items.iter() {
+                    prov.join_dependencies(&value.prov);
+                }
+            }
+            Known::Object(items) => {
+                for value in items.values() {
+                    prov.join_dependencies(&value.prov);
+                }
+            }
+            Known::Json(value) => prov.join_dependencies(&value.prov),
+            _ => {}
+        }
+        Value {
+            kind: Kind::Known(k),
+            prov,
+        }
     }
     pub fn null() -> Self {
         Value::known(Known::Null)
@@ -198,6 +216,40 @@ impl Value {
     /// are structurally equal Known values are merged, and a single
     /// alternative collapses to itself.
     pub fn one_of(alts: Vec<Value>, tainted: bool) -> Self {
+        // A traversal present in only some alternatives is only a possible
+        // graph edge. Compute this before structurally equal values collapse.
+        let mut dependencies = Vec::<crate::prov::ResourceDependency>::new();
+        for a in &alts {
+            for d in a.prov.dependencies() {
+                if dependencies
+                    .iter()
+                    .any(|old| old.resource == d.resource && old.key == d.key)
+                {
+                    continue;
+                }
+                let outcomes: Vec<_> = alts
+                    .iter()
+                    .map(|a| {
+                        a.prov
+                            .dependencies()
+                            .iter()
+                            .filter(|x| x.resource == d.resource && x.key == d.key)
+                            .fold(crate::Truth::False, |t, x| t.or(x.certainty))
+                    })
+                    .collect();
+                let certainty = if outcomes.iter().all(|t| *t == outcomes[0]) {
+                    outcomes[0]
+                } else if tainted || outcomes.contains(&crate::Truth::Tainted) {
+                    crate::Truth::Tainted
+                } else {
+                    crate::Truth::Unknown
+                };
+                dependencies.push(crate::prov::ResourceDependency {
+                    certainty,
+                    ..d.clone()
+                });
+            }
+        }
         let mut flat: Vec<Value> = Vec::with_capacity(alts.len());
         let mut tainted = tainted;
         for a in alts {
@@ -212,16 +264,26 @@ impl Value {
             }
         }
         if flat.len() == 1 {
-            return flat.pop().unwrap();
+            let mut value = flat.pop().unwrap();
+            if !dependencies.is_empty() {
+                value.prov = value.prov.referencing(dependencies);
+            }
+            return value;
         }
-        Value::new(Kind::OneOf(Arc::new(OneOf {
+        let mut value = Value::new(Kind::OneOf(Arc::new(OneOf {
             alternatives: flat,
             tainted,
-        })))
+        })));
+        if !dependencies.is_empty() {
+            value.prov = value.prov.referencing(dependencies);
+        }
+        value
     }
 
     #[must_use]
     pub fn with_prov(mut self, prov: Prov) -> Self {
+        let mut prov = prov;
+        prov.join_dependencies(&self.prov);
         self.prov = prov;
         self
     }

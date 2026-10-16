@@ -51,8 +51,12 @@ use tf_eval::{Kind, Known, Prov, Value, Verdict};
 use tf_linter::{Category, DynRule, Judgement, Level, RuleFailure, RuleInfo};
 use tf_semantic::{Module, Resource};
 
-/// Current IR version. Readers reject other versions.
-pub const IR_VERSION: u32 = 1;
+pub mod checkov;
+pub mod graph;
+pub mod jsonpath;
+
+/// Current IR version. Versions 1 and 2 remain readable; graph policies need 3.
+pub const IR_VERSION: u32 = 3;
 
 fn ir_version() -> u32 {
     IR_VERSION
@@ -114,6 +118,22 @@ pub enum CmpOp {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Expr {
+    /// Complete graph policy, evaluated once per root. Pass results are negated.
+    CheckovGraph {
+        definition: graph::GraphExpr,
+    },
+    /// Attribute predicate from a Checkov graph policy (true means pass).
+    CheckovAttribute {
+        #[serde(flatten)]
+        check: checkov::AttributeCheck,
+    },
+    /// Checkov's declarative value-check semantics, over configured values.
+    /// Imported checks carry their own missing-value policy; provider defaults
+    /// must not silently change the upstream rule.
+    CheckovValue {
+        #[serde(flatten)]
+        check: checkov::ValueCheck,
+    },
     /// Attribute access. At resource scope the first segment is a top-level
     /// attribute (absent → `null`, or the defaults-overlay value when
     /// `default` is set); further segments (and every segment at element
@@ -221,6 +241,9 @@ pub fn load_rules_file(path: &std::path::Path) -> Result<Vec<RuleSpec>, String> 
 /// Internal, pre-converted expression tree (literals as `Value`s).
 #[derive(Debug)]
 enum Node {
+    CheckovGraph(graph::GraphExpr),
+    CheckovAttribute(checkov::AttributeCheck),
+    CheckovValue(checkov::ValueCheck),
     Col { path: Vec<Seg>, default: bool },
     Element,
     Lit(Value),
@@ -308,9 +331,31 @@ fn lit(v: &serde_json::Value) -> Result<Value, String> {
     }
 }
 
-fn compile_expr(e: &Expr) -> Result<Node, String> {
-    let b = |e: &Expr| compile_expr(e).map(Box::new);
+fn compile_expr(e: &Expr, version: u32) -> Result<Node, String> {
+    if version < 2 && matches!(e, Expr::CheckovValue { .. } | Expr::CheckovAttribute { .. }) {
+        return Err("Checkov predicates require IR version 2".into());
+    }
+    let b = |e: &Expr| compile_expr(e, version).map(Box::new);
     Ok(match e {
+        Expr::CheckovGraph { .. } => {
+            return Err(
+                "checkov_graph must be the complete clause condition in IR version 3".into(),
+            );
+        }
+        Expr::CheckovAttribute { check } => {
+            if version < 3 && check.attribute.contains(['.', '*']) {
+                return Err(
+                    "checkov_attribute: version 2 supports only literal top-level attributes"
+                        .into(),
+                );
+            }
+            check.validate()?;
+            Node::CheckovAttribute(check.clone())
+        }
+        Expr::CheckovValue { check } => {
+            check.validate()?;
+            Node::CheckovValue(check.clone())
+        }
         Expr::Col { path, default } => {
             if path.is_empty() {
                 return Err("col: empty path".into());
@@ -345,7 +390,10 @@ fn compile_expr(e: &Expr) -> Result<Node, String> {
             if args.is_empty() {
                 return Err("and/or: no arguments".into());
             }
-            let args = args.iter().map(compile_expr).collect::<Result<_, _>>()?;
+            let args = args
+                .iter()
+                .map(|e| compile_expr(e, version))
+                .collect::<Result<_, _>>()?;
             if matches!(e, Expr::And { .. }) {
                 Node::And(args)
             } else {
@@ -410,7 +458,7 @@ fn compile_message(m: &str) -> Result<Vec<Piece>, String> {
 /// Validate and compile a rule.
 pub fn compile(spec: RuleSpec) -> Result<CompiledRule, String> {
     let ctx = |e: String| format!("rule {:?}: {e}", spec.name);
-    if spec.version != IR_VERSION {
+    if !(1..=IR_VERSION).contains(&spec.version) {
         return Err(ctx(format!(
             "unsupported IR version {} (this build reads {IR_VERSION})",
             spec.version
@@ -442,11 +490,24 @@ pub fn compile(spec: RuleSpec) -> Result<CompiledRule, String> {
             for_each: c
                 .for_each
                 .as_ref()
-                .map(compile_expr)
+                .map(|e| compile_expr(e, spec.version))
                 .transpose()
                 .map_err(|e| ctx(format!("clause {i}: for_each: {e}")))?,
-            condition: compile_expr(&c.condition)
-                .map_err(|e| ctx(format!("clause {i}: condition: {e}")))?,
+            condition: if let Expr::CheckovGraph { definition } = &c.condition {
+                if spec.version < 3 || c.for_each.is_some() {
+                    return Err(ctx(
+                        "checkov_graph requires IR version 3 and no for_each".into()
+                    ));
+                }
+                definition.validate().map_err(ctx)?;
+                if definition.is_filter() {
+                    return Err(ctx("graph filters require a predicate".into()));
+                }
+                Node::CheckovGraph(definition.clone())
+            } else {
+                compile_expr(&c.condition, spec.version)
+                    .map_err(|e| ctx(format!("clause {i}: condition: {e}")))?
+            },
         });
     }
     let info = RuleInfo {
@@ -575,6 +636,15 @@ fn is_true(v: &Value) -> Verdict {
 
 fn eval_pred(n: &Node, s: Scope<'_>) -> Verdict {
     match n {
+        Node::CheckovGraph(_) => Verdict::new(Truth::Unknown, None),
+        Node::CheckovAttribute(check) => match s {
+            Scope::Resource(r) => check.evaluate(r),
+            Scope::Value(_) => Verdict::new(Truth::Unknown, None),
+        },
+        Node::CheckovValue(check) => match s {
+            Scope::Resource(r) => check.evaluate(r),
+            Scope::Value(_) => Verdict::new(Truth::Unknown, None),
+        },
         Node::Col { .. } | Node::Element | Node::Lit(_) => is_true(&eval_value(n, s)),
         Node::Cmp(op, l, r, witness_left) => {
             let (lv, rv) = (eval_value(l, s), eval_value(r, s));
@@ -636,10 +706,21 @@ impl CompiledRule {
     /// The verdict of this rule for one resource (`None` when no clause
     /// applies to its type).
     pub fn verdict(&self, r: &Resource) -> Option<Verdict> {
-        let idx = self.by_type.get(&*r.ty)?;
+        let typed = self.by_type.get(&*r.ty);
+        let wildcard = self.by_type.get("*");
+        if typed.is_none() && wildcard.is_none() {
+            return None;
+        }
+        let idx = typed
+            .into_iter()
+            .flatten()
+            .chain(wildcard.into_iter().flatten());
         let mut acc = Verdict::FALSE;
         for &i in idx {
             let c = &self.clauses[i];
+            if matches!(c.condition, Node::CheckovGraph(_)) {
+                continue;
+            }
             let v = match &c.for_each {
                 Some(fe) => {
                     let list = eval_value(fe, Scope::Resource(r));
@@ -681,10 +762,61 @@ impl CompiledRule {
 }
 
 impl DynRule for CompiledRule {
+    fn needs_graph(&self) -> bool {
+        self.clauses
+            .iter()
+            .any(|c| matches!(c.condition, Node::CheckovGraph(_)))
+    }
+    fn judge_graph<'a>(
+        &self,
+        graph: &tf_semantic::graph::ResourceGraph<'a>,
+    ) -> Result<Vec<(&'a Resource, Judgement)>, RuleFailure> {
+        if let Some(r) = graph.resources.iter().find(|r| !r.dependencies_complete && self.clauses.iter().any(|c| matches!(&c.condition, Node::CheckovGraph(e) if e.connection_tree() && e.targets(r)))) {
+            return Err(format!("graph dependencies unavailable for {}; include Terraform source or a plan with complete configuration references", r.address));
+        }
+
+        let mut verdicts: Vec<_> = graph
+            .resources
+            .iter()
+            .map(|r| {
+                if r.mode == tf_semantic::Mode::Managed {
+                    self.verdict(r).unwrap_or(Verdict::FALSE)
+                } else {
+                    Verdict::FALSE
+                }
+            })
+            .collect();
+        for (clause, spec) in self.clauses.iter().zip(&self.spec.clauses) {
+            if let Node::CheckovGraph(expr) = &clause.condition {
+                for (i, result) in expr.evaluate(graph).into_iter().enumerate() {
+                    let r = graph.resources[i];
+                    if !graph::matches(&spec.resource_types, r) {
+                        continue;
+                    }
+                    if let Some(pass) = result {
+                        verdicts[i] = verdicts[i].clone().or(pass.negate());
+                    }
+                }
+            }
+        }
+        Ok(graph
+            .resources
+            .iter()
+            .zip(verdicts)
+            .filter_map(|(&r, v)| {
+                Judgement::from_verdict(v, |v| self.render(r, v.witness.as_ref())).map(|j| (r, j))
+            })
+            .collect())
+    }
     fn info(&self) -> RuleInfo {
         self.info.clone()
     }
     fn judge_resource(&self, r: &Resource) -> Result<Vec<Judgement>, RuleFailure> {
+        // Mixed packs can merge resource and graph clauses under the same ID.
+        // Their verdicts are combined once by judge_graph, avoiding duplicates.
+        if self.needs_graph() {
+            return Ok(Vec::new());
+        }
         Ok(self
             .verdict(r)
             .and_then(|v| Judgement::from_verdict(v, |v| self.render(r, v.witness.as_ref())))

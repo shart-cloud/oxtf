@@ -241,10 +241,10 @@ pub fn scan(req: ScanRequest) -> Result<ScanOutput, ScanError> {
                     // Directories that exist only in the overlay.
                     for f in files.overlay_under(p) {
                         if f.extension().is_some_and(|x| x == "tf")
-                            && let Some(dir) = f.parent()
-                            && !roots.iter().any(|r| r == dir)
+                            && let Some(dir) = f.parent().map(normalize)
+                            && !roots.contains(&dir)
                         {
-                            roots.push(dir.to_path_buf());
+                            roots.push(dir);
                         }
                     }
                 }
