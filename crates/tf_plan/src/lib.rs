@@ -150,22 +150,25 @@ pub fn scan_plan_with_model(
     let start = Instant::now();
     let a = load_plan(path, opts, &files)?;
     let out = linter.run(&a);
+    // No parsed modules here: only skips in a resource's own block apply.
+    let (findings, suppressed) = tf_linter::suppress::checkov_skips(out.findings, &a, &files, None);
     let stats = ScanStats {
         roots: 1,
         module_instances: a.modules.len(),
         resources: a.stats.resources,
         files: files.len(),
         elapsed: start.elapsed(),
-        ..ScanStats::from_findings(&out.findings)
+        ..ScanStats::from_findings(&findings)
     };
     let diagnostics = a.diagnostics.clone();
     Ok((
         ScanResult {
-            findings: out.findings,
+            findings,
             diagnostics,
             stats,
             rule_errors: out.rule_errors,
             files,
+            suppressed,
         },
         a,
     ))
@@ -294,6 +297,8 @@ impl<'p> Builder<'p> {
                     resources: Vec::new(),
                     variables: self.variables(a, src),
                     outputs: Vec::new(),
+                    locals: src.map(|m| m.locals.clone()).unwrap_or_default(),
+                    block_values: src.map(|m| m.block_values.clone()).unwrap_or_default(),
                     module_calls: src.map(|m| m.module_calls.clone()).unwrap_or_default(),
                     symbols: src.map(|m| m.symbols.clone()).unwrap_or_default(),
                     references: src.map(|m| m.references.clone()).unwrap_or_default(),

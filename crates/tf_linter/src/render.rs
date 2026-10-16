@@ -103,6 +103,82 @@ impl Diagnostic for Related {
     }
 }
 
+/// The `file:line:col` a rule-loading message starts with (1-based line
+/// and character column), as every front-end writes them.
+pub fn message_location(message: &str) -> Option<(std::path::PathBuf, u32, u32)> {
+    let mut parts = message.splitn(4, ':');
+    let (file, line, col) = (parts.next()?, parts.next()?, parts.next()?);
+    let line: u32 = line.trim().parse().ok()?;
+    let col: u32 = col.trim().parse().ok()?;
+    (!file.is_empty() && line > 0 && col > 0).then(|| (file.into(), line, col))
+}
+
+/// The span a `file:line:col` names in `files` (loaded on demand): from
+/// the column to the end of its line.
+pub fn locate(files: &FileTable, file: &std::path::Path, line: u32, col: u32) -> Option<FileSpan> {
+    let sf = files.load(file).ok()?;
+    let text = &*sf.text;
+    let start_of_line = text
+        .split_inclusive('\n')
+        .take(line as usize - 1)
+        .map(str::len)
+        .sum::<usize>();
+    let line_text = text[start_of_line..].split('\n').next()?;
+    let in_line = line_text
+        .char_indices()
+        .nth(col as usize - 1)
+        .map_or(line_text.len(), |(i, _)| i);
+    let start = start_of_line + in_line;
+    let end = (start_of_line + line_text.len())
+        .max(start + 1)
+        .min(text.len());
+    Some(FileSpan::new(
+        sf.id,
+        tf_span::Span::new(start as u32, end as u32),
+    ))
+}
+
+/// A rule-loading error or warning for the terminal: each line that starts
+/// with `file:line:col: ` becomes a miette report pointing into the rule
+/// file; other lines (regorus's own snippets among them) pass through.
+pub fn render_load_message(message: &str, severity: miette::Severity, color: bool) -> String {
+    let files = FileTable::new();
+    let mut out = String::new();
+    for line in message.lines() {
+        let located = message_location(line).and_then(|(file, l, c)| {
+            let at = locate(&files, &file, l, c)?;
+            let text = line.splitn(4, ':').nth(3).unwrap_or("").trim().to_string();
+            Some((at, text))
+        });
+        match located {
+            Some((at, text)) => {
+                let report = Report {
+                    code: "rule-load".into(),
+                    message: text.clone(),
+                    severity,
+                    src: source(&files, at),
+                    labels: vec![LabeledSpan::new_primary_with_span(Some(text), span(at))],
+                    help: None,
+                    related: Vec::new(),
+                };
+                let mut s = String::new();
+                let theme = if color {
+                    GraphicalTheme::unicode()
+                } else {
+                    GraphicalTheme::unicode_nocolor()
+                };
+                let _ = GraphicalReportHandler::new_themed(theme).render_report(&mut s, &report);
+                out.push_str(&s);
+            }
+            None => {
+                out.push_str(line);
+                out.push('\n');
+            }
+        }
+    }
+    out
+}
+
 /// `path:line` of a step, for the provenance summary.
 pub fn location(files: &FileTable, at: FileSpan) -> String {
     let f = files.get(at.file);

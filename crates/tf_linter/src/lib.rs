@@ -26,11 +26,12 @@ pub mod render;
 pub mod rule;
 pub mod rules;
 pub mod scan;
+pub mod suppress;
 
-pub use engine::{ANY_TYPE, Linter, RuleSelectionError, RunOutput, select_rules};
+pub use engine::{ANY_TYPE, Linter, RuleSelectionError, RunOutput, Sources, select_rules};
 pub use record::{FindingRecord, RuleError, ScanRecord};
 pub use rule::{
-    Category, DynRule, Finding, FixAction, FixHint, Hidden, Judgement, Level, Rule, RuleFailure,
-    RuleInfo, RuleMeta, Severity,
+    Category, ConfigFile, DynRule, Engine, Finding, FindingSubject, FixAction, FixHint, Hidden,
+    Judgement, Level, Rule, RuleFailure, RuleInfo, RuleMeta, RuleSource, Severity, Subject,
 };
 pub use scan::{ScanOptions, ScanResult, ScanStats, discover_roots, scan_dir, scan_with};

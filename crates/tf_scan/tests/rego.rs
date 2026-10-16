@@ -159,7 +159,8 @@ fn foreign(root: &str, policy: &Path, shape: Shape) -> ScanRequest {
 }
 
 /// The exit check for the foreign-policy seam: an unmodified public Conftest
-/// policy over the HCL-shaped projection yields each certainty class.
+/// policy, evaluated per file as Conftest does, yields each certainty class
+/// (one file per class: certainty is decided over the whole file).
 #[test]
 fn unmodified_conftest_policy_yields_each_certainty_class() {
     let policy = repo().join("fixtures/rego/foreign/conftest_hcl2_deny.rego");
@@ -189,7 +190,7 @@ fn unmodified_conftest_policy_yields_each_certainty_class() {
         (
             "azurerm_managed_disk.from_data",
             "indeterminate",
-            "Azure disk `from_data` is not encrypted (cannot be confirmed: encryption_settings[0].enabled computed at apply time)",
+            "Azure disk `from_data` is not encrypted (cannot be confirmed: resource.azurerm_managed_disk.from_data.encryption_settings[0].enabled computed at apply time)",
         ),
         (
             "azurerm_managed_disk.from_var",
@@ -228,8 +229,8 @@ fn unmodified_conftest_policy_yields_each_certainty_class() {
 
 /// regorus does not implement Go's `%q` format verb, which the public
 /// policy's required-tags rule uses. That is an engine gap, and it must
-/// surface as a rule error naming the resource, never as a missing
-/// violation; the rest of the scan still completes.
+/// surface as a rule error naming the file (Conftest's unit), never as a
+/// missing violation; the rest of the scan still completes.
 #[test]
 fn unsupported_builtin_in_a_foreign_policy_is_a_rule_error() {
     let policy = repo().join("fixtures/rego/foreign/conftest_hcl2_deny.rego");
@@ -242,9 +243,11 @@ fn unsupported_builtin_in_a_foreign_policy_is_a_rule_error() {
     let errors = &out.result.rule_errors;
     assert_eq!(errors.len(), 1, "{errors:?}");
     assert_eq!(errors[0].rule, "rego:conftest_hcl2_deny");
-    assert_eq!(
-        errors[0].resource.as_deref(),
-        Some("aws_security_group_rule.open")
+    assert_eq!(errors[0].resource, None);
+    assert!(
+        errors[0].message.contains("foreign_sprintf/main.tf"),
+        "{}",
+        errors[0].message
     );
     assert!(errors[0].message.contains("%q"), "{}", errors[0].message);
     assert_eq!(out.record().rule_errors.len(), 1);
@@ -272,10 +275,7 @@ fn foreign_policy_compile_errors_refuse_the_scan() {
     ))
     .err()
     .unwrap();
-    assert!(
-        missing.to_string().contains("cannot read policy"),
-        "{missing}"
-    );
+    assert!(missing.to_string().contains("none.rego"), "{missing}");
     std::fs::remove_dir_all(dir).unwrap();
 }
 
@@ -300,6 +300,7 @@ fn a_later_catalog_source_shadows_by_name() {
     }
     .resolve()
     .unwrap()
+    .rules
     .iter()
     .map(|r| r.info().name.to_string())
     .collect();
@@ -321,4 +322,160 @@ fn selection_covers_the_whole_catalog() {
     req.selection = Some(vec!["rego:nope".into()]);
     let err = scan(req).err().unwrap();
     assert!(matches!(err, ScanError::Selection(_)), "{err}");
+}
+
+fn ports(root: &str, shape: Shape) -> ScanRequest {
+    let mut req = ScanRequest::dirs(vec![repo().join(root)], false);
+    req.catalog.builtin = false;
+    req.catalog.policies.foreign = vec![repo().join("fixtures/rego/ports")];
+    req.catalog.policies.entries = vec![
+        "data.ports.rds.deny".into(),
+        "data.ports.s3_public_access_block.deny".into(),
+    ];
+    req.catalog.policies.shape = Some(shape);
+    req
+}
+
+/// The seed-rule ports: IDs and levels from `# METADATA`, a module-input
+/// policy joining buckets to public access blocks across the root, and a
+/// `path` in the violation pointing the finding at the attribute.
+#[test]
+fn ported_policies_use_metadata_module_input_and_paths() {
+    let known = run(ports("fixtures/rego/ports_tf/known", Shape::Plan));
+    let rows: Vec<(String, String, String, String, Value)> = known["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| {
+            (
+                f["rule"]["id"].as_str().unwrap().into(),
+                f["rule"]["level"].as_str().unwrap().into(),
+                f["resource"]["address"].as_str().unwrap().into(),
+                f["severity"].as_str().unwrap().into(),
+                f["location"]["line"].clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            (
+                "PORT-AWS-RDS-UNENCRYPTED".into(),
+                "high".into(),
+                "aws_db_instance.db".into(),
+                "definite".into(),
+                // `storage_encrypted = false`, from the violation's `path`.
+                serde_json::json!(20)
+            ),
+            (
+                "PORT-AWS-S3-PUBLIC-ACCESS-BLOCK".into(),
+                "high".into(),
+                "aws_s3_bucket.exposed".into(),
+                "definite".into(),
+                serde_json::json!(13)
+            ),
+        ]
+    );
+    let tainted = run(ports("fixtures/rego/ports_tf/tainted", Shape::Plan));
+    let f = &tainted["findings"][0];
+    assert_eq!(tainted["findings"].as_array().unwrap().len(), 1);
+    assert_eq!(f["resource"]["address"], "aws_s3_bucket.named");
+    assert_eq!(f["severity"], "conditional");
+    assert!(f["message"].as_str().unwrap().contains("var.name"), "{f}");
+    assert_eq!(f["hidden"][0]["path"], "aws_s3_bucket.named.bucket");
+    // Module input is defined for the plan shape only.
+    let err = scan(ports("fixtures/rego/ports_tf/known", Shape::Hcl))
+        .err()
+        .unwrap();
+    assert!(
+        err.to_string().contains("needs the plan input shape"),
+        "{err}"
+    );
+}
+
+/// Conftest conventions, per file: `deny_`/`warn_` rules discovered in
+/// `main`, results no resource reproduces reported on the file, a join
+/// attributed to the bucket by ablation, and an exception keyed on
+/// `data.conftest.file` (fixtures/rego/conftest; `conftest test` agrees).
+#[test]
+fn conftest_conventions_files_ablation_and_exceptions() {
+    let mut req = ScanRequest::dirs(vec![repo().join("fixtures/rego/conftest/tf")], false);
+    req.catalog.builtin = false;
+    req.catalog.policies.foreign = vec![repo().join("fixtures/rego/conftest/policy")];
+    let result = run(req);
+    let mut rows: Vec<(String, String, Value, String)> = result["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| {
+            (
+                f["rule"]["id"].as_str().unwrap().into(),
+                f["rule"]["level"].as_str().unwrap().into(),
+                f["subject"].clone(),
+                f["severity"].as_str().unwrap().into(),
+            )
+        })
+        .collect();
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+    let file = serde_json::json!({
+        "kind": "file",
+        "file": tf_semantic::source::normalize(&repo().join("fixtures/rego/conftest/tf/main.tf"))
+            .display()
+            .to_string(),
+        "module": "",
+    });
+    assert_eq!(
+        rows,
+        [
+            (
+                "rego:main.deny_unpinned_module".to_string(),
+                "medium".to_string(),
+                file.clone(),
+                "definite".to_string()
+            ),
+            (
+                "rego:main.deny_unversioned".to_string(),
+                "medium".to_string(),
+                serde_json::json!({"kind": "resource", "address": "aws_s3_bucket.a"}),
+                "definite".to_string()
+            ),
+            (
+                "rego:main.warn_provider_region".to_string(),
+                "low".to_string(),
+                file,
+                "definite".to_string()
+            ),
+        ]
+    );
+    let f = result["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["subject"]["kind"] == "file")
+        .unwrap();
+    assert_eq!(f["resource"], Value::Null);
+}
+
+/// `oxtf rules test` (Conftest's `verify`): `test_*` rules pass when true,
+/// `todo_test_*` is skipped, and Conftest's `parse_config` and
+/// `parse_config_file` builtins work. `conftest verify` gives the same.
+#[test]
+fn policy_tests_run_as_conftest_verify() {
+    let catalog = Catalog {
+        rule_files: vec![repo().join("fixtures/rego/conftest/policy")],
+        ..Catalog::default()
+    };
+    let outcomes = tf_scan::verify_policies(&catalog).unwrap();
+    let got: Vec<(String, tf_scan::TestResult)> =
+        outcomes.into_iter().map(|o| (o.rule, o.result)).collect();
+    use tf_scan::TestResult::*;
+    assert_eq!(
+        got,
+        [
+            ("data.main.test_unpinned_module_is_denied".to_string(), Pass),
+            ("data.main.test_pinned_module_passes".to_string(), Pass),
+            ("data.main.test_a_failing_test_fails".to_string(), Fail),
+            ("data.main.todo_test_regions".to_string(), Skip),
+        ]
+    );
 }

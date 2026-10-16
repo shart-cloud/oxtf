@@ -14,4 +14,5 @@ path = "src/main.rs"
 tf_linter.workspace = true
 tf_scan.workspace = true
 serde_json.workspace = true
+miette.workspace = true
 mimalloc = "0.1"

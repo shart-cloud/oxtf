@@ -11,6 +11,7 @@ tf_span.workspace = true
 tf_schema.workspace = true
 tf_eval.workspace = true
 tf_semantic.workspace = true
+tf_ast.workspace = true
 rayon.workspace = true
 miette = { workspace = true, features = ["fancy-no-backtrace"] }
 serde.workspace = true

@@ -19,41 +19,22 @@
 //! failure on a resource is returned from the rule hook, so the engine
 //! records it as a rule error on the scan.
 
+pub mod foreign;
+pub mod hcl2json;
 pub mod projection;
 
 use std::cell::RefCell;
 use std::fmt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use serde_json::{Value as Json, json};
 use tf_eval::value::to_json;
 use tf_eval::{Truth, Value, Verdict, truth};
-use tf_linter::rule::{DynRule, Hidden, Judgement, Rule, RuleFailure, RuleInfo};
+use tf_linter::rule::{DynRule, Judgement, Rule, RuleFailure, RuleInfo};
 use tf_linter::rules::{AwsRdsUnencrypted, GcpStorageUniformAccess};
-use tf_linter::{ANY_TYPE, Category, Level, Severity};
 use tf_semantic::{Module, Resource};
 
 pub use projection::Shape;
-
-/// A policy file as loaded: its display name (file stem) and Rego source.
-#[derive(Clone, Debug)]
-struct PolicyFile {
-    name: String,
-    source: String,
-}
-
-impl PolicyFile {
-    fn load(path: &Path) -> Result<PolicyFile, PolicyError> {
-        let source = std::fs::read_to_string(path)
-            .map_err(|e| PolicyError(format!("cannot read policy {}: {e}", path.display())))?;
-        let name = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("policy")
-            .to_string();
-        Ok(PolicyFile { name, source })
-    }
-}
 
 /// Which policies a scan runs.
 #[derive(Clone, Debug, Default)]
@@ -63,12 +44,24 @@ pub struct Policies {
     /// those names, so a catalog that shadows by name replaces the seed
     /// rules with them.
     pub native: bool,
-    /// Foreign policy files, run unchanged over every managed resource.
+    /// Foreign policy files and directories, loaded as one bundle and run
+    /// unchanged ([`foreign`]).
     pub foreign: Vec<PathBuf>,
     pub shape: Option<Shape>,
-    /// Rule path the foreign policies' violations are read from
-    /// (`data.main.deny` by default).
-    pub entry: Option<String>,
+    /// Entry rules the foreign policies' violations are read from, one
+    /// oxtf rule each ([`foreign::DEFAULT_ENTRY`] when empty).
+    pub entries: Vec<String>,
+    /// Parse foreign policies as Rego v0 (`opa eval --v0-compatible`).
+    pub rego_v0: bool,
+    /// Data documents for foreign policies (Conftest's `--data`).
+    pub data: Vec<PathBuf>,
+    /// Conftest namespaces (`main` when empty), unless `entries` are named.
+    pub namespaces: Vec<String>,
+    /// Every namespace (`--all-namespaces`).
+    pub all_namespaces: bool,
+    /// Files under `foreign` that are not part of the bundle (rule files of
+    /// other formats found in the same directory).
+    pub exclude: Vec<PathBuf>,
 }
 
 impl Policies {
@@ -96,8 +89,8 @@ impl From<String> for PolicyError {
 }
 
 /// The rules the policies contribute: native-tier rules named after the
-/// seed rules they stand in for, then one `rego:<name>` rule per foreign
-/// policy. Every policy is compiled and its interface checked here.
+/// seed rules they stand in for, then one rule per foreign entry rule.
+/// Every policy is compiled and its interface checked here.
 pub fn catalog(policies: &Policies) -> Result<Vec<Box<dyn DynRule>>, PolicyError> {
     let mut rules: Vec<Box<dyn DynRule>> = Vec::new();
     if policies.native {
@@ -105,11 +98,17 @@ pub fn catalog(policies: &Policies) -> Result<Vec<Box<dyn DynRule>>, PolicyError
             rules.push(Box::new(NativePolicy::prepare(seed)?));
         }
     }
-    let shape = policies.shape.unwrap_or(Shape::Plan);
-    let entry = policies.entry.as_deref().unwrap_or("data.main.deny");
-    for path in &policies.foreign {
-        let file = PolicyFile::load(path)?;
-        rules.push(Box::new(ForeignPolicy::prepare(&file, shape, entry)?));
+    if !policies.foreign.is_empty() {
+        rules.extend(foreign::rules(&foreign::Options {
+            paths: &policies.foreign,
+            data: &policies.data,
+            entries: &policies.entries,
+            namespaces: &policies.namespaces,
+            all_namespaces: policies.all_namespaces,
+            exclude: &policies.exclude,
+            shape: policies.shape.unwrap_or(Shape::Plan),
+            rego_v0: policies.rego_v0,
+        })?);
     }
     Ok(rules)
 }
@@ -130,11 +129,7 @@ fn engine_with(name: &str, source: &str) -> Result<regorus::Engine, String> {
     Ok(engine)
 }
 
-fn eval(engine: &regorus::Engine, input: Json, rule: &str) -> Result<regorus::Value, String> {
-    let mut engine = engine.clone();
-    engine.set_input(regorus::Value::from(input));
-    engine.eval_rule(rule.to_string()).map_err(|e| e.to_string())
-}
+use foreign::eval;
 
 fn eval_bool(engine: &regorus::Engine, input: Json, rule: &str) -> Result<bool, String> {
     match eval(engine, input, rule)? {
@@ -208,10 +203,9 @@ impl NativePolicy {
         let engine = engine_with(package, source)?;
         let probe = json!({"configured": {}, "subject": {"value": null, "boolean": null, "number": null, "text": null}});
         let declared = eval(&engine, probe.clone(), &format!("data.{package}.subject"))?;
-        let declared: Json = serde_json::from_str(
-            &declared.to_json_str().map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())?;
+        let declared: Json =
+            serde_json::from_str(&declared.to_json_str().map_err(|e| e.to_string())?)
+                .map_err(|e| e.to_string())?;
         let attribute = declared["attribute"]
             .as_str()
             .ok_or_else(|| format!("policy {package}: subject.attribute must be a string"))?
@@ -219,7 +213,11 @@ impl NativePolicy {
         let effective = match declared["mode"].as_str() {
             Some("effective") => true,
             Some("configured") => false,
-            _ => return Err(format!("policy {package}: subject.mode must be \"effective\" or \"configured\"")),
+            _ => {
+                return Err(format!(
+                    "policy {package}: subject.mode must be \"effective\" or \"configured\""
+                ));
+            }
         };
         // Both decision rules must exist and be boolean before any scan runs.
         eval_bool(&engine, probe.clone(), &format!("data.{package}.skip"))?;
@@ -229,7 +227,10 @@ impl NativePolicy {
             info: seed.info(),
             engine,
             package,
-            subject: Subject { attribute, effective },
+            subject: Subject {
+                attribute,
+                effective,
+            },
         })
     }
 
@@ -321,124 +322,6 @@ impl DynRule for NativePolicy {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Foreign tier
-// ---------------------------------------------------------------------------
-
-struct ForeignPolicy {
-    info: RuleInfo,
-    engine: regorus::Engine,
-    entry: String,
-    shape: Shape,
-}
-
-impl ForeignPolicy {
-    fn prepare(file: &PolicyFile, shape: Shape, entry: &str) -> Result<Self, String> {
-        let engine = engine_with(&file.name, &file.source)?;
-        // The entry rule must resolve on an empty document before any scan runs.
-        let empty = match shape {
-            Shape::Hcl => json!({"resource": {}}),
-            Shape::Plan => json!({"format_version": "1.2", "resource_changes": [], "planned_values": {"root_module": {"resources": []}}}),
-        };
-        violations(&eval(&engine, empty, entry).map_err(|e| format!("policy {}: {e}", file.name))?)
-            .map_err(|e| format!("policy {}: {e}", file.name))?;
-        Ok(ForeignPolicy {
-            info: RuleInfo {
-                name: format!("rego:{}", file.name).into(),
-                category: Category::Other,
-                // Foreign policies declare no impact level.
-                level: Level::Medium,
-                description: format!("Rego policy {}", file.name).into(),
-                // Foreign policies declare no resource types: every managed
-                // instance is projected and offered to them.
-                resource_types: vec![ANY_TYPE.into()],
-                runs_on_module: false,
-            },
-            engine,
-            entry: entry.to_string(),
-            shape,
-        })
-    }
-
-    fn judge(&self, r: &Resource) -> Result<Vec<Judgement>, String> {
-        let projection = projection::project(r, self.shape);
-        let input = projection::input(r, &projection, self.shape);
-        let messages = violations(&eval(&self.engine, input, &self.entry)?)?;
-        if messages.is_empty() {
-            return Ok(Vec::new());
-        }
-        let severity = projection.certainty();
-        let deciding = projection.deciding();
-        let witness = deciding.map(|a| a.value.clone());
-        let suffix = match severity {
-            Severity::Indeterminate => {
-                let paths: Vec<_> = projection.abstractions.iter().map(|a| a.path.as_str()).collect();
-                format!(" (cannot be confirmed: {} computed at apply time)", paths.join(", "))
-            }
-            _ => String::new(),
-        };
-        let hidden: Vec<Hidden> = projection
-            .abstractions
-            .iter()
-            .map(|a| Hidden {
-                path: a.path.clone(),
-                truth: a.truth,
-            })
-            .collect();
-        Ok(messages
-            .into_iter()
-            .map(|m| Judgement {
-                severity,
-                witness: witness.clone(),
-                message: format!("{m}{suffix}"),
-                hidden: hidden.clone(),
-                fix_hint: None,
-            })
-            .collect())
-    }
-}
-
-/// The violations a foreign entry rule produced: a set or array of strings,
-/// or of objects with a `msg` string.
-fn violations(result: &regorus::Value) -> Result<Vec<String>, String> {
-    if matches!(result, regorus::Value::Undefined) {
-        return Ok(Vec::new());
-    }
-    let json: Json = serde_json::from_str(&result.to_json_str().map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
-    let items = match json {
-        Json::Array(items) => items,
-        Json::Bool(false) | Json::Null => Vec::new(),
-        other => return Err(format!("entry rule must produce a set of violations, got {other}")),
-    };
-    items
-        .into_iter()
-        .map(|item| match item {
-            Json::String(s) => Ok(s),
-            Json::Object(ref o) => match o.get("msg") {
-                Some(Json::String(s)) => Ok(s.clone()),
-                _ => Ok(item.to_string()),
-            },
-            other => Ok(other.to_string()),
-        })
-        .collect()
-}
-
-impl DynRule for ForeignPolicy {
-    fn info(&self) -> RuleInfo {
-        self.info.clone()
-    }
-    fn judge_resource(&self, r: &Resource) -> Result<Vec<Judgement>, RuleFailure> {
-        self.judge(r)
-    }
-    fn judge_module<'m>(
-        &self,
-        _m: &'m Module,
-    ) -> Result<Vec<(&'m Resource, Judgement)>, RuleFailure> {
-        Ok(Vec::new())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -486,7 +369,10 @@ mod tests {
     fn native_tier_policies_are_validated_up_front() {
         let compile = |src: &str| NativePolicy::compile(Seed::Rds, "oxtf.rds", src);
         assert!(compile("this isn't rego").is_err());
-        assert!(compile("package oxtf.rds\nviolates := true").is_err(), "no subject");
+        assert!(
+            compile("package oxtf.rds\nviolates := true").is_err(),
+            "no subject"
+        );
         assert!(
             compile("package oxtf.rds\nsubject := {\"attribute\": \"x\", \"mode\": \"sometimes\"}\ndefault skip := false\nviolates := true").is_err(),
             "bad mode"
@@ -524,7 +410,13 @@ violates if { input.subject.boolean == false; 1 / 0 == 0 }
         assert_eq!(result.rule_errors.len(), 1);
         let e = &result.rule_errors[0];
         assert_eq!(e.rule, "aws-rds-unencrypted");
-        assert!(e.resource.as_deref().unwrap().starts_with("aws_db_instance."), "{e:?}");
+        assert!(
+            e.resource
+                .as_deref()
+                .unwrap()
+                .starts_with("aws_db_instance."),
+            "{e:?}"
+        );
         assert!(e.message.contains("divide"), "{e:?}");
         let good = catalog(&Policies {
             native: true,
@@ -534,23 +426,5 @@ violates if { input.subject.boolean == false; 1 / 0 == 0 }
         let result = scan(good);
         assert_eq!(result.findings.len(), 1);
         assert!(result.rule_errors.is_empty());
-    }
-
-    #[test]
-    fn foreign_violations_accept_strings_and_msg_objects() {
-        let v = regorus::Value::from_json_str(r#"["a", {"msg": "b", "x": 1}, 3]"#).unwrap();
-        assert_eq!(violations(&v).unwrap(), vec!["a", "b", "3"]);
-        assert!(violations(&regorus::Value::Undefined).unwrap().is_empty());
-        assert!(violations(&regorus::Value::from_json_str("\"x\"").unwrap()).is_err());
-    }
-
-    #[test]
-    fn foreign_policies_must_resolve_their_entry_rule() {
-        let file = PolicyFile {
-            name: "p".into(),
-            source: "package other\nimport rego.v1\ndeny contains \"x\" if true".into(),
-        };
-        assert!(ForeignPolicy::prepare(&file, Shape::Hcl, "data.main.deny").is_err());
-        assert!(ForeignPolicy::prepare(&file, Shape::Hcl, "data.other.deny").is_ok());
     }
 }

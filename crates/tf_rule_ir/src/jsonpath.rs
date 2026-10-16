@@ -1,20 +1,12 @@
 //! The admitted subset of Checkov's JSONPath predicates. Paths are
 //! compiled at export time; runtime traversal retains abstract values.
+use std::cell::Cell;
+
 use crate::checkov::{AttributeCheck, AttributeOp, configuration};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 use tf_eval::{Kind, Known, Step, StepKind, Truth, Value, Verdict, truth};
 use tf_semantic::Resource;
-
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum JsonPathOp {
-    Exists,
-    NotExists,
-    Equals,
-    NotEquals,
-    NotContains,
-}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -35,7 +27,50 @@ pub enum Selector {
 pub struct FilterPredicate {
     pub path: Vec<String>,
     pub operator: FilterOp,
-    pub value: String,
+    /// A string, or an integer (the matched value is then passed through
+    /// Python's `int()` before comparing, as bc_jsonpath_ng does).
+    pub value: Json,
+    #[serde(skip)]
+    regex: crate::checkov::Cache<Option<regex::Regex>>,
+}
+
+impl FilterPredicate {
+    pub fn new(path: Vec<String>, operator: FilterOp, value: Json) -> Self {
+        FilterPredicate {
+            path,
+            operator,
+            value,
+            regex: Default::default(),
+        }
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        if self.path.is_empty() || self.path.iter().any(|s| !field_name(s)) {
+            return Err("JSONPath filter requires literal fields".into());
+        }
+        match (&self.value, self.operator) {
+            (Json::String(_), FilterOp::Equals | FilterOp::NotEquals | FilterOp::Regex) => {}
+            (Json::Number(n), op) if n.is_i64() && op != FilterOp::Regex => {}
+            _ => {
+                return Err(
+                    "JSONPath filter expects a string (==, !=, =~) or an integer comparison".into(),
+                );
+            }
+        }
+        if self.regex().is_none() && self.operator == FilterOp::Regex {
+            return Err("JSONPath filter regex is not supported".into());
+        }
+        Ok(())
+    }
+
+    fn regex(&self) -> Option<&regex::Regex> {
+        self.regex
+            .get_or_init(|| {
+                let pattern = self.value.as_str()?;
+                crate::pyre::compile(pattern, crate::pyre::Mode::Search).ok()
+            })
+            .as_ref()
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -43,9 +78,15 @@ pub struct FilterPredicate {
 pub enum FilterOp {
     Equals,
     NotEquals,
+    /// `=~`: Python `re.search(pattern, value)`.
+    Regex,
+    LessThan,
+    LessThanOrEqual,
+    GreaterThan,
+    GreaterThanOrEqual,
 }
 
-fn field_name(s: &str) -> bool {
+pub(crate) fn field_name(s: &str) -> bool {
     let mut chars = s.chars();
     chars
         .next()
@@ -57,9 +98,12 @@ fn field_name(s: &str) -> bool {
 #[serde(deny_unknown_fields)]
 pub struct JsonPathCheck {
     pub path: Vec<Segment>,
-    pub operator: JsonPathOp,
+    /// `jsonpath_<operator>`: the attribute operator, applied to every match.
+    pub operator: AttributeOp,
     #[serde(default)]
     pub value: Json,
+    #[serde(skip)]
+    check: crate::checkov::Cache<AttributeCheck>,
 }
 
 impl JsonPathCheck {
@@ -71,10 +115,7 @@ impl JsonPathCheck {
             Segment::Field(s) => !field_name(s),
             Segment::Select(Selector::Each) => false,
             Segment::Select(Selector::Filter { predicates }) => {
-                predicates.is_empty()
-                    || predicates
-                        .iter()
-                        .any(|p| p.path.is_empty() || p.path.iter().any(|s| !field_name(s)))
+                predicates.is_empty() || predicates.iter().any(|p| p.validate().is_err())
             }
         }) || matches!(
             first.as_str(),
@@ -90,10 +131,7 @@ impl JsonPathCheck {
                 "JSONPath requires literal fields, array wildcards or string filters without meta-arguments".into(),
             );
         }
-        if self.value.is_array() || self.value.is_object() {
-            return Err("JSONPath comparison expects a scalar".into());
-        }
-        Ok(())
+        self.check().validate_operand()
     }
 
     pub fn evaluate(&self, resource: &Resource) -> Verdict {
@@ -117,7 +155,12 @@ impl JsonPathCheck {
         let mut result = if let Some(fields) = fields {
             self.predicate(&lookup(&vertex, &fields, 0, true).unwrap_or_else(Value::null))
         } else {
-            let matches = self.query(&vertex, &self.path);
+            let raised = Cell::new(false);
+            let matches = self.query(&vertex, &self.path, &raised);
+            if raised.get() {
+                // An exception anywhere in the query aborts it: no result.
+                return Verdict::new(Truth::Unknown, Some(vertex.clone()));
+            }
             if self.predicate(&Value::null()).truth == Truth::True {
                 matches.all
             } else {
@@ -139,30 +182,32 @@ impl JsonPathCheck {
         result
     }
 
-    fn predicate(&self, value: &Value) -> Verdict {
-        if self.operator == JsonPathOp::NotContains {
-            return contains(value, &self.value).negate();
-        }
-        AttributeCheck {
+    /// The operator as an attribute check, prepared once.
+    fn check(&self) -> &AttributeCheck {
+        self.check.get_or_init(|| AttributeCheck {
             attribute: String::new(),
-            operator: match self.operator {
-                JsonPathOp::Exists => AttributeOp::Exists,
-                JsonPathOp::NotExists => AttributeOp::NotExists,
-                JsonPathOp::Equals => AttributeOp::Equals,
-                JsonPathOp::NotEquals => AttributeOp::NotEquals,
-                JsonPathOp::NotContains => AttributeOp::NotContains,
-            },
+            operator: self.operator,
             value: self.value.clone(),
-        }
-        .evaluate_value(value)
+            prepared: Default::default(),
+        })
     }
 
-    fn query(&self, value: &Value, path: &[Segment]) -> Matches {
+    fn predicate(&self, value: &Value) -> Verdict {
+        // A JSONPath match is the raw (unflattened) vertex value, so
+        // containment uses the one-level semantics below.
+        match self.operator {
+            AttributeOp::Contains => contains(value, &self.value),
+            AttributeOp::NotContains => contains(value, &self.value).negate(),
+            _ => self.check().evaluate_value(value),
+        }
+    }
+
+    fn query(&self, value: &Value, path: &[Segment], raised: &Cell<bool>) -> Matches {
         if let Kind::OneOf(o) = &value.kind {
             let branches: Vec<_> = o
                 .alternatives
                 .iter()
-                .map(|v| self.query(&v.child_of(value), path))
+                .map(|v| self.query(&v.child_of(value), path, raised))
                 .collect();
             return Matches {
                 any: truth::combine_one_of(
@@ -191,21 +236,21 @@ impl JsonPathCheck {
         // The Terraform renderer treats jsonencode as its structured argument.
         // Keep symbolic descendants; never round-trip through a JSON string.
         if let Some(Known::Json(inner)) = value.as_known() {
-            return self.query(&inner.child_of(value), path);
+            return self.query(&inner.child_of(value), path, raised);
         }
         if let Some(s) = value.as_str()
             && let Ok(json) = serde_json::from_str::<Json>(s)
             && (json.is_object() || json.is_array())
         {
             // Terraform's renderer also decodes literal JSON policy strings.
-            return self.query(&tf_eval::value::from_json(&json, &value.prov), path);
+            return self.query(&tf_eval::value::from_json(&json, &value.prov), path, raised);
         }
         match &path[0] {
             Segment::Field(name) => value
                 .as_object()
                 .and_then(|o| o.get(name.as_str()))
                 .map_or_else(Matches::empty, |v| {
-                    self.query(&v.child_of(value), &path[1..])
+                    self.query(&v.child_of(value), &path[1..], raised)
                 }),
             Segment::Select(selector) => {
                 if matches!(selector, Selector::Each)
@@ -242,14 +287,14 @@ impl JsonPathCheck {
                         Selector::Each => Verdict::new(Truth::True, Some(item.clone())),
                         Selector::Filter { predicates } => predicates.iter().fold(
                             Verdict::new(Truth::True, Some(item.clone())),
-                            |result, p| result.and(filter(item, p, &p.path)),
+                            |result, p| result.and(filter(item, p, &p.path, raised)),
                         ),
                     };
                     let next = match eligibility.truth {
                         Truth::False => Matches::empty(),
-                        Truth::True => self.query(item, &path[1..]),
+                        Truth::True => self.query(item, &path[1..], raised),
                         _ => {
-                            let next = self.query(item, &path[1..]);
+                            let next = self.query(item, &path[1..], raised);
                             Matches {
                                 any: eligibility.clone().and(next.any),
                                 all: eligibility.negate().or(next.all),
@@ -282,25 +327,72 @@ impl Matches {
     }
 }
 
-fn filter(value: &Value, predicate: &FilterPredicate, path: &[String]) -> Verdict {
+fn filter(
+    value: &Value,
+    predicate: &FilterPredicate,
+    path: &[String],
+    raised: &Cell<bool>,
+) -> Verdict {
     truth::map(value, &|value| {
         if path.is_empty() {
-            let equal = value.as_str() == Some(predicate.value.as_str());
-            return Verdict::new(
-                Truth::from_bool(equal == (predicate.operator == FilterOp::Equals)),
-                Some(value.clone()),
-            );
+            return filter_leaf(value, predicate, raised);
         }
         if let Some(Known::Json(inner)) = value.as_known() {
-            return filter(&inner.child_of(value), predicate, path);
+            return filter(&inner.child_of(value), predicate, path, raised);
         }
         value
             .as_object()
             .and_then(|o| o.get(path[0].as_str()))
             .map_or(Verdict::FALSE, |v| {
-                filter(&v.child_of(value), predicate, &path[1..])
+                filter(&v.child_of(value), predicate, &path[1..], raised)
             })
     })
+}
+
+/// bc_jsonpath_ng's `Expression.find` on one matched value. Where Python
+/// raises (`int()` of a non-scalar, `re.search` on a non-string) the whole
+/// query fails, so the result is left unresolved.
+fn filter_leaf(value: &Value, predicate: &FilterPredicate, raised: &Cell<bool>) -> Verdict {
+    let yes = |b: bool| Verdict::new(Truth::from_bool(b), Some(value.clone()));
+    let raises = || {
+        raised.set(true);
+        Verdict::new(Truth::Unknown, Some(value.clone()))
+    };
+    match &predicate.value {
+        Json::String(expected) => match predicate.operator {
+            FilterOp::Regex => match value.as_known() {
+                Some(Known::String(s)) => yes(predicate.regex().expect("validated").is_match(s)),
+                _ => raises(),
+            },
+            op => {
+                let equal = value.as_str() == Some(expected.as_str());
+                yes(equal == (op == FilterOp::Equals))
+            }
+        },
+        Json::Number(n) => {
+            let expected = n.as_i64().expect("validated") as i128;
+            let actual = match value.as_known() {
+                Some(Known::String(s)) => match crate::py::int_str(s) {
+                    Some(n) => n,
+                    // int() raised ValueError: the item is skipped.
+                    None => return yes(false),
+                },
+                Some(Known::Number(f)) => f.trunc() as i128,
+                Some(Known::Bool(b)) => *b as i128,
+                _ => return raises(),
+            };
+            yes(match predicate.operator {
+                FilterOp::Equals => actual == expected,
+                FilterOp::NotEquals => actual != expected,
+                FilterOp::LessThan => actual < expected,
+                FilterOp::LessThanOrEqual => actual <= expected,
+                FilterOp::GreaterThan => actual > expected,
+                FilterOp::GreaterThanOrEqual => actual >= expected,
+                FilterOp::Regex => unreachable!("validated"),
+            })
+        }
+        _ => unreachable!("validated"),
+    }
 }
 
 /// Python membership used by the pinned containment solver. Object values are

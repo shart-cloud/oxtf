@@ -1,0 +1,90 @@
+{
+  "locals": [
+    {
+      "a": "lit $${not} %%{no}",
+      "aa": "${var.a}${var.b}",
+      "b": "x${var.y}z",
+      "bb": 12345678901234567000,
+      "c": "${var.y}",
+      "cc": true,
+      "d": 1,
+      "dd": null,
+      "e": [
+        1,
+        2
+      ],
+      "ee": "a inner ${var.x} b",
+      "f": "pre %{if var.c}t%{else}f%{endif} post",
+      "ff": "${1 + 2}",
+      "g": "%{if var.c}yes%{else}no%{endif}",
+      "gg": "${var.x == \"y\" ? \"a\" : \"b\"}",
+      "h": "%{for k, v in var.m}${k}=${v},%{endfor}",
+      "hh": "x",
+      "i": "a${var.s}b",
+      "j": "heredoc ${var.x}\nline2\n",
+      "k": "indented\n  more\n",
+      "l": "${(var.p)}",
+      "m": "${lower(var.s)}",
+      "n": -1,
+      "o": false,
+      "p": "${-var.n}",
+      "q": {
+        "${(var.k)}": 3,
+        "aws.east": 5,
+        "plain": 1,
+        "quoted": 2,
+        "t${var.x}": 4
+      },
+      "r": "${[for x in var.l : upper(x) if x != \"\"]}",
+      "s": "${var.a[0].b[*].c}",
+      "t": 1.5,
+      "u": 1000,
+      "v": 0.000001,
+      "w": "unicode é é \t tab",
+      "x": null,
+      "y": "%{if var.c}only%{endif}",
+      "z": "${try(var.a, \"d\")}"
+    }
+  ],
+  "resource": {
+    "a": {
+      "b": [
+        {
+          "dynamic": {
+            "x": [
+              {
+                "content": [
+                  {
+                    "v": "${x.value}"
+                  }
+                ],
+                "for_each": "${var.l}"
+              }
+            ]
+          },
+          "nested": [
+            {
+              "deep": [
+                {
+                  "k": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "terraform": [
+    {
+      "required_providers": [
+        {
+          "aws": {
+            "source": "hashicorp/aws",
+            "version": "~\u003e 5.0"
+          }
+        }
+      ]
+    }
+  ]
+}

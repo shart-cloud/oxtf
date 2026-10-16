@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! oxtf scan [PATH...] [-r|--recursive] [--format text|json] [--var-file FILE]...
-//!           [--rule ID]... [--rule-file FILE]... [--threads N] [--color] [--no-diagnostics] [--quiet]
+//!           [--rule ID]... [--rule-file PATH]... [--threads N] [--color] [--no-diagnostics] [--quiet]
 //! oxtf scan --plan PLAN.json [--source DIR] [options]
 //! oxtf rules
 //! ```
@@ -36,7 +36,11 @@ const USAGE: &str = "usage:
                                   scan `terraform show -json` output; findings are mapped
                                   back to .tf spans in DIR (default: the plan's directory
                                   if it has .tf files, else locations point into the JSON)
-  oxtf rules [--rule-file FILE]... list built-in and imported rules
+  oxtf rules [--rule-file PATH]... [-f json]
+                                  list built-in and loaded rules: level, category, engine,
+                                  description, resource types and source file:line
+  oxtf rules test --policy PATH... [--data PATH]... [--namespace NS]... [--rego-v0]
+                                  run the policies' test_* rules (as `conftest verify`)
 
 scan options:
   -r, --recursive         every directory under PATH containing .tf files is a root module
@@ -44,14 +48,23 @@ scan options:
       --var-file FILE     extra .tfvars for the root module(s) (repeatable)
       --rule ID           only run this rule (repeatable); ids come from the whole
                           catalog: seed rules, --rule-file rules and Rego policies
-      --rule-file FILE    also run rules from a JSON rule-IR file (repeatable; e.g. written
-                          by the tfscan Python expression API or Checkov importer)
+      --rule-file PATH    also run rules from PATH (repeatable), each file by its format:
+                          rule-IR JSON (e.g. from the tfscan Python expression API),
+                          Checkov YAML/JSON policies, Rego (.rego), or a directory of any
+                          mix of them (searched recursively)
       --rego-native       run the seed rules that have a bundled native-tier Rego
                           policy (RDS encryption, GCS uniform access) as Rego
-      --policy FILE       also run a foreign Rego policy over every resource
-                          (repeatable; Conftest / OPA style, unchanged)
+      --policy PATH       the same as --rule-file. Rego files load as one bundle and run
+                          unchanged; by default they follow Conftest: every
+                          deny/violation/warn rule (and deny_*, ...) in the selected
+                          namespaces is a rule, and `exception` sets suppress them
+      --namespace NS      Conftest namespace to run (repeatable; default: main)
+      --all-namespaces    run every namespace
+      --data PATH         .json/.yaml data documents for --policy (repeatable)
+      --policy-entry R    OPA mode instead: run these entry rules (repeatable), and load
+                          data next to the policies as `opa eval -d PATH` does
       --policy-shape S    input document shape for --policy: plan (default) or hcl
-      --policy-entry R    rule path read for violations (default: data.main.deny)
+      --rego-v0           parse --policy files as Rego v0 (`--v0-compatible`)
       --overlay PATH=FILE scan FILE's contents as if it were at PATH (repeatable;
                           FILE `-` reads stdin). PATH may be a file that does not exist,
                           in a directory that does not exist. Unsaved buffers, patches.
@@ -102,17 +115,28 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
                 .rule_files
                 .push(it.next().ok_or("--rule-file needs a value")?.into()),
             "--rego-native" => catalog.policies.native = true,
+            // An alias: every format is detected.
             "--policy" => catalog
-                .policies
-                .foreign
+                .rule_files
                 .push(it.next().ok_or("--policy needs a value")?.into()),
             "--policy-shape" => {
                 catalog.policies.shape =
                     Some(it.next().ok_or("--policy-shape needs a value")?.parse()?)
             }
-            "--policy-entry" => {
-                catalog.policies.entry = Some(it.next().ok_or("--policy-entry needs a value")?)
-            }
+            "--policy-entry" => catalog
+                .policies
+                .entries
+                .push(it.next().ok_or("--policy-entry needs a value")?),
+            "--rego-v0" => catalog.policies.rego_v0 = true,
+            "--namespace" => catalog
+                .policies
+                .namespaces
+                .push(it.next().ok_or("--namespace needs a value")?),
+            "--all-namespaces" => catalog.policies.all_namespaces = true,
+            "--data" => catalog
+                .policies
+                .data
+                .push(it.next().ok_or("--data needs a value")?.into()),
             "--plan" => plan = Some(it.next().ok_or("--plan needs a value")?.into()),
             "--source" => source = Some(it.next().ok_or("--source needs a value")?.into()),
             "--overlay" => {
@@ -188,26 +212,68 @@ fn main() -> ExitCode {
             }
         },
         Some("rules") => {
-            let rules = match parse_args(args)
-                .and_then(|a| a.request.catalog.resolve().map_err(|e| e.to_string()))
-            {
-                Ok(rules) => rules,
+            let mut args = args.peekable();
+            if args.peek().map(String::as_str) == Some("test") {
+                args.next();
+                return rules_test(args);
+            }
+            let (rules, json) = match parse_args(args).and_then(|a| {
+                let json = a.json;
+                a.request
+                    .catalog
+                    .resolve()
+                    .map(|r| (r, json))
+                    .map_err(|e| e.to_string())
+            }) {
+                Ok((resolved, json)) => {
+                    for w in &resolved.warnings {
+                        eprintln!("warning: {w}");
+                    }
+                    (resolved.rules, json)
+                }
                 Err(e) => {
                     eprintln!("error: {e}");
                     return ExitCode::from(2);
                 }
             };
-            for r in Linter::new(rules).rules() {
+            let linter = Linter::new(rules);
+            if json {
+                let list: Vec<serde_json::Value> = linter
+                    .rules()
+                    .iter()
+                    .map(|r| {
+                        serde_json::json!({
+                            "id": &*r.name,
+                            "level": r.level.as_str(),
+                            "category": r.category.as_str(),
+                            "description": &*r.description,
+                            "resource_types": r.resource_types.iter().map(|t| &**t).collect::<Vec<_>>(),
+                            "runs_on_module": r.runs_on_module,
+                            "guideline": r.guideline.as_deref(),
+                            "source": tf_linter::record::SourceRef::from(&r.source),
+                        })
+                    })
+                    .collect();
+                println!("{}", serde_json::Value::Array(list));
+                return ExitCode::SUCCESS;
+            }
+            for r in linter.rules() {
                 let types = if r.runs_on_module {
                     "(module rule)".to_string()
                 } else {
                     r.resource_types.join(", ")
                 };
+                let source = match (&r.source.file, r.source.line) {
+                    (Some(f), Some(l)) => format!("  {}:{l}", f.display()),
+                    (Some(f), None) => format!("  {}", f.display()),
+                    _ => String::new(),
+                };
                 println!(
-                    "{:<28} {:<9} {:<11} {}  [{}]",
+                    "{:<28} {:<9} {:<11} {:<9} {}  [{}]{source}",
                     r.name,
                     r.level.as_str(),
                     r.category.as_str(),
+                    r.source.engine.as_str(),
                     r.description,
                     types
                 );
@@ -218,6 +284,69 @@ fn main() -> ExitCode {
             eprintln!("{USAGE}");
             ExitCode::from(2)
         }
+    }
+}
+
+/// `oxtf rules test`: run the policies' `test_*` rules as `conftest
+/// verify` does. Exit codes: 0 all passed, 1 a test failed or errored,
+/// 2 the policies could not load.
+fn rules_test(args: impl Iterator<Item = String>) -> ExitCode {
+    let catalog = match parse_args(args) {
+        Ok(a) => a.request.catalog,
+        Err(e) => {
+            eprintln!("error: {e}\n\n{USAGE}");
+            return ExitCode::from(2);
+        }
+    };
+    let outcomes = match tf_scan::verify_policies(&catalog) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    use tf_scan::TestResult;
+    let (mut passed, mut failed, mut skipped, mut errors) = (0, 0, 0, 0);
+    for o in &outcomes {
+        let (tag, detail) = match &o.result {
+            TestResult::Pass => {
+                passed += 1;
+                ("PASS", String::new())
+            }
+            TestResult::Fail => {
+                failed += 1;
+                ("FAIL", String::new())
+            }
+            TestResult::Skip => {
+                skipped += 1;
+                ("SKIP", String::new())
+            }
+            TestResult::Error(e) => {
+                errors += 1;
+                ("ERROR", format!("\n{e}"))
+            }
+        };
+        println!("{tag} - {} - {}{detail}", o.file.display(), o.rule);
+    }
+    println!(
+        "\n{} tests, {passed} passed, {failed} failures, {skipped} skipped, {errors} errors",
+        outcomes.len()
+    );
+    if failed + errors > 0 {
+        ExitCode::from(1)
+    } else {
+        ExitCode::SUCCESS
+    }
+}
+
+/// A rule-loading message, with each `file:line:col: ` line drawn as a
+/// snippet of the rule file.
+fn load_message(message: &str, severity: miette::Severity, color: bool) -> String {
+    let rendered = tf_linter::render::render_load_message(message, severity, color);
+    if rendered.ends_with('\n') {
+        rendered
+    } else {
+        format!("{rendered}\n")
     }
 }
 
@@ -234,11 +363,22 @@ fn scan(a: Args) -> ExitCode {
     let output = match tf_scan::scan(request) {
         Ok(o) => o,
         Err(e) => {
-            eprintln!("error: {e}");
+            eprint!(
+                "error: {}",
+                load_message(&e.to_string(), miette::Severity::Error, color)
+            );
             return ExitCode::from(2);
         }
     };
     let r = &output.result;
+    // Skipped rule files are shown even with --no-diagnostics: they change
+    // what an empty result means.
+    for d in r.diagnostics.iter().filter(|d| d.code == "rule-skipped") {
+        eprint!(
+            "warning: {}",
+            load_message(&d.message, miette::Severity::Warning, color)
+        );
+    }
     for e in &r.rule_errors {
         match &e.resource {
             Some(res) => eprintln!("rule error: {} on {res}: {}", e.rule, e.message),
@@ -275,7 +415,8 @@ fn print_result(
             let _ = writeln!(out, "{}", render_finding(&r.files, f, color));
         }
         if diagnostics {
-            for d in &r.diagnostics {
+            // Skipped rule files were already printed to stderr.
+            for d in r.diagnostics.iter().filter(|d| d.code != "rule-skipped") {
                 let at =
                     d.at.map(|x| format!("{}: ", location(&r.files, x)))
                         .unwrap_or_default();
@@ -309,4 +450,7 @@ fn print_result(
             format!("\n  by rule: {}", by_rule.join(", "))
         }
     );
+    if !r.suppressed.is_empty() {
+        let _ = writeln!(out, "  suppressed by checkov:skip: {}", r.suppressed.len());
+    }
 }

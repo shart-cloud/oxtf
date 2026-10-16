@@ -52,8 +52,13 @@ use tf_linter::{Category, DynRule, Judgement, Level, RuleFailure, RuleInfo};
 use tf_semantic::{Module, Resource};
 
 pub mod checkov;
+pub mod checkov_policy;
+pub mod goyaml;
 pub mod graph;
 pub mod jsonpath;
+pub mod py;
+pub mod pyre;
+pub mod pyyaml;
 
 /// Current IR version. Versions 1 and 2 remain readable; graph policies need 3.
 pub const IR_VERSION: u32 = 3;
@@ -89,6 +94,23 @@ pub struct RuleSpec {
     /// `{witness|fallback}`; `{{` / `}}` escape braces.
     pub message: String,
     pub clauses: Vec<Clause>,
+    /// A page explaining the rule and its fix.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guideline: Option<String>,
+    /// Where the rule was loaded from: set by the loader, not part of the
+    /// IR, and ignored by equality.
+    #[serde(skip)]
+    pub origin: Origin,
+}
+
+/// The front-end and file a [`RuleSpec`] came from.
+#[derive(Clone, Debug, Default)]
+pub struct Origin(pub tf_linter::RuleSource);
+
+impl PartialEq for Origin {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -228,10 +250,212 @@ pub fn parse_rules(json: &str) -> Result<Vec<RuleSpec>, String> {
     }
 }
 
-/// Read and parse a rules file.
-pub fn load_rules_file(path: &std::path::Path) -> Result<Vec<RuleSpec>, String> {
+/// Rules loaded from a `--rule-file` path, and the files of a directory
+/// that were skipped.
+#[derive(Debug, Default)]
+pub struct LoadedRules {
+    pub rules: Vec<RuleSpec>,
+    pub skipped: Vec<SkippedFile>,
+    /// `.rego` files, for the Rego bundle (`tf_rego`).
+    pub rego: Vec<std::path::PathBuf>,
+    /// JSON/YAML files read as rules (loaded or skipped): not data for a
+    /// Rego bundle loaded from the same directory.
+    pub claimed: Vec<std::path::PathBuf>,
+}
+
+/// A file in a rule directory that did not load: unparsable, an unsupported
+/// policy, or a rule name already defined by an earlier file.
+#[derive(Debug, PartialEq)]
+pub struct SkippedFile {
+    pub path: std::path::PathBuf,
+    /// One line per problem, each starting with the file (and position).
+    pub reason: String,
+}
+
+/// Read and parse a rules file or directory, detecting each file's format.
+///
+/// A file is rule IR JSON, a Checkov policy (`.yaml`/`.yml` always, `.json`
+/// when it has Checkov's `metadata` and `definition`), or a Rego module
+/// (`.rego`, returned in [`LoadedRules::rego`] for `tf_rego`). A named file
+/// that does not load is an error.
+///
+/// A directory is walked recursively in name order, as Checkov walks a
+/// policy directory, and each file is read by its own format. A rule file
+/// that does not load is skipped and reported in [`LoadedRules::skipped`],
+/// never dropped silently. When two files define the same rule name, the
+/// first wins (as in Checkov) and the later file is skipped. In a directory
+/// that holds Rego, a JSON/YAML file that is neither a Checkov policy nor
+/// rule IR is a data document or test mock (Conftest ignores it unless it
+/// is named with `--data`), not a broken rule.
+pub fn load_rules_file(path: &std::path::Path) -> Result<LoadedRules, String> {
+    if !path.is_dir() {
+        if path.extension().is_some_and(|e| e == "rego") {
+            return Ok(LoadedRules {
+                rego: vec![path.to_path_buf()],
+                ..LoadedRules::default()
+            });
+        }
+        return load_one(path).map(|rules| LoadedRules {
+            rules,
+            claimed: vec![path.to_path_buf()],
+            ..LoadedRules::default()
+        });
+    }
+    let mut files = Vec::new();
+    let mut rego = Vec::new();
+    collect_rule_files(path, &mut files, &mut rego)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut out = LoadedRules {
+        rego,
+        ..LoadedRules::default()
+    };
+    let mut seen: std::collections::HashMap<String, std::path::PathBuf> = Default::default();
+    for file in files {
+        if !out.rego.is_empty() && !is_rule_document(&file) {
+            continue;
+        }
+        out.claimed.push(file.clone());
+        let specs = match load_one(&file) {
+            Ok(specs) => specs,
+            Err(reason) => {
+                out.skipped.push(SkippedFile { path: file, reason });
+                continue;
+            }
+        };
+        let duplicates: Vec<String> = specs
+            .iter()
+            .filter_map(|spec| {
+                seen.get(&spec.name).map(|first| {
+                    format!(
+                        "{}: rule {} is already defined in {}",
+                        file.display(),
+                        spec.name,
+                        first.display()
+                    )
+                })
+            })
+            .collect();
+        if !duplicates.is_empty() {
+            out.skipped.push(SkippedFile {
+                path: file,
+                reason: duplicates.join("\n"),
+            });
+            continue;
+        }
+        for spec in specs {
+            seen.insert(spec.name.clone(), file.clone());
+            out.rules.push(spec);
+        }
+    }
+    Ok(out)
+}
+
+fn collect_rule_files(
+    dir: &std::path::Path,
+    out: &mut Vec<std::path::PathBuf>,
+    rego: &mut Vec<std::path::PathBuf>,
+) -> std::io::Result<()> {
+    let mut entries: Vec<_> = std::fs::read_dir(dir)?.collect::<Result<_, _>>()?;
+    entries.sort_by_key(|e| e.file_name());
+    for entry in entries {
+        let path = entry.path();
+        if entry.file_type()?.is_dir() {
+            collect_rule_files(&path, out, rego)?;
+        } else {
+            match path.extension().and_then(|e| e.to_str()) {
+                Some("json" | "yaml" | "yml") => out.push(path),
+                Some("rego") => rego.push(path),
+                _ => {}
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A rule IR error as `file:line:col: message`, with the position serde
+/// reports when the document is read with the shape it has.
+fn ir_error(path: &std::path::Path, text: &str, message: String) -> String {
+    #[derive(Deserialize)]
+    #[allow(dead_code)]
+    struct Wrapped {
+        rules: Vec<RuleSpec>,
+    }
+    let positioned = match serde_json::from_str::<serde_json::Value>(text) {
+        Err(e) => Some(e),
+        Ok(serde_json::Value::Array(_)) => serde_json::from_str::<Vec<RuleSpec>>(text).err(),
+        Ok(v) if v.get("rules").is_some() && v.get("name").is_none() => {
+            serde_json::from_str::<Wrapped>(text).err()
+        }
+        Ok(_) => serde_json::from_str::<RuleSpec>(text).err(),
+    };
+    match positioned {
+        Some(e) if e.line() > 0 => {
+            let msg = e.to_string();
+            let msg = msg
+                .rsplit_once(" at line ")
+                .map_or(msg.as_str(), |(m, _)| m)
+                .to_string();
+            format!(
+                "{}:{}:{}: {msg}",
+                path.display(),
+                e.line(),
+                e.column().max(1)
+            )
+        }
+        _ => format!("{}: {message}", path.display()),
+    }
+}
+
+/// Whether a JSON/YAML file is meant as a rule: a Checkov policy, or rule
+/// IR (a rule with `clauses`, a list of them, or `{"rules": [...]}`). An
+/// unparsable file counts as one when it is `.json` with a `clauses` key in
+/// its text, so a broken rule is reported rather than ignored.
+fn is_rule_document(path: &std::path::Path) -> bool {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return true;
+    };
+    let value = match path.extension().and_then(|e| e.to_str()) {
+        Some("yaml" | "yml") => pyyaml::load(&text).ok().map(|d| d.value),
+        _ => serde_json::from_str::<serde_json::Value>(&text).ok(),
+    };
+    let rule = |v: &serde_json::Value| v.get("clauses").is_some();
+    match value {
+        Some(v) => {
+            checkov_policy::is_policy(&v)
+                || rule(&v)
+                || v.as_array()
+                    .is_some_and(|a| !a.is_empty() && a.iter().all(rule))
+                || v.get("rules")
+                    .and_then(|r| r.as_array())
+                    .is_some_and(|a| a.iter().all(rule))
+        }
+        None => text.contains("\"clauses\""),
+    }
+}
+
+fn load_one(path: &std::path::Path) -> Result<Vec<RuleSpec>, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    parse_rules(&text).map_err(|e| format!("{}: {e}", path.display()))
+    let source = match path.extension().and_then(|e| e.to_str()) {
+        Some("yaml" | "yml") => checkov_policy::PolicySource::parse(path, &text),
+        _ => match serde_json::from_str::<serde_json::Value>(&text) {
+            Ok(v) if checkov_policy::is_policy(&v) => {
+                Ok(checkov_policy::PolicySource::from_json(v, &text))
+            }
+            _ => {
+                let mut specs = parse_rules(&text).map_err(|e| ir_error(path, &text, e))?;
+                for spec in &mut specs {
+                    spec.origin = Origin(tf_linter::RuleSource {
+                        engine: tf_linter::Engine::Ir,
+                        file: Some(path.to_path_buf()),
+                        line: None,
+                    });
+                }
+                return Ok(specs);
+            }
+        },
+    };
+    let source = source.map_err(|e| format!("{}: {e}", path.display()))?;
+    checkov_policy::translate_source(path, &source).map(|r| vec![r])
 }
 
 // ---------------------------------------------------------------------------
@@ -289,6 +513,8 @@ pub struct CompiledRule {
     clauses: Vec<CClause>,
     by_type: HashMap<String, Vec<usize>>,
     message: Vec<Piece>,
+    /// A fix derived from the predicate, when it is unambiguous.
+    fix: Option<(String, serde_json::Value)>,
 }
 
 impl CompiledRule {
@@ -517,14 +743,65 @@ pub fn compile(spec: RuleSpec) -> Result<CompiledRule, String> {
         description: Arc::from(spec.description.as_str()),
         resource_types: types,
         runs_on_module: false,
+        guideline: spec.guideline.as_deref().map(Arc::from),
+        source: spec.origin.0.clone(),
     };
+    let fix = derive_fix(&spec);
     Ok(CompiledRule {
         spec,
         info,
         clauses,
         by_type,
         message,
+        fix,
     })
+}
+
+/// The one mechanical fix a Checkov policy's predicate implies, if any:
+/// its definition holds exactly one fixable leaf (beside filters), on a
+/// top-level attribute, and the leaf names the value to write: `equals` a
+/// literal, `is_true`, `is_false`, or `within` a single literal. Every
+/// clause must imply the same fix. `exists` and other operators do not say
+/// what to write, so they derive none.
+fn derive_fix(spec: &RuleSpec) -> Option<(String, serde_json::Value)> {
+    use checkov::AttributeOp::*;
+    fn leaves<'g>(e: &'g graph::GraphExpr, out: &mut Vec<&'g graph::GraphExpr>) -> bool {
+        match e {
+            graph::GraphExpr::And { args } => args.iter().all(|a| leaves(a, out)),
+            graph::GraphExpr::Filter { .. } | graph::GraphExpr::AttributeFilter { .. } => true,
+            graph::GraphExpr::Attribute { .. } => {
+                out.push(e);
+                true
+            }
+            _ => false,
+        }
+    }
+    let literal = |v: &serde_json::Value| !v.is_array() && !v.is_object() && !v.is_null();
+    let mut fixes = spec.clauses.iter().map(|c| {
+        let Expr::CheckovGraph { definition } = &c.condition else {
+            return None;
+        };
+        let mut found = Vec::new();
+        if !leaves(definition, &mut found) {
+            return None;
+        }
+        let [graph::GraphExpr::Attribute { check, .. }] = found.as_slice() else {
+            return None;
+        };
+        if check.attribute.is_empty() || check.attribute.contains(['.', '*', '[']) {
+            return None;
+        }
+        let value = match (check.operator, &check.value) {
+            (Equals, v) if literal(v) => v.clone(),
+            (IsTrue, _) => serde_json::Value::Bool(true),
+            (IsFalse, _) => serde_json::Value::Bool(false),
+            (Within, serde_json::Value::Array(a)) if a.len() == 1 && literal(&a[0]) => a[0].clone(),
+            _ => return None,
+        };
+        Some((check.attribute.clone(), value))
+    });
+    let first = fixes.next()??;
+    fixes.all(|f| f.as_ref() == Some(&first)).then_some(first)
 }
 
 /// Parse and compile every rule of a rules document.
@@ -738,6 +1015,16 @@ impl CompiledRule {
         Some(acc)
     }
 
+    fn with_fix(&self, r: &Resource, j: Judgement) -> Judgement {
+        match &self.fix {
+            Some((attribute, value)) => Judgement {
+                fix_hint: Some(tf_linter::FixHint::set(r, attribute, value.clone())),
+                ..j
+            },
+            None => j,
+        }
+    }
+
     fn render(&self, r: &Resource, w: Option<&Value>) -> String {
         let mut s = String::new();
         for p in &self.message {
@@ -804,7 +1091,8 @@ impl DynRule for CompiledRule {
             .iter()
             .zip(verdicts)
             .filter_map(|(&r, v)| {
-                Judgement::from_verdict(v, |v| self.render(r, v.witness.as_ref())).map(|j| (r, j))
+                Judgement::from_verdict(v, |v| self.render(r, v.witness.as_ref()))
+                    .map(|j| (r, self.with_fix(r, j)))
             })
             .collect())
     }
@@ -820,6 +1108,7 @@ impl DynRule for CompiledRule {
         Ok(self
             .verdict(r)
             .and_then(|v| Judgement::from_verdict(v, |v| self.render(r, v.witness.as_ref())))
+            .map(|j| self.with_fix(r, j))
             .into_iter()
             .collect())
     }

@@ -123,7 +123,7 @@ fn project_body(body: &Body, prefix: &str, p: &mut Projection) {
 
 /// `None` when the value is abstract (recorded), else its JSON with abstract
 /// descendants removed (objects) or recorded and dropped (lists).
-fn project_value(v: &Value, path: &str, p: &mut Projection) -> Option<Json> {
+pub(crate) fn project_value(v: &Value, path: &str, p: &mut Projection) -> Option<Json> {
     match &v.kind {
         Kind::Known(Known::Object(m)) => {
             let mut out = JsonMap::new();

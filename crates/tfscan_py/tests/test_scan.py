@@ -166,10 +166,44 @@ def test_foreign_policy_and_rule_errors():
     assert r.rule_errors == []
     r = tfscan.scan(rego / "foreign_sprintf", builtin=False, policies=[policy], policy_shape="hcl")
     (e,) = r.rule_errors
-    assert e["rule"] == "rego:conftest_hcl2_deny" and e["resource"] == "aws_security_group_rule.open"
-    assert "%q" in e["message"]
-    with pytest.raises(ValueError, match="cannot read policy"):
+    # Conftest evaluates the whole file, so the error names the file.
+    assert e["rule"] == "rego:conftest_hcl2_deny" and e["resource"] is None
+    assert "%q" in e["message"] and "foreign_sprintf/main.tf" in e["message"]
+    with pytest.raises(ValueError, match="missing.rego"):
         tfscan.scan(rego / "foreign", policies=[rego / "missing.rego"])
+
+
+def test_rule_files_of_every_format_and_policy_options():
+    mixed = FIXTURES.parent / "rules_mixed"
+    r = tfscan.scan(mixed / "tf", builtin=False, rule_files=[mixed / "policies"])
+    assert sorted(f.rule for f in r.findings) == ["CKV2_MIXED_1", "MIXED_OWNER_TAG", "py-sg-open-ssh"]
+    assert r.rule_errors == []
+    listed = {x["name"]: x for x in tfscan.rules([mixed / "policies"], builtin=False)}
+    assert listed["CKV2_MIXED_1"]["source"]["engine"] == "checkov"
+    assert listed["CKV2_MIXED_1"]["guideline"] == "https://example.com/guidelines/s3-versioning"
+    assert listed["MIXED_OWNER_TAG"]["source"]["line"] == 13
+    conftest = FIXTURES.parent / "rego" / "conftest"
+    r = tfscan.scan(conftest / "tf", builtin=False, rule_files=[conftest / "policy"])
+    subjects = sorted(f.subject["kind"] for f in r.findings)
+    assert subjects == ["file", "file", "resource"]
+    assert {f.resource_type for f in r.findings} == {None, "aws_s3_bucket"}
+    outcomes = {o["rule"]: o["result"] for o in tfscan.test_policies([conftest / "policy"])}
+    assert outcomes == {
+        "data.main.test_unpinned_module_is_denied": "pass",
+        "data.main.test_pinned_module_passes": "pass",
+        "data.main.test_a_failing_test_fails": "fail",
+        "data.main.todo_test_regions": "skip",
+    }
+    # OPA mode with several entries, from Python.
+    ports = FIXTURES.parent / "rego" / "ports"
+    r = tfscan.scan(
+        FIXTURES.parent / "rego" / "ports_tf" / "known",
+        builtin=False,
+        rule_files=[ports],
+        policy_entries=["data.ports.rds.deny", "data.ports.s3_public_access_block.deny"],
+        policy_shape="plan",
+    )
+    assert sorted(f.rule for f in r.findings) == ["PORT-AWS-RDS-UNENCRYPTED", "PORT-AWS-S3-PUBLIC-ACCESS-BLOCK"]
 
 
 def test_overlay_shadows_disk_and_verifies_a_fix():
@@ -186,3 +220,15 @@ def test_overlay_shadows_disk_and_verifies_a_fix():
     r = tfscan.scan(mem, overlay={f"{mem}/main.tf": 'resource "aws_db_instance" "x" { storage_encrypted = false }'})
     assert [(g.address, g.severity) for g in r.findings] == [("aws_db_instance.x", "definite")]
     assert r.findings[0].file == f"{mem}/main.tf"
+
+
+def test_checkov_skip_comments_are_reported():
+    base = FIXTURES.parent / "checkov_skip"
+    r = tfscan.scan(base / "tf", builtin=False, rule_files=[base / "policies"])
+    assert sorted(f.address for f in r.findings) == [
+        "aws_db_instance.other_id", "aws_db_instance.outside", "module.child2.aws_db_instance.inner"]
+    assert sorted((s["resource"], s["comment"]) for s in r.suppressed) == [
+        ("aws_db_instance.bare_skip", "No comment provided"),
+        ("aws_db_instance.skipped", "encrypted by the platform"),
+        ("module.child.aws_db_instance.inner", "module-wide"),
+    ]

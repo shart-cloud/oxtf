@@ -126,3 +126,117 @@ resource "aws_flow_log" "log" { vpc_id = aws_vpc.good.id }
             .contains("dependencies unavailable")
     );
 }
+
+/// A Checkov custom policy in YAML runs as written: no export step, no
+/// Python, with values resolved by oxtf (the bucket's ACL comes from a
+/// variable default, which Checkov's own loader would compare as text).
+#[test]
+fn yaml_policy_runs_without_export() {
+    let dir = std::env::temp_dir().join(format!("oxtf-checkov-yaml-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("policies")).unwrap();
+    std::fs::write(
+        dir.join("policies/private_acl.yaml"),
+        r#"
+metadata:
+  id: CKV2_CUSTOM_ACL
+  name: S3 buckets must be private
+  category: GENERAL_SECURITY
+  severity: HIGH
+definition:
+  cond_type: attribute
+  resource_types: [aws_s3_bucket]
+  attribute: acl
+  operator: equals
+  value: private
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("main.tf"),
+        r#"
+variable "acl" { default = "public-read" }
+resource "aws_s3_bucket" "bad" { acl = var.acl }
+resource "aws_s3_bucket" "good" { acl = "private" }
+"#,
+    )
+    .unwrap();
+    let list = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .args(["rules", "--rule-file"])
+        .arg(dir.join("policies"))
+        .output()
+        .unwrap();
+    assert!(list.status.success(), "{:?}", list);
+    assert!(String::from_utf8_lossy(&list.stdout).contains("CKV2_CUSTOM_ACL"));
+    let scan = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .arg("scan")
+        .arg(&dir)
+        .args([
+            "--format",
+            "json",
+            "--rule",
+            "CKV2_CUSTOM_ACL",
+            "--rule-file",
+        ])
+        .arg(dir.join("policies"))
+        .output()
+        .unwrap();
+    assert!(scan.status.success(), "{:?}", scan);
+    let result: serde_json::Value = serde_json::from_slice(&scan.stdout).unwrap();
+    let findings = result["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{findings:#?}");
+    assert_eq!(findings[0]["rule"]["id"], "CKV2_CUSTOM_ACL");
+    assert_eq!(findings[0]["rule"]["level"], "high");
+    assert_eq!(findings[0]["resource"]["address"], "aws_s3_bucket.bad");
+
+    // An unsupported policy in a directory is skipped with a warning that
+    // points into the policy file; the rest of the directory still runs.
+    std::fs::write(
+        dir.join("policies/regex.yaml"),
+        "metadata: {id: CKV2_RE, name: n, category: c}\ndefinition:\n  cond_type: attribute\n  resource_types: [aws_s3_bucket]\n  attribute: acl\n  operator: frobnicate\n  value: '^p'\n",
+    )
+    .unwrap();
+    let scan = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .arg("scan")
+        .arg(&dir)
+        .args(["--format", "json", "--no-diagnostics", "--rule-file"])
+        .arg(dir.join("policies"))
+        .output()
+        .unwrap();
+    assert!(scan.status.success(), "{:?}", scan);
+    let stderr = String::from_utf8_lossy(&scan.stderr);
+    assert!(stderr.contains("warning: skipped rule file"), "{stderr}");
+    // Drawn as a snippet of the policy file at the operator.
+    assert!(
+        stderr.contains("regex.yaml:6:13]")
+            && stderr.contains("CKV2_RE: unsupported graph operator: frobnicate"),
+        "{stderr}"
+    );
+    let result: serde_json::Value = serde_json::from_slice(&scan.stdout).unwrap();
+    let skipped: Vec<_> = result["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|d| d["code"] == "rule-skipped")
+        .collect();
+    assert_eq!(skipped.len(), 1);
+    assert_eq!(skipped[0]["severity"], "warning");
+    assert!(
+        result["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f["rule"]["id"] == "CKV2_CUSTOM_ACL")
+    );
+
+    // Named directly, the same file is still a load error.
+    let scan = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .arg("scan")
+        .arg(&dir)
+        .arg("--rule-file")
+        .arg(dir.join("policies/regex.yaml"))
+        .output()
+        .unwrap();
+    assert_eq!(scan.status.code(), Some(2), "{:?}", scan);
+    std::fs::remove_dir_all(&dir).unwrap();
+}

@@ -88,7 +88,8 @@ pub fn findings_schema() -> Schema {
         utf8("level", false),
         utf8("severity", false),
         utf8("address", false),
-        utf8("resource_type", false),
+        // Null for a finding on a file (a whole-file policy result).
+        utf8("resource_type", true),
         utf8("module", false),
         utf8("message", false),
         utf8("root", false),
@@ -132,21 +133,21 @@ pub fn findings_batch(d: &ScanData) -> Result<RecordBatch, ArrowError> {
         let (file, l, c) = loc(files, f.primary);
         let root = f.root.display().to_string();
         let fingerprint = tf_linter::record::fingerprint(&f.rule, &f.address, f.attribute.as_deref());
-        let vals: [&str; 11] = [
-            &fingerprint,
-            &f.rule,
-            f.category.as_str(),
-            f.level.as_str(),
-            f.severity.as_str(),
-            &f.address,
-            &f.resource_type,
-            &f.module,
-            &f.message,
-            &root,
-            &file,
+        let vals: [Option<&str>; 11] = [
+            Some(&fingerprint),
+            Some(&f.rule),
+            Some(f.category.as_str()),
+            Some(f.level.as_str()),
+            Some(f.severity.as_str()),
+            Some(&f.address),
+            f.resource_type.as_deref(),
+            Some(&f.module),
+            Some(&f.message),
+            Some(&root),
+            Some(&file),
         ];
         for (b, v) in cols.iter_mut().zip(vals) {
-            b.append_value(v);
+            b.append_option(v);
         }
         attribute.append_option(f.attribute.as_deref());
         record.append_value(tf_linter::render::finding_json(files, f).to_string());

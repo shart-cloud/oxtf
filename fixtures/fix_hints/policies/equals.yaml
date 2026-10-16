@@ -1,0 +1,10 @@
+metadata:
+  id: CKV2_FIX_EQUALS
+  name: RDS storage is encrypted
+  category: ENCRYPTION
+definition:
+  cond_type: attribute
+  resource_types: [aws_db_instance]
+  attribute: storage_encrypted
+  operator: equals
+  value: true

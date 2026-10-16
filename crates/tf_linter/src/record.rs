@@ -14,11 +14,11 @@ use tf_eval::{Kind, Known, Step, Truth, Value};
 use tf_semantic::{Address, Diagnostic, FileTable, InstanceKey, Mode};
 use tf_span::FileSpan;
 
-use crate::rule::{Category, Finding, FixHint, Hidden, Level, Severity};
+use crate::rule::{Category, Finding, FindingSubject, FixHint, Hidden, Level, Severity};
 use crate::scan::{ScanResult, ScanStats};
 
 /// Version of the record shape. Bumped on any breaking change.
-pub const SCHEMA: u32 = 1;
+pub const SCHEMA: u32 = 2;
 
 /// A resolved source location.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,12 +84,45 @@ impl From<&Address> for ResourceRef {
     }
 }
 
+/// `{"kind": "resource", "address"}` or `{"kind": "file", "file",
+/// "module"}`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SubjectRecord {
+    Resource { address: String },
+    File { file: String, module: String },
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuleRef {
     pub id: String,
     pub category: Category,
     pub level: Level,
     pub description: String,
+    /// A page explaining the rule, when it names one.
+    #[serde(default)]
+    pub guideline: Option<String>,
+    /// The front-end the rule came through, and its file and line.
+    #[serde(default)]
+    pub source: SourceRef,
+}
+
+/// `{"engine", "file", "line"}`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourceRef {
+    pub engine: crate::rule::Engine,
+    pub file: Option<String>,
+    pub line: Option<u32>,
+}
+
+impl From<&crate::rule::RuleSource> for SourceRef {
+    fn from(s: &crate::rule::RuleSource) -> Self {
+        SourceRef {
+            engine: s.engine,
+            file: s.file.as_ref().map(|f| f.display().to_string()),
+            line: s.line,
+        }
+    }
 }
 
 /// An abstract value as a reader can use it.
@@ -192,7 +225,10 @@ pub struct FindingRecord {
     pub fingerprint: String,
     pub rule: RuleRef,
     pub severity: Severity,
-    pub resource: ResourceRef,
+    /// What the finding is about.
+    pub subject: SubjectRecord,
+    /// The resource instance, or `None` when the subject is a file.
+    pub resource: Option<ResourceRef>,
     /// Root module directory the finding was produced in.
     pub root: String,
     /// Attribute path of the deciding value within the resource.
@@ -233,9 +269,20 @@ pub fn finding_record(files: &FileTable, f: &Finding) -> FindingRecord {
             category: f.category,
             level: f.level,
             description: f.description.to_string(),
+            guideline: f.guideline.as_deref().map(str::to_string),
+            source: SourceRef::from(&f.source),
         },
         severity: f.severity,
-        resource: ResourceRef::from(&f.resource),
+        subject: match &f.subject {
+            FindingSubject::Resource(a) => SubjectRecord::Resource {
+                address: a.to_string(),
+            },
+            FindingSubject::File { path } => SubjectRecord::File {
+                file: path.display().to_string(),
+                module: f.module.to_string(),
+            },
+        },
+        resource: f.subject.resource().map(ResourceRef::from),
         root: f.root.display().to_string(),
         attribute: f.attribute.as_deref().map(str::to_string),
         configured: f.configured.as_ref().map(value_record),
@@ -315,6 +362,19 @@ pub struct ScanRecord {
     pub diagnostics: Vec<DiagnosticRecord>,
     pub rule_errors: Vec<RuleError>,
     pub stats: StatsRecord,
+    /// Findings a `checkov:skip` line suppressed.
+    #[serde(default)]
+    pub suppressed: Vec<SuppressedRecord>,
+}
+
+/// A suppressed finding: `rule`, `resource` (address), the `comment`'s
+/// reason, and the `location` of the line that suppressed it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SuppressedRecord {
+    pub rule: String,
+    pub resource: String,
+    pub comment: String,
+    pub location: Location,
 }
 
 impl ScanRecord {
@@ -333,6 +393,16 @@ impl ScanRecord {
                 .collect(),
             rule_errors: r.rule_errors.clone(),
             stats: StatsRecord::from(&r.stats),
+            suppressed: r
+                .suppressed
+                .iter()
+                .map(|s| SuppressedRecord {
+                    rule: s.rule.to_string(),
+                    resource: s.address.to_string(),
+                    comment: s.comment.clone(),
+                    location: location(&r.files, s.at),
+                })
+                .collect(),
         }
     }
 }

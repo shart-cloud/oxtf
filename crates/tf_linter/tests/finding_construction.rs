@@ -18,6 +18,8 @@ fn info() -> RuleInfo {
         description: "test".into(),
         resource_types: vec!["aws_s3_bucket".into()],
         runs_on_module: false,
+        guideline: None,
+        source: Default::default(),
     }
 }
 
@@ -99,7 +101,7 @@ fn finding_carries_rule_and_resource_identity() {
     assert_eq!(&*f.rule, "test-rule");
     assert_eq!(f.level, Level::High);
     assert_eq!(&*f.address, "module.m.aws_s3_bucket.b");
-    assert_eq!(&*f.resource_type, "aws_s3_bucket");
+    assert_eq!(f.resource_type.as_deref(), Some("aws_s3_bucket"));
     assert_eq!(&*f.module, "module.m");
     assert_eq!(f.root, Path::new("/root"));
     assert_eq!(f.message, "msg");

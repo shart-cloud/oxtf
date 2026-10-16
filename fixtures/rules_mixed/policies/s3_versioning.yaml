@@ -1,0 +1,12 @@
+metadata:
+  id: CKV2_MIXED_1
+  name: S3 bucket versioning is enabled
+  category: GENERAL_SECURITY
+  severity: LOW
+  guideline: https://example.com/guidelines/s3-versioning
+definition:
+  cond_type: attribute
+  resource_types: [aws_s3_bucket]
+  attribute: versioning.enabled
+  operator: equals
+  value: true
