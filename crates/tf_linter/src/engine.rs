@@ -26,6 +26,8 @@ pub struct RunOutput {
     pub findings: Vec<Finding>,
     /// Hooks that returned `Err`, one per (rule, resource) or (rule, module).
     pub rule_errors: Vec<RuleError>,
+    /// Filled by the caller from [`crate::suppress`].
+    pub suppressed: Vec<crate::suppress::Suppressed>,
 }
 
 pub struct Linter {
@@ -262,6 +264,7 @@ impl Linter {
         RunOutput {
             findings: out,
             rule_errors,
+            suppressed: Vec::new(),
         }
     }
 }

@@ -206,8 +206,10 @@ resource "aws_s3_bucket" "good" { acl = "private" }
     assert!(scan.status.success(), "{:?}", scan);
     let stderr = String::from_utf8_lossy(&scan.stderr);
     assert!(stderr.contains("warning: skipped rule file"), "{stderr}");
+    // Drawn as a snippet of the policy file at the operator.
     assert!(
-        stderr.contains("regex.yaml:6:13: CKV2_RE: unsupported graph operator: frobnicate"),
+        stderr.contains("regex.yaml:6:13]")
+            && stderr.contains("CKV2_RE: unsupported graph operator: frobnicate"),
         "{stderr}"
     );
     let result: serde_json::Value = serde_json::from_slice(&scan.stdout).unwrap();

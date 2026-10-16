@@ -33,8 +33,14 @@
           "rule": {
             "category": "storage",
             "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
+            "guideline": null,
             "id": "aws-s3-public-access-block",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -58,7 +64,8 @@
         "module_instances": 1,
         "resources": 3,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/baseline/transformed/plan.json": {
       "diagnostics": [],
@@ -92,8 +99,14 @@
           "rule": {
             "category": "storage",
             "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
+            "guideline": null,
             "id": "aws-s3-public-access-block",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -131,8 +144,14 @@
           "rule": {
             "category": "storage",
             "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
+            "guideline": null,
             "id": "aws-s3-public-access-block",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -156,7 +175,8 @@
         "module_instances": 1,
         "resources": 3,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/fail_dynamic_statements.json": {
       "diagnostics": [],
@@ -225,8 +245,14 @@
           "rule": {
             "category": "iam",
             "description": "IAM policy allows Action \"*\" on Resource \"*\"",
+            "guideline": null,
             "id": "aws-iam-wildcard-policy",
-            "level": "critical"
+            "level": "critical",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -250,7 +276,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/fail_heredoc_json.json": {
       "diagnostics": [],
@@ -306,8 +333,14 @@
           "rule": {
             "category": "iam",
             "description": "IAM policy allows Action \"*\" on Resource \"*\"",
+            "guideline": null,
             "id": "aws-iam-wildcard-policy",
-            "level": "critical"
+            "level": "critical",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -331,7 +364,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/fail_jsonencode_inline.json": {
       "diagnostics": [],
@@ -387,8 +421,14 @@
           "rule": {
             "category": "iam",
             "description": "IAM policy allows Action \"*\" on Resource \"*\"",
+            "guideline": null,
             "id": "aws-iam-wildcard-policy",
-            "level": "critical"
+            "level": "critical",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -412,7 +452,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/fail_jsonencode_via_local_and_list.json": {
       "diagnostics": [],
@@ -481,8 +522,14 @@
           "rule": {
             "category": "iam",
             "description": "IAM policy allows Action \"*\" on Resource \"*\"",
+            "guideline": null,
             "id": "aws-iam-wildcard-policy",
-            "level": "critical"
+            "level": "critical",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -506,7 +553,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/fail_policy_document_data_source.json": {
       "diagnostics": [],
@@ -575,8 +623,14 @@
           "rule": {
             "category": "iam",
             "description": "IAM policy allows Action \"*\" on Resource \"*\"",
+            "guideline": null,
             "id": "aws-iam-wildcard-policy",
-            "level": "critical"
+            "level": "critical",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -600,7 +654,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/pass_policy_document_deny.json": {
       "diagnostics": [],
@@ -617,7 +672,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/pass_scoped.json": {
       "diagnostics": [],
@@ -634,7 +690,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-rds-unencrypted/conditional_unconstrained_variable__fail.json": {
       "diagnostics": [],
@@ -723,8 +780,14 @@
           "rule": {
             "category": "encryption",
             "description": "RDS instance storage is not encrypted",
+            "guideline": null,
             "id": "aws-rds-unencrypted",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -748,7 +811,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-rds-unencrypted/conditional_unconstrained_variable__pass.json": {
       "diagnostics": [],
@@ -765,7 +829,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-rds-unencrypted/fail_absent_uses_default.json": {
       "diagnostics": [],
@@ -841,8 +906,14 @@
           "rule": {
             "category": "encryption",
             "description": "RDS instance storage is not encrypted",
+            "guideline": null,
             "id": "aws-rds-unencrypted",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -866,7 +937,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-rds-unencrypted/fail_explicit_false.json": {
       "diagnostics": [],
@@ -942,8 +1014,14 @@
           "rule": {
             "category": "encryption",
             "description": "RDS instance storage is not encrypted",
+            "guideline": null,
             "id": "aws-rds-unencrypted",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -967,7 +1045,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-rds-unencrypted/fail_variable_default_false.json": {
       "diagnostics": [],
@@ -1056,8 +1135,14 @@
           "rule": {
             "category": "encryption",
             "description": "RDS instance storage is not encrypted",
+            "guideline": null,
             "id": "aws-rds-unencrypted",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -1081,7 +1166,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-rds-unencrypted/pass_encrypted.json": {
       "diagnostics": [],
@@ -1098,7 +1184,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/conditional_unconstrained_variable__fail.json": {
       "diagnostics": [],
@@ -1179,8 +1266,14 @@
           "rule": {
             "category": "storage",
             "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
+            "guideline": null,
             "id": "aws-s3-public-access-block",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -1204,7 +1297,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/conditional_unconstrained_variable__pass.json": {
       "diagnostics": [],
@@ -1221,7 +1315,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/fail_block_attrs_absent_default_false.json": {
       "diagnostics": [],
@@ -1289,8 +1384,14 @@
           "rule": {
             "category": "storage",
             "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
+            "guideline": null,
             "id": "aws-s3-public-access-block",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -1314,7 +1415,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/fail_block_for_other_bucket.json": {
       "diagnostics": [],
@@ -1348,8 +1450,14 @@
           "rule": {
             "category": "storage",
             "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
+            "guideline": null,
             "id": "aws-s3-public-access-block",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -1373,7 +1481,8 @@
         "module_instances": 1,
         "resources": 3,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/fail_missing_block.json": {
       "diagnostics": [],
@@ -1407,8 +1516,14 @@
           "rule": {
             "category": "storage",
             "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
+            "guideline": null,
             "id": "aws-s3-public-access-block",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -1432,7 +1547,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/fail_permissive_block.json": {
       "diagnostics": [],
@@ -1500,8 +1616,14 @@
           "rule": {
             "category": "storage",
             "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
+            "guideline": null,
             "id": "aws-s3-public-access-block",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -1525,7 +1647,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/pass_block_via_variable.json": {
       "diagnostics": [],
@@ -1542,7 +1665,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/pass_full_block.json": {
       "diagnostics": [],
@@ -1559,7 +1683,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/conditional_unconstrained_variable__fail.json": {
       "diagnostics": [],
@@ -1656,8 +1781,14 @@
           "rule": {
             "category": "network",
             "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
+            "guideline": null,
             "id": "aws-sg-open-ssh",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -1681,7 +1812,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/conditional_unconstrained_variable__pass.json": {
       "diagnostics": [],
@@ -1698,7 +1830,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/fail_dynamic_block.json": {
       "diagnostics": [],
@@ -1808,8 +1941,14 @@
           "rule": {
             "category": "network",
             "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
+            "guideline": null,
             "id": "aws-sg-open-ssh",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -1833,7 +1972,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/fail_inline_literal.json": {
       "diagnostics": [],
@@ -1919,8 +2059,14 @@
           "rule": {
             "category": "network",
             "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
+            "guideline": null,
             "id": "aws-sg-open-ssh",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -1944,7 +2090,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/fail_port_range_and_all_protocols.json": {
       "diagnostics": [],
@@ -2028,8 +2175,14 @@
           "rule": {
             "category": "network",
             "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
+            "guideline": null,
             "id": "aws-sg-open-ssh",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -2117,8 +2270,14 @@
           "rule": {
             "category": "network",
             "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
+            "guideline": null,
             "id": "aws-sg-open-ssh",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -2142,7 +2301,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/fail_tfvars_through_local.json": {
       "diagnostics": [],
@@ -2239,8 +2399,14 @@
           "rule": {
             "category": "network",
             "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
+            "guideline": null,
             "id": "aws-sg-open-ssh",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -2264,7 +2430,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/fail_vpc_ingress_rule.json": {
       "diagnostics": [],
@@ -2320,8 +2487,14 @@
           "rule": {
             "category": "network",
             "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
+            "guideline": null,
             "id": "aws-sg-open-ssh",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -2345,7 +2518,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/pass_dynamic_restricted.json": {
       "diagnostics": [],
@@ -2362,7 +2536,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/pass_restricted.json": {
       "diagnostics": [],
@@ -2379,7 +2554,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/pass_tfvars_overrides_open_default.json": {
       "diagnostics": [],
@@ -2396,7 +2572,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/gcp-storage-uniform-access/fail_absent.json": {
       "diagnostics": [],
@@ -2462,8 +2639,14 @@
           "rule": {
             "category": "storage",
             "description": "Cloud Storage bucket does not enforce uniform bucket-level access",
+            "guideline": null,
             "id": "gcp-storage-uniform-access",
-            "level": "medium"
+            "level": "medium",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -2487,7 +2670,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/gcp-storage-uniform-access/fail_false_via_local.json": {
       "diagnostics": [],
@@ -2576,8 +2760,14 @@
           "rule": {
             "category": "storage",
             "description": "Cloud Storage bucket does not enforce uniform bucket-level access",
+            "guideline": null,
             "id": "gcp-storage-uniform-access",
-            "level": "medium"
+            "level": "medium",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -2601,7 +2791,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "plan:fixtures/plans/gcp-storage-uniform-access/pass_enabled.json": {
       "diagnostics": [],
@@ -2618,7 +2809,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/baseline/computed": {
       "diagnostics": [],
@@ -2652,8 +2844,14 @@
           "rule": {
             "category": "storage",
             "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
+            "guideline": null,
             "id": "aws-s3-public-access-block",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -2677,7 +2875,8 @@
         "module_instances": 1,
         "resources": 3,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/baseline/local": {
       "diagnostics": [],
@@ -2711,8 +2910,14 @@
           "rule": {
             "category": "storage",
             "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
+            "guideline": null,
             "id": "aws-s3-public-access-block",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -2736,7 +2941,8 @@
         "module_instances": 1,
         "resources": 3,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/baseline/sibling": {
       "diagnostics": [],
@@ -2770,8 +2976,14 @@
           "rule": {
             "category": "storage",
             "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
+            "guideline": null,
             "id": "aws-s3-public-access-block",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -2795,7 +3007,8 @@
         "module_instances": 1,
         "resources": 3,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/baseline/transformed": {
       "diagnostics": [],
@@ -2829,8 +3042,14 @@
           "rule": {
             "category": "storage",
             "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
+            "guideline": null,
             "id": "aws-s3-public-access-block",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -2868,8 +3087,14 @@
           "rule": {
             "category": "storage",
             "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
+            "guideline": null,
             "id": "aws-s3-public-access-block",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -2893,7 +3118,8 @@
         "module_instances": 1,
         "resources": 3,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/fail_dynamic_statements": {
       "diagnostics": [],
@@ -3006,8 +3232,14 @@
           "rule": {
             "category": "iam",
             "description": "IAM policy allows Action \"*\" on Resource \"*\"",
+            "guideline": null,
             "id": "aws-iam-wildcard-policy",
-            "level": "critical"
+            "level": "critical",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -3031,7 +3263,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/fail_heredoc_json": {
       "diagnostics": [],
@@ -3087,8 +3320,14 @@
           "rule": {
             "category": "iam",
             "description": "IAM policy allows Action \"*\" on Resource \"*\"",
+            "guideline": null,
             "id": "aws-iam-wildcard-policy",
-            "level": "critical"
+            "level": "critical",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -3112,7 +3351,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_inline": {
       "diagnostics": [],
@@ -3186,8 +3426,14 @@
           "rule": {
             "category": "iam",
             "description": "IAM policy allows Action \"*\" on Resource \"*\"",
+            "guideline": null,
             "id": "aws-iam-wildcard-policy",
-            "level": "critical"
+            "level": "critical",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -3211,7 +3457,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_via_local_and_list": {
       "diagnostics": [],
@@ -3308,8 +3555,14 @@
           "rule": {
             "category": "iam",
             "description": "IAM policy allows Action \"*\" on Resource \"*\"",
+            "guideline": null,
             "id": "aws-iam-wildcard-policy",
-            "level": "critical"
+            "level": "critical",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -3333,7 +3586,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_data_source": {
       "diagnostics": [],
@@ -3461,8 +3715,14 @@
           "rule": {
             "category": "iam",
             "description": "IAM policy allows Action \"*\" on Resource \"*\"",
+            "guideline": null,
             "id": "aws-iam-wildcard-policy",
-            "level": "critical"
+            "level": "critical",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -3486,7 +3746,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_dynamic_statement": {
       "diagnostics": [],
@@ -3638,8 +3899,14 @@
           "rule": {
             "category": "iam",
             "description": "IAM policy allows Action \"*\" on Resource \"*\"",
+            "guideline": null,
             "id": "aws-iam-wildcard-policy",
-            "level": "critical"
+            "level": "critical",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -3663,7 +3930,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/pass_policy_document_deny": {
       "diagnostics": [],
@@ -3680,7 +3948,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/pass_scoped": {
       "diagnostics": [],
@@ -3697,7 +3966,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-rds-unencrypted/conditional_count_tainted_alternative": {
       "diagnostics": [],
@@ -3773,8 +4043,14 @@
           "rule": {
             "category": "encryption",
             "description": "RDS instance storage is not encrypted",
+            "guideline": null,
             "id": "aws-rds-unencrypted",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "conditional",
@@ -3798,7 +4074,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable": {
       "diagnostics": [],
@@ -3887,8 +4164,14 @@
           "rule": {
             "category": "encryption",
             "description": "RDS instance storage is not encrypted",
+            "guideline": null,
             "id": "aws-rds-unencrypted",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "conditional",
@@ -3912,7 +4195,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default": {
       "diagnostics": [],
@@ -3978,8 +4262,14 @@
           "rule": {
             "category": "encryption",
             "description": "RDS instance storage is not encrypted",
+            "guideline": null,
             "id": "aws-rds-unencrypted",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -4003,7 +4293,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-rds-unencrypted/fail_explicit_false": {
       "diagnostics": [],
@@ -4079,8 +4370,14 @@
           "rule": {
             "category": "encryption",
             "description": "RDS instance storage is not encrypted",
+            "guideline": null,
             "id": "aws-rds-unencrypted",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -4104,7 +4401,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-rds-unencrypted/fail_variable_default_false": {
       "diagnostics": [],
@@ -4193,8 +4491,14 @@
           "rule": {
             "category": "encryption",
             "description": "RDS instance storage is not encrypted",
+            "guideline": null,
             "id": "aws-rds-unencrypted",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -4218,7 +4522,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-rds-unencrypted/pass_encrypted": {
       "diagnostics": [],
@@ -4235,7 +4540,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/conditional_unconstrained_variable": {
       "diagnostics": [],
@@ -4316,8 +4622,14 @@
           "rule": {
             "category": "storage",
             "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
+            "guideline": null,
             "id": "aws-s3-public-access-block",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "conditional",
@@ -4341,7 +4653,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/fail_block_attrs_absent_default_false": {
       "diagnostics": [],
@@ -4403,8 +4716,14 @@
           "rule": {
             "category": "storage",
             "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
+            "guideline": null,
             "id": "aws-s3-public-access-block",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -4428,7 +4747,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/fail_block_for_other_bucket": {
       "diagnostics": [],
@@ -4462,8 +4782,14 @@
           "rule": {
             "category": "storage",
             "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
+            "guideline": null,
             "id": "aws-s3-public-access-block",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -4487,7 +4813,8 @@
         "module_instances": 1,
         "resources": 3,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/fail_missing_block": {
       "diagnostics": [],
@@ -4521,8 +4848,14 @@
           "rule": {
             "category": "storage",
             "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
+            "guideline": null,
             "id": "aws-s3-public-access-block",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -4546,7 +4879,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/fail_permissive_block": {
       "diagnostics": [],
@@ -4614,8 +4948,14 @@
           "rule": {
             "category": "storage",
             "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
+            "guideline": null,
             "id": "aws-s3-public-access-block",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -4639,7 +4979,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/pass_block_via_variable": {
       "diagnostics": [],
@@ -4656,7 +4997,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/pass_escaped_instance_key": {
       "diagnostics": [],
@@ -4673,7 +5015,8 @@
         "module_instances": 1,
         "resources": 4,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/pass_full_block": {
       "diagnostics": [],
@@ -4690,7 +5033,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/conditional_unconstrained_variable": {
       "diagnostics": [],
@@ -4759,8 +5103,14 @@
           "rule": {
             "category": "network",
             "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
+            "guideline": null,
             "id": "aws-sg-open-ssh",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "conditional",
@@ -4784,7 +5134,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/fail_dynamic_block": {
       "diagnostics": [],
@@ -4900,8 +5251,14 @@
           "rule": {
             "category": "network",
             "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
+            "guideline": null,
             "id": "aws-sg-open-ssh",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -4925,7 +5282,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/fail_inline_literal": {
       "diagnostics": [],
@@ -5001,8 +5359,14 @@
           "rule": {
             "category": "network",
             "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
+            "guideline": null,
             "id": "aws-sg-open-ssh",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -5026,7 +5390,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/fail_port_range_and_all_protocols": {
       "diagnostics": [],
@@ -5100,8 +5465,14 @@
           "rule": {
             "category": "network",
             "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
+            "guideline": null,
             "id": "aws-sg-open-ssh",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -5179,8 +5550,14 @@
           "rule": {
             "category": "network",
             "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
+            "guideline": null,
             "id": "aws-sg-open-ssh",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -5204,7 +5581,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local": {
       "diagnostics": [],
@@ -5317,8 +5695,14 @@
           "rule": {
             "category": "network",
             "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
+            "guideline": null,
             "id": "aws-sg-open-ssh",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -5342,7 +5726,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/fail_vpc_ingress_rule": {
       "diagnostics": [],
@@ -5398,8 +5783,14 @@
           "rule": {
             "category": "network",
             "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
+            "guideline": null,
             "id": "aws-sg-open-ssh",
-            "level": "high"
+            "level": "high",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -5423,7 +5814,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/pass_dynamic_restricted": {
       "diagnostics": [],
@@ -5440,7 +5832,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/pass_restricted": {
       "diagnostics": [],
@@ -5457,7 +5850,8 @@
         "module_instances": 1,
         "resources": 2,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/pass_tfvars_overrides_open_default": {
       "diagnostics": [],
@@ -5474,7 +5868,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/gcp-storage-uniform-access/conditional_unconstrained_variable": {
       "diagnostics": [],
@@ -5563,8 +5958,14 @@
           "rule": {
             "category": "storage",
             "description": "Cloud Storage bucket does not enforce uniform bucket-level access",
+            "guideline": null,
             "id": "gcp-storage-uniform-access",
-            "level": "medium"
+            "level": "medium",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "conditional",
@@ -5588,7 +5989,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/gcp-storage-uniform-access/fail_absent": {
       "diagnostics": [],
@@ -5654,8 +6056,14 @@
           "rule": {
             "category": "storage",
             "description": "Cloud Storage bucket does not enforce uniform bucket-level access",
+            "guideline": null,
             "id": "gcp-storage-uniform-access",
-            "level": "medium"
+            "level": "medium",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -5679,7 +6087,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/gcp-storage-uniform-access/fail_false_via_local": {
       "diagnostics": [],
@@ -5768,8 +6177,14 @@
           "rule": {
             "category": "storage",
             "description": "Cloud Storage bucket does not enforce uniform bucket-level access",
+            "guideline": null,
             "id": "gcp-storage-uniform-access",
-            "level": "medium"
+            "level": "medium",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -5793,7 +6208,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/gcp-storage-uniform-access/fail_tfvars_variable": {
       "diagnostics": [],
@@ -5895,8 +6311,14 @@
           "rule": {
             "category": "storage",
             "description": "Cloud Storage bucket does not enforce uniform bucket-level access",
+            "guideline": null,
             "id": "gcp-storage-uniform-access",
-            "level": "medium"
+            "level": "medium",
+            "source": {
+              "engine": "builtin",
+              "file": null,
+              "line": null
+            }
           },
           "schema": 2,
           "severity": "definite",
@@ -5920,7 +6342,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     },
     "source:fixtures/rules/gcp-storage-uniform-access/pass_enabled": {
       "diagnostics": [],
@@ -5937,7 +6360,8 @@
         "module_instances": 1,
         "resources": 1,
         "roots": 1
-      }
+      },
+      "suppressed": []
     }
   },
   "version": 1

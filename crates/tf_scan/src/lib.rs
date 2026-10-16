@@ -26,11 +26,28 @@ use tf_semantic::{Analysis, DiagSeverity, Diagnostic, FileTable};
 pub use tf_rego::Shape;
 pub use tf_rego::foreign::{TestOutcome, TestResult};
 
-/// Run the `test_*` rules of `policies.foreign` as `conftest verify` does.
-pub fn verify_policies(policies: &Policies) -> Result<Vec<TestOutcome>, ScanError> {
+/// Run the `test_*` rules of the catalog's Rego (its rule files and
+/// policy paths) as `conftest verify` does.
+pub fn verify_policies(catalog: &Catalog) -> Result<Vec<TestOutcome>, ScanError> {
+    let policies = &catalog.policies;
+    let mut paths = policies.foreign.clone();
+    let mut exclude = policies.exclude.clone();
+    for path in &catalog.rule_files {
+        let loaded = tf_rule_ir::load_rules_file(path).map_err(ScanError::Rules)?;
+        if !loaded.rego.is_empty() {
+            paths.push(path.clone());
+            exclude.extend(loaded.claimed);
+        }
+    }
+    if paths.is_empty() {
+        return Err(ScanError::Policy(PolicyError(
+            "no Rego policies to test".into(),
+        )));
+    }
     tf_rego::foreign::verify(&tf_rego::foreign::Options {
-        paths: &policies.foreign,
+        paths: &paths,
         data: &policies.data,
+        exclude: &exclude,
         entries: &[],
         namespaces: &policies.namespaces,
         all_namespaces: true,
@@ -85,7 +102,7 @@ impl Catalog {
 
     /// The rules this catalog yields, in order, shadowed by name, and a
     /// warning for each rule-directory file that was skipped.
-    pub fn resolve(self) -> Result<Resolved, ScanError> {
+    pub fn resolve(mut self) -> Result<Resolved, ScanError> {
         let mut warnings = Vec::new();
         let mut rules: Vec<Box<dyn DynRule>> = Vec::new();
         let mut add = |batch: Vec<Box<dyn DynRule>>| {
@@ -100,6 +117,12 @@ impl Catalog {
         }
         for path in &self.rule_files {
             let loaded = tf_rule_ir::load_rules_file(path).map_err(ScanError::Rules)?;
+            // Rego goes to the policy bundle: the file, or the directory
+            // (whose rule files are not data for OPA mode).
+            if !loaded.rego.is_empty() {
+                self.policies.foreign.push(path.clone());
+                self.policies.exclude.extend(loaded.claimed.iter().cloned());
+            }
             warnings.extend(
                 loaded
                     .skipped
@@ -275,7 +298,16 @@ pub fn scan(mut req: ScanRequest) -> Result<ScanOutput, ScanError> {
     };
     // Skipped rule files come first: they qualify every finding below them.
     let output = |mut result: ScanResult, analyses| {
-        result.diagnostics.splice(0..0, skipped.iter().cloned());
+        // Point each skipped file's warning at its first located problem.
+        let located = skipped.iter().cloned().map(|mut d| {
+            d.at = d.message.lines().find_map(|l| {
+                let (file, line, col) = tf_linter::render::message_location(l)?;
+                tf_linter::render::locate(&result.files, &file, line, col)
+            });
+            d
+        });
+        let located: Vec<Diagnostic> = located.collect();
+        result.diagnostics.splice(0..0, located);
         Ok(ScanOutput { result, analyses })
     };
     match req.input {
@@ -327,5 +359,89 @@ pub fn scan(mut req: ScanRequest) -> Result<ScanOutput, ScanError> {
                 tf_plan::scan_plan_with_model(&linter, &plan, &PlanOptions { source }, files)?;
             output(result, vec![analysis])
         }
+    }
+}
+
+/// One file's text after applying a fix hint.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FixEdit {
+    pub file: PathBuf,
+    pub text: String,
+}
+
+/// Apply a finding's fix hint to the source of `output` (scanned with
+/// `keep_models`): the attribute is rewritten at its `site`, or inserted
+/// into the resource block when it is not written. The value is written as
+/// an HCL literal. Nothing is written to disk; scan the edit through
+/// `ScanRequest::overlay` to check it.
+pub fn apply_fix(output: &ScanOutput, hint: &tf_linter::FixHint) -> Result<FixEdit, String> {
+    let resource = output
+        .analyses
+        .iter()
+        .flat_map(|a| &a.modules)
+        .flat_map(|m| &m.resources)
+        .find(|r| r.id == hint.resource)
+        .ok_or_else(|| {
+            format!(
+                "{} is not in the scan (scan with keep_models)",
+                hint.resource
+            )
+        })?;
+    let line = format!("{} = {}", hint.attribute, hcl_literal(&hint.value));
+    let (file, text) = match hint.site {
+        Some(at) => {
+            let sf = output.result.files.get(at.file);
+            let mut text = sf.text.to_string();
+            text.replace_range(at.span.start as usize..at.span.end as usize, &line);
+            (sf.path.clone(), text)
+        }
+        None => {
+            let body = resource.body.span;
+            let sf = output.result.files.get(body.file);
+            let mut text = sf.text.to_string();
+            // A block body's span ends at its closing brace.
+            let close = body.span.end as usize;
+            if text.as_bytes().get(close) != Some(&b'}') {
+                return Err(format!(
+                    "{}: resource block has no closing brace",
+                    hint.resource
+                ));
+            }
+            let line_start = text[..close].rfind('\n').map_or(0, |i| i + 1);
+            if text[line_start..close].trim().is_empty() {
+                text.insert_str(line_start, &format!("  {line}\n"));
+            } else {
+                text.insert_str(close, &format!("\n  {line}\n"));
+            }
+            (sf.path.clone(), text)
+        }
+    };
+    Ok(FixEdit { file, text })
+}
+
+/// A JSON value as an HCL literal.
+fn hcl_literal(v: &serde_json::Value) -> String {
+    use serde_json::Value as J;
+    match v {
+        J::String(s) => serde_json::to_string(s)
+            .expect("a string serializes")
+            .replace("${", "$${")
+            .replace("%{", "%%{"),
+        J::Array(items) => format!(
+            "[{}]",
+            items.iter().map(hcl_literal).collect::<Vec<_>>().join(", ")
+        ),
+        J::Object(m) => format!(
+            "{{ {} }}",
+            m.iter()
+                .map(|(k, v)| format!(
+                    "{} = {}",
+                    serde_json::to_string(k).expect("a key"),
+                    hcl_literal(v)
+                ))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        other => other.to_string(),
     }
 }

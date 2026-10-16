@@ -19,7 +19,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-spec = importlib.util.spec_from_file_location("importer", ROOT / "crates/tfscan_py/python/tfscan/checkov.py")
+spec = importlib.util.spec_from_file_location("importer", ROOT / "bench/checkov/legacy_graph_importer.py")
 importer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(importer)
 

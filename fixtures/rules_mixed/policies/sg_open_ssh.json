@@ -1,0 +1,372 @@
+{
+  "version": 1,
+  "name": "py-sg-open-ssh",
+  "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
+  "level": "high",
+  "category": "network",
+  "message": "ingress allows SSH (port 22) from {witness|the internet}",
+  "clauses": [
+    {
+      "resource_types": [
+        "aws_security_group"
+      ],
+      "for_each": {
+        "op": "col",
+        "path": [
+          "ingress"
+        ]
+      },
+      "condition": {
+        "op": "and",
+        "args": [
+          {
+            "op": "or",
+            "args": [
+              {
+                "op": "list_any",
+                "list": {
+                  "op": "col",
+                  "path": [
+                    "cidr_blocks"
+                  ]
+                },
+                "pred": {
+                  "op": "is_in",
+                  "expr": {
+                    "op": "element"
+                  },
+                  "values": [
+                    "0.0.0.0/0",
+                    "::/0"
+                  ]
+                }
+              },
+              {
+                "op": "list_any",
+                "list": {
+                  "op": "col",
+                  "path": [
+                    "ipv6_cidr_blocks"
+                  ]
+                },
+                "pred": {
+                  "op": "is_in",
+                  "expr": {
+                    "op": "element"
+                  },
+                  "values": [
+                    "0.0.0.0/0",
+                    "::/0"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "op": "or",
+            "args": [
+              {
+                "op": "is_in",
+                "expr": {
+                  "op": "col",
+                  "path": [
+                    "protocol"
+                  ]
+                },
+                "values": [
+                  "-1",
+                  "all"
+                ]
+              },
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "is_in",
+                    "expr": {
+                      "op": "col",
+                      "path": [
+                        "protocol"
+                      ]
+                    },
+                    "values": [
+                      "tcp",
+                      "6",
+                      "TCP"
+                    ]
+                  },
+                  {
+                    "op": "cmp",
+                    "cmp": "le",
+                    "left": {
+                      "op": "col",
+                      "path": [
+                        "from_port"
+                      ]
+                    },
+                    "right": {
+                      "op": "lit",
+                      "value": 22
+                    }
+                  },
+                  {
+                    "op": "cmp",
+                    "cmp": "ge",
+                    "left": {
+                      "op": "col",
+                      "path": [
+                        "to_port"
+                      ]
+                    },
+                    "right": {
+                      "op": "lit",
+                      "value": 22
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "resource_types": [
+        "aws_vpc_security_group_ingress_rule"
+      ],
+      "condition": {
+        "op": "and",
+        "args": [
+          {
+            "op": "or",
+            "args": [
+              {
+                "op": "is_in",
+                "expr": {
+                  "op": "col",
+                  "path": [
+                    "cidr_ipv4"
+                  ]
+                },
+                "values": [
+                  "0.0.0.0/0",
+                  "::/0"
+                ]
+              },
+              {
+                "op": "is_in",
+                "expr": {
+                  "op": "col",
+                  "path": [
+                    "cidr_ipv6"
+                  ]
+                },
+                "values": [
+                  "0.0.0.0/0",
+                  "::/0"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "or",
+            "args": [
+              {
+                "op": "is_in",
+                "expr": {
+                  "op": "col",
+                  "path": [
+                    "ip_protocol"
+                  ]
+                },
+                "values": [
+                  "-1",
+                  "all"
+                ]
+              },
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "is_in",
+                    "expr": {
+                      "op": "col",
+                      "path": [
+                        "ip_protocol"
+                      ]
+                    },
+                    "values": [
+                      "tcp",
+                      "6",
+                      "TCP"
+                    ]
+                  },
+                  {
+                    "op": "cmp",
+                    "cmp": "le",
+                    "left": {
+                      "op": "col",
+                      "path": [
+                        "from_port"
+                      ]
+                    },
+                    "right": {
+                      "op": "lit",
+                      "value": 22
+                    }
+                  },
+                  {
+                    "op": "cmp",
+                    "cmp": "ge",
+                    "left": {
+                      "op": "col",
+                      "path": [
+                        "to_port"
+                      ]
+                    },
+                    "right": {
+                      "op": "lit",
+                      "value": 22
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "resource_types": [
+        "aws_security_group_rule"
+      ],
+      "condition": {
+        "op": "and",
+        "args": [
+          {
+            "op": "or",
+            "args": [
+              {
+                "op": "list_any",
+                "list": {
+                  "op": "col",
+                  "path": [
+                    "cidr_blocks"
+                  ]
+                },
+                "pred": {
+                  "op": "is_in",
+                  "expr": {
+                    "op": "element"
+                  },
+                  "values": [
+                    "0.0.0.0/0",
+                    "::/0"
+                  ]
+                }
+              },
+              {
+                "op": "list_any",
+                "list": {
+                  "op": "col",
+                  "path": [
+                    "ipv6_cidr_blocks"
+                  ]
+                },
+                "pred": {
+                  "op": "is_in",
+                  "expr": {
+                    "op": "element"
+                  },
+                  "values": [
+                    "0.0.0.0/0",
+                    "::/0"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "op": "or",
+            "args": [
+              {
+                "op": "is_in",
+                "expr": {
+                  "op": "col",
+                  "path": [
+                    "protocol"
+                  ]
+                },
+                "values": [
+                  "-1",
+                  "all"
+                ]
+              },
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "is_in",
+                    "expr": {
+                      "op": "col",
+                      "path": [
+                        "protocol"
+                      ]
+                    },
+                    "values": [
+                      "tcp",
+                      "6",
+                      "TCP"
+                    ]
+                  },
+                  {
+                    "op": "cmp",
+                    "cmp": "le",
+                    "left": {
+                      "op": "col",
+                      "path": [
+                        "from_port"
+                      ]
+                    },
+                    "right": {
+                      "op": "lit",
+                      "value": 22
+                    }
+                  },
+                  {
+                    "op": "cmp",
+                    "cmp": "ge",
+                    "left": {
+                      "op": "col",
+                      "path": [
+                        "to_port"
+                      ]
+                    },
+                    "right": {
+                      "op": "lit",
+                      "value": 22
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "cmp",
+            "cmp": "eq",
+            "left": {
+              "op": "col",
+              "path": [
+                "type"
+              ]
+            },
+            "right": {
+              "op": "lit",
+              "value": "ingress"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -123,13 +123,14 @@ finding on that file.
 | `diagnostics` | Parse errors, warnings and notes: `severity` (`error`, `warning`, `info`), `code`, `message`, `location` or `null`. A `rule-skipped` warning (listed first, `location` `null`) names a file in a `--rule-file` directory that did not load; its message gives the file and each reason with its line and column. The rules in that file did not run. |
 | `rule_errors` | Rules that failed to run or returned an unresolved foreign result: `rule`, `resource` (or `null`), `message`. An empty list means no execution errors were recorded for selected, applicable rules; it does not establish coverage of unsupported rules or prove that native Unknown outcomes passed. A reader must never take silence from a rule listed here as a pass. The CLI still prints the record and exits 1 when this list is non-empty (2 means the scan could not run at all). |
 | `stats` | Counts: `roots`, `module_instances`, `files`, `resources`, `findings`, `definite`, `conditional`, `indeterminate`, `findings_by_rule`, `elapsed_ms`. |
+| `suppressed` | Findings of Checkov-sourced rules that a `checkov:skip=ID:reason` line suppressed, as Checkov applies them (in the resource's block or an enclosing `module` block): `rule`, `resource`, `comment` (Checkov's `No comment provided` when there is none) and the `location` of that line. Not findings, but never dropped silently. |
 
 ## Finding
 
 | Field | Meaning |
 | --- | --- |
 | `fingerprint` | Stable identity across scans: a hash of `rule.id`, the subject's address (`resource.address`, or the file's path) and `attribute`. It excludes locations, message and severity on purpose, so unrelated edits keep the identity and a certainty change updates an existing issue instead of filing a new one. |
-| `rule` | `id`, `category` (`network`, `storage`, `iam`, `encryption`, `other`), `level` (`low`, `medium`, `high`, `critical`: impact, independent of certainty), `description`. |
+| `rule` | `id`, `category` (`network`, `storage`, `iam`, `encryption`, `other`), `level` (`low`, `medium`, `high`, `critical`: impact, independent of certainty), `description`, `guideline` (a URL the rule names, or `null`), and `source`: `engine` (`builtin`, `ir`, `checkov`, `rego`, `conftest`, `python`), and the rule's `file` and `line` (`null` for built-in rules). |
 | `severity` | Certainty. `definite`: insecure as written. `conditional`: insecure for some value of an unconstrained variable. `indeterminate`: a foreign policy fired on the Known values, but an input it may depend on is provider-computed; needs a human. Native rules never produce `indeterminate`. |
 | `subject` | What the finding is about: `{"kind": "resource", "address"}`, or `{"kind": "file", "file", "module"}` for a whole-file policy result that no single resource reproduces (`module` is the module instance address, `""` for the root). |
 | `resource` | The resource instance: `address` (full), `base_address` (no key), `module` (`""` for the root), `mode` (`managed` or `data`), `type`, `name`, `key` (a number for `count`, a string for `for_each`, or `null`). `null` when the subject is a file. |

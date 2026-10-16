@@ -38,6 +38,8 @@ __version__ = "0.0.1"
 __all__ = [
     "scan",
     "scan_plan",
+    "rules",
+    "test_policies",
     "analyze",
     "parse",
     "ScanResult",
@@ -207,6 +209,12 @@ class ScanResult:
         not a pass."""
         return self._inner.rule_errors
 
+    @property
+    def suppressed(self) -> list[dict]:
+        """Findings a ``checkov:skip`` line suppressed (``rule``,
+        ``resource``, ``comment``, ``file``, ``line``)."""
+        return self._inner.suppressed
+
     def to_json(self) -> str:
         return self._inner.to_json()
 
@@ -256,9 +264,15 @@ def _run(
     rules: Sequence[Union[Rule, CallbackRule, CompiledRule]] = (),
     builtin: bool = True,
     select: Optional[Sequence[str]] = None,
+    rule_files: Sequence[PathLike] = (),
     policies: Sequence[PathLike] = (),
+    data: Sequence[PathLike] = (),
+    namespaces: Sequence[str] = (),
+    all_namespaces: bool = False,
+    policy_entries: Sequence[str] = (),
     policy_shape: Optional[str] = None,
     policy_entry: Optional[str] = None,
+    rego_v0: bool = False,
     rego_native: bool = False,
     overlay: Mapping[PathLike, str] = {},
     threads: Optional[int] = None,
@@ -280,6 +294,12 @@ def _run(
         policy_entry=policy_entry,
         overlay=[(os.fspath(p), t) for p, t in overlay.items()],
         threads=threads,
+        rule_files=[os.fspath(p) for p in rule_files],
+        data=[os.fspath(p) for p in data],
+        namespaces=list(namespaces),
+        all_namespaces=all_namespaces,
+        policy_entries=list(policy_entries),
+        rego_v0=rego_v0,
     )
     return ScanResult(inner, calls)
 
@@ -292,9 +312,15 @@ def scan(
     rules: Sequence[Union[Rule, CallbackRule, CompiledRule]] = (),
     builtin: bool = True,
     select: Optional[Sequence[str]] = None,
+    rule_files: Sequence[PathLike] = (),
     policies: Sequence[PathLike] = (),
+    data: Sequence[PathLike] = (),
+    namespaces: Sequence[str] = (),
+    all_namespaces: bool = False,
+    policy_entries: Sequence[str] = (),
     policy_shape: Optional[str] = None,
     policy_entry: Optional[str] = None,
+    rego_v0: bool = False,
     rego_native: bool = False,
     overlay: Mapping[PathLike, str] = {},
     threads: Optional[int] = None,
@@ -304,9 +330,15 @@ def scan(
     ``recursive``: every directory under ``path`` containing ``.tf`` files is
     a root module. The rule catalog is the built-in rules (``builtin``),
     plus ``rules``: expression rules (``tfscan.rule``), compiled IR rules
-    and callback rules, plus foreign Rego ``policies`` (Conftest / OPA
-    style, run unchanged; ``policy_shape`` is ``"plan"`` or ``"hcl"``,
-    ``policy_entry`` defaults to ``data.main.deny``). ``select`` narrows the
+    and callback rules, plus ``rule_files``: files and directories of any
+    rule format (rule IR JSON, Checkov YAML/JSON policies, Rego), each file
+    detected by its content, exactly as ``oxtf scan --rule-file``.
+    ``policies`` is an alias. Rego runs unchanged: by default as Conftest
+    (``deny``/``violation``/``warn`` rules in ``namespaces``, default
+    ``main``, or ``all_namespaces``; ``data`` adds data documents), or as
+    ``opa eval`` for ``policy_entries`` (``policy_entry`` adds one).
+    ``policy_shape`` is ``"plan"`` or ``"hcl"``; ``rego_v0`` parses Rego v0.
+    ``select`` narrows the
     whole catalog to the given rule ids, exactly as ``oxtf scan --rule``
     does: unknown ids raise ``ValueError`` and an empty list runs nothing.
     A rule that fails on a resource is reported in ``result.rule_errors``,
@@ -321,9 +353,15 @@ def scan(
         rules=rules,
         builtin=builtin,
         select=select,
+        rule_files=rule_files,
         policies=policies,
+        data=data,
+        namespaces=namespaces,
+        all_namespaces=all_namespaces,
+        policy_entries=policy_entries,
         policy_shape=policy_shape,
         policy_entry=policy_entry,
+        rego_v0=rego_v0,
         rego_native=rego_native,
         overlay=overlay,
         threads=threads,
@@ -337,9 +375,15 @@ def scan_plan(
     rules: Sequence[Union[Rule, CallbackRule, CompiledRule]] = (),
     builtin: bool = True,
     select: Optional[Sequence[str]] = None,
+    rule_files: Sequence[PathLike] = (),
     policies: Sequence[PathLike] = (),
+    data: Sequence[PathLike] = (),
+    namespaces: Sequence[str] = (),
+    all_namespaces: bool = False,
+    policy_entries: Sequence[str] = (),
     policy_shape: Optional[str] = None,
     policy_entry: Optional[str] = None,
+    rego_v0: bool = False,
     rego_native: bool = False,
     overlay: Mapping[PathLike, str] = {},
     threads: Optional[int] = None,
@@ -354,9 +398,15 @@ def scan_plan(
         rules=rules,
         builtin=builtin,
         select=select,
+        rule_files=rule_files,
         policies=policies,
+        data=data,
+        namespaces=namespaces,
+        all_namespaces=all_namespaces,
+        policy_entries=policy_entries,
         policy_shape=policy_shape,
         policy_entry=policy_entry,
+        rego_v0=rego_v0,
         rego_native=rego_native,
         overlay=overlay,
         threads=threads,
@@ -378,3 +428,60 @@ def parse(source: str) -> Document:
     """Parse HCL text into the arena AST (GIL released). Nodes are handles
     (``Arc`` to the parse + node id)."""
     return _tfscan.parse_hcl(source)
+
+
+def rules(
+    rule_files: Sequence[PathLike] = (),
+    *,
+    builtin: bool = True,
+    data: Sequence[PathLike] = (),
+    namespaces: Sequence[str] = (),
+    all_namespaces: bool = False,
+    policy_entries: Sequence[str] = (),
+    policy_shape: Optional[str] = None,
+    rego_v0: bool = False,
+) -> list[dict[str, Any]]:
+    """The rule catalog, as ``oxtf rules``: the built-in rules (unless
+    ``builtin`` is false) and every rule in ``rule_files`` (any format), each
+    a dict with ``name``, ``level``, ``category``, ``description``,
+    ``resource_types``, ``runs_on_module``, ``guideline`` and ``source``
+    (``engine``, ``file``, ``line``). A rule file in a directory that does
+    not load is skipped with a ``UserWarning``."""
+    import warnings
+
+    out, skipped = _tfscan.rules_info(
+        [os.fspath(p) for p in rule_files],
+        builtin=builtin,
+        data=[os.fspath(p) for p in data],
+        namespaces=list(namespaces),
+        all_namespaces=all_namespaces,
+        policy_entries=list(policy_entries),
+        policy_shape=policy_shape,
+        rego_v0=rego_v0,
+    )
+    for w in skipped:
+        warnings.warn(w, stacklevel=2)
+    return out
+
+
+def test_policies(
+    rule_files: Sequence[PathLike],
+    *,
+    data: Sequence[PathLike] = (),
+    namespaces: Sequence[str] = (),
+    rego_v0: bool = False,
+) -> list[dict[str, Any]]:
+    """Run the ``test_*`` rules of the Rego in ``rule_files``, as ``oxtf
+    rules test`` and ``conftest verify`` do. Each outcome is a dict with
+    ``rule``, ``file``, ``result`` (``pass``, ``fail``, ``skip`` or
+    ``error``) and ``error``."""
+    return [
+        {"rule": r, "file": f, "result": res, "error": e}
+        for r, f, res, e in _tfscan.test_policies(
+            [os.fspath(p) for p in rule_files],
+            data=[os.fspath(p) for p in data],
+            namespaces=list(namespaces),
+            rego_v0=rego_v0,
+        )
+    ]
+

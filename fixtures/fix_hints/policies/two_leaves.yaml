@@ -1,0 +1,16 @@
+metadata:
+  id: CKV2_FIX_NONE_TWO
+  name: RDS is encrypted and deletion-protected
+  category: ENCRYPTION
+definition:
+  and:
+    - cond_type: attribute
+      resource_types: [aws_db_instance]
+      attribute: storage_encrypted
+      operator: equals
+      value: true
+    - cond_type: attribute
+      resource_types: [aws_db_instance]
+      attribute: deletion_protection
+      operator: equals
+      value: true

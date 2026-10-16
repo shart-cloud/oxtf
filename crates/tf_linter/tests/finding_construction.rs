@@ -18,6 +18,8 @@ fn info() -> RuleInfo {
         description: "test".into(),
         resource_types: vec!["aws_s3_bucket".into()],
         runs_on_module: false,
+        guideline: None,
+        source: Default::default(),
     }
 }
 

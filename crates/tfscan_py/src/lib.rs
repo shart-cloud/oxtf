@@ -733,6 +733,23 @@ impl ScanResult {
         }
         Ok(out)
     }
+    /// Findings a `checkov:skip` line suppressed: dicts with `rule`,
+    /// `resource`, `comment`, `file` and `line`.
+    #[getter]
+    fn suppressed<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let out = PyList::empty(py);
+        for x in &self.data.result.suppressed {
+            let (file, line, _) = loc(self.data.files(), x.at);
+            let d = PyDict::new(py);
+            d.set_item("rule", x.rule.as_ref())?;
+            d.set_item("resource", x.address.as_ref())?;
+            d.set_item("comment", &x.comment)?;
+            d.set_item("file", file)?;
+            d.set_item("line", line)?;
+            out.append(d)?;
+        }
+        Ok(out)
+    }
     #[getter]
     fn diagnostics<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
         let out = PyList::empty(py);
@@ -1008,32 +1025,54 @@ struct PyCatalog {
     calls: CallCount,
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Rule files and policy options, as `oxtf --rule-file` and its policy
+/// flags take them.
+#[derive(Default)]
+struct PolicyArgs {
+    /// Any format, detected per file (`--rule-file`, `--policy`).
+    rule_files: Vec<PathBuf>,
+    data: Vec<PathBuf>,
+    namespaces: Vec<String>,
+    all_namespaces: bool,
+    entries: Vec<String>,
+    shape: Option<String>,
+    rego_v0: bool,
+}
+
+impl PolicyArgs {
+    fn catalog(self, builtin: bool, rego_native: bool, ir_rules: Vec<String>) -> PyResult<Catalog> {
+        let shape = self
+            .shape
+            .as_deref()
+            .map(|s| s.parse::<tf_scan::Shape>().map_err(PyValueError::new_err))
+            .transpose()?;
+        Ok(Catalog {
+            builtin,
+            rule_files: self.rule_files,
+            rule_json: ir_rules,
+            runtime: Vec::new(),
+            policies: tf_rego::Policies {
+                native: rego_native,
+                shape,
+                entries: self.entries,
+                rego_v0: self.rego_v0,
+                data: self.data,
+                namespaces: self.namespaces,
+                all_namespaces: self.all_namespaces,
+                ..Default::default()
+            },
+        })
+    }
+}
+
 fn build_catalog(
     builtin: bool,
     ir_rules: Vec<String>,
     callbacks: Vec<Bound<'_, PyAny>>,
     rego_native: bool,
-    policies: Vec<PathBuf>,
-    policy_shape: Option<&str>,
-    policy_entry: Option<String>,
+    policy: PolicyArgs,
 ) -> PyResult<PyCatalog> {
-    let shape = policy_shape
-        .map(|s| s.parse::<tf_scan::Shape>().map_err(PyValueError::new_err))
-        .transpose()?;
-    let mut catalog = Catalog {
-        builtin,
-        rule_files: Vec::new(),
-        rule_json: ir_rules,
-        runtime: Vec::new(),
-        policies: tf_rego::Policies {
-            native: rego_native,
-            foreign: policies,
-            shape,
-            entries: policy_entry.into_iter().collect(),
-            ..Default::default()
-        },
-    };
+    let mut catalog = policy.catalog(builtin, rego_native, ir_rules)?;
     let error = Arc::new(Mutex::new(None));
     let calls = Arc::new(std::sync::atomic::AtomicU64::new(0));
     for cb in &callbacks {
@@ -1046,6 +1085,12 @@ fn build_catalog(
                 description: Arc::from(cb.getattr("description")?.extract::<String>()?.as_str()),
                 resource_types: types.iter().map(|t| Arc::from(t.as_str())).collect(),
                 runs_on_module: false,
+                guideline: None,
+                source: tf_linter::RuleSource {
+                    engine: tf_linter::Engine::Python,
+                    file: None,
+                    line: None,
+                },
             },
             func: cb.getattr("func")?.unbind(),
             error: error.clone(),
@@ -1073,11 +1118,15 @@ fn scan_error(e: tf_scan::ScanError) -> PyErr {
 /// whole catalog, or `None` for all. `ir_rules`: rule IR JSON documents.
 /// `callbacks`: `tfscan.CallbackRule` objects (attributes `name`,
 /// `resource_types`, `level`, `category`, `description`, `func`).
-/// `policies`: foreign Rego policy files; `rego_native` runs the bundled
-/// native-tier policies in place of their seed rules. `overlay`: `(path,
-/// text)` pairs that shadow the disk for this scan.
+/// `rule_files`: rule files and directories of any format (rule IR,
+/// Checkov policies, Rego), as `oxtf --rule-file`; `policies` is an alias.
+/// `data`, `namespaces`, `all_namespaces`, `policy_entries` (OPA mode),
+/// `policy_shape` and `rego_v0` are the policy flags; `policy_entry` adds
+/// one entry. `rego_native` runs the bundled native-tier policies in place
+/// of their seed rules. `overlay`: `(path, text)` pairs that shadow the
+/// disk for this scan.
 #[pyfunction]
-#[pyo3(signature = (paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], callbacks=vec![], rego_native=false, policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, _release_gil=true))]
+#[pyo3(signature = (paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], callbacks=vec![], rego_native=false, policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, _release_gil=true, rule_files=vec![], data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], rego_v0=false))]
 #[allow(clippy::too_many_arguments)]
 fn scan(
     py: Python<'_>,
@@ -1097,6 +1146,12 @@ fn scan(
     overlay: Vec<(PathBuf, String)>,
     threads: Option<usize>,
     _release_gil: bool,
+    rule_files: Vec<PathBuf>,
+    data: Vec<PathBuf>,
+    namespaces: Vec<String>,
+    all_namespaces: bool,
+    policy_entries: Vec<String>,
+    rego_v0: bool,
 ) -> PyResult<(ScanResult, u64)> {
     if !_release_gil && !callbacks.is_empty() {
         // Workers would block on the GIL held by this thread.
@@ -1113,9 +1168,15 @@ fn scan(
         ir_rules,
         callbacks,
         rego_native,
-        policies,
-        policy_shape,
-        policy_entry,
+        PolicyArgs {
+            rule_files: rule_files.into_iter().chain(policies).collect(),
+            data,
+            namespaces,
+            all_namespaces,
+            entries: policy_entries.into_iter().chain(policy_entry).collect(),
+            shape: policy_shape.map(str::to_string),
+            rego_v0,
+        },
     )?;
     let input = match plan {
         Some(plan) => {
@@ -1178,7 +1239,7 @@ fn _rule_time(
         catalog,
         error,
         calls,
-    } = build_catalog(builtin, ir_rules, callbacks, false, vec![], None, None)?;
+    } = build_catalog(builtin, ir_rules, callbacks, false, PolicyArgs::default())?;
     let result = py.detach(move || -> Result<_, tf_scan::ScanError> {
         // Analyse once with no rules, then time the rules alone.
         let mut analyse = ScanRequest::dirs(paths, recursive);
@@ -1206,6 +1267,112 @@ fn _rule_time(
     }
     let (times, n) = result.map_err(scan_error)?;
     Ok((times, n, calls.load(std::sync::atomic::Ordering::Relaxed)))
+}
+
+/// One rule's metadata as a dict: `name`, `level`, `category`,
+/// `description`, `resource_types`, `runs_on_module`, `guideline`, `source`
+/// (`engine`, `file`, `line`).
+fn rule_dict<'py>(py: Python<'py>, r: &RuleInfo) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("name", r.name.as_ref())?;
+    d.set_item("level", r.level.as_str())?;
+    d.set_item("category", r.category.as_str())?;
+    d.set_item("description", r.description.as_ref())?;
+    d.set_item(
+        "resource_types",
+        r.resource_types
+            .iter()
+            .map(|t| t.as_ref())
+            .collect::<Vec<_>>(),
+    )?;
+    d.set_item("runs_on_module", r.runs_on_module)?;
+    d.set_item("guideline", r.guideline.as_deref())?;
+    let src = PyDict::new(py);
+    src.set_item("engine", r.source.engine.as_str())?;
+    src.set_item(
+        "file",
+        r.source.file.as_ref().map(|f| f.display().to_string()),
+    )?;
+    src.set_item("line", r.source.line)?;
+    d.set_item("source", src)?;
+    Ok(d)
+}
+
+/// The catalog `oxtf rules` lists: the built-in rules (unless `builtin` is
+/// false) and the rules in `rule_files` (any format), with the policy
+/// options. Returns (rules, warnings for skipped files).
+#[pyfunction]
+#[pyo3(signature = (rule_files=vec![], builtin=true, data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], policy_shape=None, rego_v0=false))]
+#[allow(clippy::too_many_arguments)]
+fn rules_info<'py>(
+    py: Python<'py>,
+    rule_files: Vec<PathBuf>,
+    builtin: bool,
+    data: Vec<PathBuf>,
+    namespaces: Vec<String>,
+    all_namespaces: bool,
+    policy_entries: Vec<String>,
+    policy_shape: Option<String>,
+    rego_v0: bool,
+) -> PyResult<(Bound<'py, PyList>, Vec<String>)> {
+    let catalog = PolicyArgs {
+        rule_files,
+        data,
+        namespaces,
+        all_namespaces,
+        entries: policy_entries,
+        shape: policy_shape,
+        rego_v0,
+    }
+    .catalog(builtin, false, Vec::new())?;
+    let resolved = catalog.resolve().map_err(scan_error)?;
+    let out = PyList::empty(py);
+    for r in Linter::new(resolved.rules).rules() {
+        out.append(rule_dict(py, r)?)?;
+    }
+    Ok((out, resolved.warnings))
+}
+
+/// `(rule, file, result, error)`.
+type TestRow = (String, String, String, Option<String>);
+
+/// Run the `test_*` rules of the Rego in `rule_files`, as `oxtf rules
+/// test` (Conftest's `verify`). Returns `(rule, file, result, error)` with
+/// result `pass`, `fail`, `skip` or `error`.
+#[pyfunction]
+#[pyo3(signature = (rule_files, data=vec![], namespaces=vec![], rego_v0=false))]
+fn test_policies(
+    rule_files: Vec<PathBuf>,
+    data: Vec<PathBuf>,
+    namespaces: Vec<String>,
+    rego_v0: bool,
+) -> PyResult<Vec<TestRow>> {
+    let catalog = PolicyArgs {
+        rule_files,
+        data,
+        namespaces,
+        rego_v0,
+        ..PolicyArgs::default()
+    }
+    .catalog(false, false, Vec::new())?;
+    let outcomes = tf_scan::verify_policies(&catalog).map_err(scan_error)?;
+    Ok(outcomes
+        .into_iter()
+        .map(|o| {
+            let (result, error) = match o.result {
+                tf_scan::TestResult::Pass => ("pass", None),
+                tf_scan::TestResult::Fail => ("fail", None),
+                tf_scan::TestResult::Skip => ("skip", None),
+                tf_scan::TestResult::Error(e) => ("error", Some(e)),
+            };
+            (
+                o.rule,
+                o.file.display().to_string(),
+                result.to_string(),
+                error,
+            )
+        })
+        .collect())
 }
 
 /// Names and metadata of the built-in rules.
@@ -1242,6 +1409,8 @@ fn _tfscan(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(scan, m)?)?;
     m.add_function(wrap_pyfunction!(compile_rules, m)?)?;
     m.add_function(wrap_pyfunction!(builtin_rules, m)?)?;
+    m.add_function(wrap_pyfunction!(rules_info, m)?)?;
+    m.add_function(wrap_pyfunction!(test_policies, m)?)?;
     m.add_function(wrap_pyfunction!(_rule_time, m)?)?;
     m.add("IR_VERSION", tf_rule_ir::IR_VERSION)?;
     m.add("PYO3_VERSION", "0.29.3")?;

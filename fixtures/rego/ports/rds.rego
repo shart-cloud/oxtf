@@ -19,5 +19,6 @@ deny contains violation if {
 		"msg": sprintf("%s: storage_encrypted is not true", [r.address]),
 		"address": r.address,
 		"path": "storage_encrypted",
+		"fix": {"attribute": "storage_encrypted", "value": true},
 	}
 }

@@ -14,7 +14,7 @@ pub use gcp_storage_uniform_access::GcpStorageUniformAccess;
 
 use tf_eval::{Value, Verdict, truth};
 
-use crate::rule::{DynRule, FixAction, FixHint};
+use crate::rule::{DynRule, FixHint};
 
 pub fn all() -> Vec<Box<dyn DynRule>> {
     vec![
@@ -33,13 +33,7 @@ pub(crate) fn set_attribute(
     attribute: &str,
     value: serde_json::Value,
 ) -> FixHint {
-    FixHint {
-        resource: r.id.clone(),
-        attribute: attribute.to_string(),
-        action: FixAction::Set,
-        value,
-        site: r.attr(attribute).map(|a| a.span),
-    }
+    FixHint::set(r, attribute, value)
 }
 
 /// The string value (`to_str` of a Known primitive) equals one of `set`.

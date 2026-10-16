@@ -1,0 +1,9 @@
+metadata:
+  id: CKV2_FIX_IS_FALSE
+  name: S3 buckets are not force-destroyed
+  category: ENCRYPTION
+definition:
+  cond_type: attribute
+  resource_types: [aws_s3_bucket]
+  attribute: force_destroy
+  operator: is_false

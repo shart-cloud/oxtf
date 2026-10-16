@@ -147,10 +147,9 @@ instead):
   literally.
 - `resource_types: provider` (Checkov's provider-block selector) is rejected.
 
-**Still open from F1:**
-
-- `tfscan` still loads Checkov packs through the Python importer; switching
-  it to these paths and deleting the graph half of the importer is F5.
+**Closed in F5:** `tfscan` takes these paths (`rule_files`), and the
+graph half of the Python importer is gone from the package. It is kept
+only as an offline oracle in `bench/checkov/legacy_graph_importer.py`.
 
 ### F2. Full Checkov operator coverage (implemented 2026-10-16)
 
@@ -442,7 +441,8 @@ file was hidden from the policy.
 - The same set without its `data.conftest.file` exception: about 0.27 s.
 
 Each file a policy can read `data.conftest.file` for needs its own prepared
-engine, shared by the bundle's rules for that root. A `with` override per
+engine, shared by the bundle's rules for that root. (F5 replaced this with a
+per-rule `with` override and brought the gate configuration to 0.36 s.) A `with` override per
 query was tried and was slower, because the query is compiled each time.
 Rendered documents, engines and exception results are cached per root
 (`ConfigFile::run`). The budget gate is F5's.
@@ -455,26 +455,95 @@ Rendered documents, engines and exception results are cached per root
 - The regorus gaps of F3 apply. Conftest's own hcl2 example uses
   `sprintf("%q")`, so two of its five tests are rule errors.
 
-### F5. Unified loading, metadata and UX
+### F5. Unified loading, metadata and UX (implemented 2026-10-16)
 
-- [ ] `--rule-file` format detection for file and directory, with
-  `--policy` kept as an alias. Mixed directories load each file by its format.
-- [ ] A common rule metadata model across sources: ID, name, level,
-  category, guideline URL, source engine, and source file/line. `oxtf rules`
-  shows the source engine and file; JSON output includes it.
-- [ ] Load diagnostics with spans for all three formats (criterion 4).
-- [ ] `tfscan` takes the same paths (`rules=["policies/"]`); the Python-side
-  Checkov graph importer is deleted. `tfscan.scan` also needs the
-  F3/F4 policy options it lacks: several entries, `rego_v0`, `--data`,
-  namespaces.
-- [ ] Fix-hint derivation from IR predicates (criterion 6), with
-  fixtures that apply each hint and rescan to a pass.
-- [ ] Suppression-comment compatibility: `#checkov:skip=ID:reason` applies
-  to Checkov-sourced rules as it would in Checkov.
+- [x] **One entry point.** `--rule-file PATH` detects each file's format:
+  - rule IR JSON (`clauses`);
+  - Checkov YAML/JSON (`metadata` + `definition`);
+  - `.rego`.
 
-**Gate:** corpus scan with the full Checkov graph catalog and the Conftest
-set loaded stays within the perf budget; measured with the method in
-[the execution baseline](RULE_ENGINES_PLAN.md#execution-baseline).
+  A directory may mix all three. In a directory that holds Rego, a
+  JSON/YAML file that is neither kind of rule is a data document or test
+  mock (Conftest ignores it), not a broken rule. Rego goes to the policy
+  bundle, minus the files claimed as rules, so OPA mode's data loading
+  still works. `--policy` is now an alias of `--rule-file`
+  (`fixtures/rules_mixed`).
+- [x] **Metadata model.** `RuleInfo` gains `guideline` and
+  `source { engine, file, line }`. The engine is one of `builtin`, `ir`,
+  `checkov`, `rego` (OPA entries), `conftest` (discovered by convention) or
+  `python`. The line is that of Checkov's `metadata.id` or of the Rego
+  rule. Categories map from Checkov and Rego names (`NETWORKING` →
+  network, ...; F1 had left them `other`), and guidelines come from
+  Checkov's `guideline` and Rego's `related_resources` /
+  `__rego_metadata__.url`. `oxtf rules` shows the engine and `file:line`,
+  and `oxtf rules -f json` prints the whole model. Findings carry
+  `rule.guideline` and `rule.source`: optional fields, so the schema stays
+  at 2.
+- [x] **Load diagnostics with spans.** Every front-end reports
+  `file:line:col: message`:
+  - Checkov already did;
+  - rule IR now takes serde's line and column;
+  - Rego annotations carry a column, and regorus reports its own location.
+
+  The CLI draws each such line as a miette snippet of the rule file, and a
+  skipped file's `rule-skipped` diagnostic carries that location in the
+  record.
+- [x] **Python parity.** `tfscan.scan(rule_files=[...])` takes the same
+  paths as `--rule-file` (`policies` is an alias), plus `data`,
+  `namespaces`, `all_namespaces`, `policy_entries` and `rego_v0`. New
+  `tfscan.rules(...)` and `tfscan.test_policies(...)` match `oxtf rules`
+  and `oxtf rules test`, and `ScanResult.suppressed` and
+  `Finding.subject` are exposed. The graph half of `tfscan.checkov` is
+  gone: the pack holds value checks, and graph policies load natively.
+  The retired translator lives on only as an offline oracle,
+  `bench/checkov/legacy_graph_importer.py` (frontend fixtures; `--export`
+  for the ignored IR-equality test, which still passes: 184 equal, 2 now
+  native). Python suite: 163 passed, mypy clean.
+- [x] **Fix hints from predicates.** A Checkov policy whose definition
+  holds exactly one fixable leaf (beside filters) on a top-level attribute
+  implies a fix: `equals` a literal, `is_true`/`is_false`, or `within` one
+  literal. `exists` names no value to write, so it implies none, and
+  neither do several fixable leaves. `tf_scan::apply_fix` turns a hint into
+  an edited file: the attribute is rewritten at its site, or inserted
+  before the block's closing brace, as an HCL literal. Fixtures
+  (`fixtures/fix_hints`) apply every kind of hint and rescan to a pass:
+  Checkov-derived ones (insert, replace, one-line block, `is_false`,
+  `within`), seed-rule ones, and a Rego `fix`. Of the 186 built-in graph
+  policies, 7 imply a fix; most are connection or `or`/`not` trees.
+- [x] **`checkov:skip`.** Checkov's semantics are reproduced for
+  Checkov-sourced rules: the regex on any line, a block that strictly
+  encloses the line, push-down from `module` blocks, IDs as written. A
+  suppressed finding moves to the record's `suppressed` list with its
+  comment and location. Python exposes it as `ScanResult.suppressed`, and
+  the CLI prints a count. On `fixtures/checkov_skip`, Checkov 3.2.328 and
+  oxtf fail and skip the same resources with the same comments.
+
+**Gate result** (corpus `corpus/repos`, 8 threads, 9 runs):
+
+| Configuration | Median | Range | Peak memory |
+| --- | --- | --- | --- |
+| All 186 built-in Checkov graph policies + the Conftest gate set (`--all-namespaces`) | 0.36 s | 0.33–0.50 s | 310 MB |
+| Graph policies only | 0.15 s | | |
+| No rules beyond the seed rules | 0.10 s | | |
+
+So the gate is met. Three changes got there from 0.78 s:
+
+- a rule reads `data.conftest.file` only if a conservative textual analysis
+  says it may (it names `data.conftest`, reads `data` dynamically,
+  imports it, or names such a rule). Only those rules get a
+  per-evaluation `with data.conftest.file as {...}`, and the rest run on a
+  reused engine. A per-thread LRU of prepared per-file engines was also
+  tried: it reached about 0.55 s but cost 130 MB more;
+- the `exception` set is evaluated once per file and shared by every rule
+  of the namespace;
+- the per-root document cache was already in place.
+
+The conformance harnesses are unchanged afterwards:
+
+- Conftest gate set: 15,171 of 15,197 agree; the 26 others differ only in
+  files with expressions;
+- Conftest fixture policy over the corpus: 6,513 of 6,513 agree;
+- OPA sets: all as recorded in F3.
 
 ## Order
 

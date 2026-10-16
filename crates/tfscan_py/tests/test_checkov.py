@@ -1,5 +1,11 @@
-"""Checkov is an optional export/callback dependency, pinned by the adapter."""
+"""Checkov is an optional export/callback dependency, pinned by the adapter.
+
+Graph policies are read natively (``rule_files``); only value checks are
+exported to a pack.
+"""
 import json
+from pathlib import Path
+import re
 
 import pytest
 
@@ -16,32 +22,46 @@ def pack(tmp_path_factory):
     return path, manifest
 
 
+@pytest.fixture(scope="module")
+def graph_checks():
+    from checkov.terraform import runner
+
+    return Path(runner.__file__).parent / "checks" / "graph_checks"
+
+
+def policy(directory, doc):
+    """Write a Checkov policy (with default metadata) for ``rule_files``."""
+    metadata = {"id": "TEST_POLICY", "name": "test", "category": "GENERAL_SECURITY", **doc.get("metadata", {})}
+    path = Path(directory) / f"{metadata['id']}.json"
+    path.write_text(json.dumps({**doc, "metadata": metadata}))
+    return path
+
+
+def blockers(tmp_path, doc):
+    """The (pointer, code) of every reason the native loader rejects ``doc``."""
+    with pytest.raises(ValueError) as error:
+        tfscan.rules([policy(tmp_path, doc)], builtin=False)
+    return {(path, code) for code, path in re.findall(r"\[(\w+)\] at (\S+)", str(error.value))}
+
+
 def test_export_accounts_for_every_check_and_excludes_overrides(pack):
     path, manifest = pack
     inventory = {x["id"]: x for x in manifest["checks"]}
     assert inventory["CKV_AWS_16"]["status"] == "translated"
     assert inventory["CKV_AWS_134"]["status"] == "unsupported"
     assert "overridden" in inventory["CKV_AWS_134"]["reason"]
-    assert inventory["CKV2_IBM_1"]["status"] == "translated"
-    assert inventory["CKV2_GIT_1"]["status"] == "translated"
     assert all(x.get("reason") for x in manifest["checks"] if x["status"] == "unsupported")
     assert (path / "LICENSE.checkov").read_text()
     assert len(checkov.load_rules(path)) == manifest["translated"]
 
 
-def test_graph_inventory_records_all_blockers_with_locations(pack):
-    graph = [x for x in pack[1]["checks"] if x["kind"] == "graph"]
-    assert sum(x["status"] == "translated" for x in graph) == 184
-    unsupported = {x["id"]: x for x in graph if x["status"] == "unsupported"}
-    assert set(unsupported) == {"CKV2_AWS_69", "CKV2_OCI_4"}
-    for entry in unsupported.values():
-        assert entry["reason"] == entry["blockers"][0]["reason"]
-        assert all(b["path"].startswith("/definition") and b["code"] for b in entry["blockers"])
-    reasons = {b["reason"] for b in unsupported["CKV2_AWS_69"]["blockers"]}
-    assert reasons == {"unsupported graph operator: not_regex_match"}
-    assert "jsonpath_regex" in {b["code"] for b in unsupported["CKV2_OCI_4"]["blockers"]}
-    assert not {"CKV2_AWS_23", "CKV2_AWS_27", "CKV2_AWS_30"} & unsupported.keys()
-    assert not {"CKV2_GCP_27", "CKV2_GCP_28", "CKV2_GCP_32", "CKV2_GCP_35", "CKV2_GCP_36"} & unsupported.keys()
+def test_builtin_graph_catalog_loads_natively(pack, graph_checks):
+    # The pack holds value checks only; every built-in graph policy loads
+    # natively from Checkov's own directory.
+    assert all(x["kind"] == "resource" for x in pack[1]["checks"])
+    loaded = [r for r in tfscan.rules([graph_checks], builtin=False)]
+    assert len(loaded) == len({p.name for p in graph_checks.rglob("*.json")}) == 186
+    assert all(r["source"]["engine"] == "checkov" and r["source"]["line"] for r in loaded)
 
 
 @pytest.mark.parametrize("operator,expected", [
@@ -93,23 +113,26 @@ def test_basic_jsonpath_matches_checkov_vertex_projection(tmp_path, operator, ex
         "attribute": path, "operator": f"jsonpath_{operator}", "value": expected}}
     (tmp_path / "main.tf").write_text("\n".join(blocks))
     native = tfscan.scan(tmp_path, builtin=False,
-                         rules=tfscan.compile_rules(json.dumps(checkov._translate_graph(doc))))
+                         rule_files=[policy(tmp_path, doc)])
     assert not native.diagnostics and not native.rule_errors
     assert {f.address for f in native.findings} == failed
     assert all(f.severity == "definite" for f in native.findings)
 
 
-def test_basic_jsonpath_rejects_unsupported_syntax_and_operators():
+def test_basic_jsonpath_rejects_unsupported_syntax(tmp_path):
     base = {"cond_type": "attribute", "resource_types": ["test_resource"],
             "attribute": "settings.value", "operator": "jsonpath_exists"}
     for path in ["settings[0].value", "$.settings.value", "settings..value", "settings[0:2]",
-                 "settings.*.value", "settings['value']", "settings.where", "settings.0", "settings[?(@.x==1)].value",
-                 "settings[?(@.x =~ 'on')]", "settings[?(@.x == on | @.y == off)]"]:
-        with pytest.raises(checkov.Unsupported) as error:
-            checkov._translate_graph({"definition": {**base, "attribute": path}})
-        assert "jsonpath" in {b["code"] for b in error.value.blockers}
-    with pytest.raises(checkov.Unsupported, match="unsupported graph operator"):
-        checkov._translate_graph({"definition": {**base, "operator": "jsonpath_contains"}})
+                 "settings.*.value", "settings['value']", "settings.where", "settings.0",
+                 "settings[?(@.x == on | @.y == off)]"]:
+        assert "jsonpath" in {code for _, code in blockers(tmp_path, {"definition": {**base, "attribute": path}})}, path
+    # Numeric and regex filters are supported since F2 (checked against
+    # Checkov's solvers by bench/checkov/graph_compare.py).
+    for path in ["settings[?(@.x==1)].value", "settings[?(@.x =~ 'on')]"]:
+        assert tfscan.rules([policy(tmp_path, {"definition": {**base, "attribute": path}})], builtin=False), path
+    # Every registry operator has a jsonpath_ form (F2).
+    assert tfscan.rules([policy(tmp_path, {"definition": {**base, "operator": "jsonpath_contains", "value": "x"}})],
+                        builtin=False)
 
 
 @pytest.mark.parametrize("operator,expected", [
@@ -158,7 +181,7 @@ def test_filtered_jsonpath_matches_checkov(tmp_path, operator, expected, path):
     doc = {"metadata": {"id": "JSONPATH_FILTER_TEST", "name": "jsonpath filters"}, "definition": {
         "cond_type": "attribute", "resource_types": ["test_resource"],
         "attribute": path, "operator": f"jsonpath_{operator}", "value": expected}}
-    native = tfscan.scan(tmp_path, builtin=False, rules=tfscan.compile_rules(json.dumps(checkov._translate_graph(doc))))
+    native = tfscan.scan(tmp_path, builtin=False, rule_files=[policy(tmp_path, doc)])
     assert not native.diagnostics and not native.rule_errors
     assert {f.address for f in native.findings} == failed
     assert all(f.severity == "definite" for f in native.findings)
@@ -179,7 +202,7 @@ resource "test_resource" "last" {
         "cond_type": "attribute", "resource_types": ["test_resource"],
         "attribute": "settings.nested.value", "operator": "jsonpath_equals", "value": True}}
     native = tfscan.scan(tmp_path, builtin=False,
-                         rules=tfscan.compile_rules(json.dumps(checkov._translate_graph(doc))))
+                         rule_files=[policy(tmp_path, doc)])
     assert not native.diagnostics and not native.rule_errors
     assert {f.address for f in native.findings} == {"test_resource.first", "test_resource.last"}
     assert all(f.severity == "conditional" and f.provenance for f in native.findings)
@@ -207,15 +230,14 @@ def test_attribute_filter_membership_matches_checkov(tmp_path, boolean, expected
         {"cond_type": "filter", "resource_types": ["ignored_metadata"],
          "attribute": "engine", "operator": "within", "value": expected},
     ]}}
-    rules = tfscan.compile_rules(json.dumps(checkov._translate_graph(doc)))
     (tmp_path / "main.tf").write_text("\n".join(blocks))
-    native = tfscan.scan(tmp_path, builtin=False, rules=rules)
+    native = tfscan.scan(tmp_path, builtin=False, rule_files=[policy(tmp_path, doc)])
     assert not native.diagnostics and not native.rule_errors
     assert {f.address for f in native.findings} == failed
     assert all(f.severity == "definite" for f in native.findings)
 
 
-def test_attribute_filters_reject_unsupported_shapes_and_scope():
+def test_attribute_filters_reject_unsupported_shapes_and_scope(tmp_path):
     connection = {"cond_type": "connection", "resource_types": ["test_node"],
                   "connected_resource_types": ["test_link"], "operator": "exists"}
     base = {"cond_type": "filter", "attribute": "engine", "operator": "within", "value": "postgres"}
@@ -223,27 +245,21 @@ def test_attribute_filters_reject_unsupported_shapes_and_scope():
                          ({"attribute": "settings.engine"}, "filter_path"),
                          ({"attribute": "depends_on"}, "meta_argument"),
                          ({"value": [["postgres"]]}, "filter_value")]:
-        with pytest.raises(checkov.Unsupported) as error:
-            checkov._translate_graph({"definition": {"and": [connection, {**base, **change}]}})
-        assert code in {b["code"] for b in error.value.blockers}
+        assert code in {c for _, c in blockers(tmp_path, {"definition": {"and": [connection, {**base, **change}]}})}
     for definition in [base, {"not": base}, {"and": [base, base]}, {"or": [base,
             {"cond_type":"attribute", "resource_types":["test_node"], "attribute":"enabled", "operator":"is_true"}]}]:
-        with pytest.raises(checkov.Unsupported):
-            checkov._translate_graph({"definition": definition})
+        assert blockers(tmp_path, {"definition": definition})
 
 
-def test_graph_inventory_checks_siblings_and_independent_leaf_constraints():
+def test_rejections_check_siblings_and_independent_leaf_constraints(tmp_path):
     leaf = {"cond_type": "attribute", "resource_types": ["test_resource"],
             "attribute": "value", "operator": "equals", "value": True}
     doc = {"definition": {"and": [
-        {**leaf, "attribute": "lifecycle.ignore_changes[*]", "operator": "regex_match"},
+        {**leaf, "attribute": "lifecycle.ignore_changes[*]", "operator": "regex_match", "value": "x"},
         {**leaf, "operator": "subset", "value": [[1]]},
         {**leaf, "operator": "length_greater_than", "value": "invalid"},
     ]}}
-    with pytest.raises(checkov.Unsupported) as error:
-        checkov._translate_graph(doc)
-    assert {(b["path"], b["code"]) for b in error.value.blockers} == {
-        ("/definition/and/0/operator", "attribute_operator"),
+    assert blockers(tmp_path, doc) == {
         ("/definition/and/0/attribute", "jsonpath"),
         ("/definition/and/0/attribute", "meta_argument"),
         ("/definition/and/1/value", "scalar_list"),
@@ -284,11 +300,11 @@ def test_graph_size_and_subset_operators_match_checkov(tmp_path, operator, expec
         assert outcome is not None
         if not outcome:
             failed.add(address)
-    rule = checkov._translate_graph({"metadata": {"id": "TEST_OPERATOR", "name": operator},
-        "definition": {"cond_type": "attribute", "resource_types": ["test_resource"],
-                       "attribute": "value", "operator": operator, "value": expected}})
+    doc = {"metadata": {"id": "TEST_OPERATOR", "name": operator},
+           "definition": {"cond_type": "attribute", "resource_types": ["test_resource"],
+                          "attribute": "value", "operator": operator, "value": expected}}
     (tmp_path / "main.tf").write_text("\n".join(blocks))
-    native = tfscan.scan(tmp_path, builtin=False, rules=tfscan.compile_rules(json.dumps(rule)))
+    native = tfscan.scan(tmp_path, builtin=False, rule_files=[policy(tmp_path, doc)])
     assert not native.diagnostics and not native.rule_errors
     assert {f.address for f in native.findings} == failed
     assert all(f.severity == "definite" for f in native.findings)
@@ -403,7 +419,7 @@ def test_record_errors_keeps_scanning_and_default_exceptions_still_propagate(tmp
         tfscan.scan(tmp_path, builtin=False, rules=[error, finding])
 
 
-def test_graph_pack_connects_across_local_module_outputs(pack, tmp_path):
+def test_graph_policies_connect_across_local_module_outputs(graph_checks, tmp_path):
     child = tmp_path / 'child'
     child.mkdir()
     (child / 'main.tf').write_text('''
@@ -415,13 +431,13 @@ module "vpc" { source = "./child" }
 resource "aws_vpc" "missing" {}
 resource "aws_flow_log" "log" { vpc_id = module.vpc.id }
 ''')
-    result = tfscan.scan(tmp_path, builtin=False, rules=checkov.load_rules(pack[0]), select=['CKV2_AWS_11'])
+    result = tfscan.scan(tmp_path, builtin=False, rule_files=[graph_checks], select=['CKV2_AWS_11'])
     assert not result.rule_errors
     assert [(f.address, f.severity) for f in result.findings] == [('aws_vpc.missing', 'definite')]
     assert result.to_arrow().num_rows == 1
 
 
-def test_graph_predicates_on_connected_resource_and_uncertainty(pack, tmp_path):
+def test_graph_predicates_on_connected_resource_and_uncertainty(graph_checks, tmp_path):
     (tmp_path / 'main.tf').write_text('''
 variable "enabled" { type = bool }
 resource "aws_s3_bucket" "bad" {}
@@ -449,7 +465,7 @@ resource "aws_s3_bucket_public_access_block" "maybe" {
   restrict_public_buckets = true
 }
 ''')
-    result = tfscan.scan(tmp_path, builtin=False, rules=checkov.load_rules(pack[0]), select=['CKV2_AWS_6'])
+    result = tfscan.scan(tmp_path, builtin=False, rule_files=[graph_checks], select=['CKV2_AWS_6'])
     assert not result.rule_errors
     assert {(f.address, f.severity) for f in result.findings} == {('aws_s3_bucket.bad','definite'),('aws_s3_bucket.maybe','conditional')}
     assert all(f.provenance for f in result.findings)
@@ -769,14 +785,14 @@ resource "google_sql_database_instance" "mysql" {{ database_version = "MYSQL_8_0
     ("CKV2_GCP_16", "log_planner_stats", "off", "on"),
     ("CKV2_GCP_17", "log_statement_stats", "off", "on"),
 ]])
-def test_graph_findings_match_full_checkov_runner(pack, tmp_path, check_id, source):
+def test_graph_findings_match_full_checkov_runner(graph_checks, tmp_path, check_id, source):
     import hcl2
     from checkov.terraform.runner import Runner
     from checkov.runner_filter import RunnerFilter
 
     (tmp_path / 'main.tf').write_text(source)
     reference = Runner().run(root_folder=str(tmp_path), runner_filter=RunnerFilter(checks=[check_id], download_external_modules=False))
-    native = tfscan.scan(tmp_path, builtin=False, rules=checkov.load_rules(pack[0]), select=[check_id])
+    native = tfscan.scan(tmp_path, builtin=False, rule_files=[graph_checks], select=[check_id])
     assert reference.passed_checks and reference.failed_checks
     assert not native.rule_errors
     data_addresses = {f"{ty}.{name}" for block in hcl2.loads(source).get("data", [])
@@ -785,14 +801,14 @@ def test_graph_findings_match_full_checkov_runner(pack, tmp_path, check_id, sour
         f"data.{f.resource}" if f.resource in data_addresses else f.resource for f in reference.failed_checks}
 
 
-def test_filter_eligibility_preserves_conditional_findings_and_evidence(pack, tmp_path):
+def test_filter_eligibility_preserves_conditional_findings_and_evidence(graph_checks, tmp_path):
     (tmp_path / 'main.tf').write_text('''
 variable "engine" { type = string }
 resource "aws_db_instance" "maybe" { engine = var.engine }
 resource "aws_db_instance" "excluded" { engine = "mysql" }
 resource "aws_db_instance" "missing" {}
 ''')
-    result = tfscan.scan(tmp_path, builtin=False, rules=checkov.load_rules(pack[0]), select=['CKV2_AWS_30'])
+    result = tfscan.scan(tmp_path, builtin=False, rule_files=[graph_checks], select=['CKV2_AWS_30'])
     assert not result.rule_errors
     assert [(f.address, f.severity) for f in result.findings] == [('aws_db_instance.maybe', 'conditional')]
     assert result.findings[0].provenance

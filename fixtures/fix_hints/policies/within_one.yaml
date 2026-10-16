@@ -1,0 +1,15 @@
+metadata:
+  id: CKV2_FIX_WITHIN
+  name: S3 bucket ACL is private
+  category: ENCRYPTION
+definition:
+  and:
+    - cond_type: filter
+      attribute: resource_type
+      operator: within
+      value: [aws_s3_bucket]
+    - cond_type: attribute
+      resource_types: [aws_s3_bucket]
+      attribute: acl
+      operator: within
+      value: [private]

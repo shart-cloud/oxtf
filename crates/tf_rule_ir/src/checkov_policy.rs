@@ -4,7 +4,8 @@
 //! This is the native front-end for Checkov's policy format: `metadata`,
 //! `scope` and a `definition` tree of `attribute`, `connection` and `filter`
 //! conditions under `and`/`or`/`not`. It produces exactly the IR the pinned
-//! Python importer did (`tfscan.checkov._translate_graph`), and every shape
+//! Python importer did (`_translate_graph`, now the oracle in
+//! `bench/checkov/legacy_graph_importer.py`), and every shape
 //! that importer rejected is rejected here, with the same blocker codes and
 //! JSON Pointer paths. YAML is read as Checkov reads it ([`crate::pyyaml`]).
 //!
@@ -1012,25 +1013,45 @@ impl PolicySource {
 }
 
 /// Translate a policy file, formatting blockers as diagnostics against it.
+/// [`translate`] a loaded policy file, with what the IR records beyond the
+/// importer's output: Checkov's category (mapped onto oxtf's), the
+/// `guideline` URL, and the file and line it came from.
 pub fn translate_source(path: &Path, source: &PolicySource) -> Result<RuleSpec, String> {
-    translate(&source.value).map_err(|blockers| {
-        let id = source
-            .value
-            .pointer("/metadata/id")
-            .and_then(Json::as_str)
-            .unwrap_or("<no id>");
-        blockers
-            .iter()
-            .map(|b| {
-                let at = match source.position(&b.path) {
-                    Some(p) => format!("{}:{}:{}", path.display(), p.line, p.col),
-                    None => path.display().to_string(),
-                };
-                format!("{at}: {id}: {} [{}] at {}", b.reason, b.code, b.path)
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    })
+    let meta = &source.value["metadata"];
+    translate(&source.value)
+        .map(|mut spec| {
+            if let Some(c) = meta.get("category").and_then(Json::as_str) {
+                spec.category = tf_linter::Category::from_foreign(c).as_str().into();
+            }
+            spec.guideline = meta
+                .get("guideline")
+                .and_then(Json::as_str)
+                .map(str::to_string);
+            spec.origin = crate::Origin(tf_linter::RuleSource {
+                engine: tf_linter::Engine::Checkov,
+                file: Some(path.to_path_buf()),
+                line: source.position("/metadata/id").map(|p| p.line as u32),
+            });
+            spec
+        })
+        .map_err(|blockers| {
+            let id = source
+                .value
+                .pointer("/metadata/id")
+                .and_then(Json::as_str)
+                .unwrap_or("<no id>");
+            blockers
+                .iter()
+                .map(|b| {
+                    let at = match source.position(&b.path) {
+                        Some(p) => format!("{}:{}:{}", path.display(), p.line, p.col),
+                        None => path.display().to_string(),
+                    };
+                    format!("{at}: {id}: {} [{}] at {}", b.reason, b.code, b.path)
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
 }
 
 /// Start positions of every value in a JSON text, by JSON Pointer. The text

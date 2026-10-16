@@ -94,6 +94,9 @@ pub struct ScanResult {
     pub rule_errors: Vec<RuleError>,
     /// Resolves the `FileId`s in findings, provenance and diagnostics.
     pub files: Arc<FileTable>,
+    /// Findings of Checkov-sourced rules that a `checkov:skip` line
+    /// suppressed ([`crate::suppress`]).
+    pub suppressed: Vec<crate::suppress::Suppressed>,
 }
 
 /// Directories to treat as root modules.
@@ -175,13 +178,21 @@ pub fn scan_with(
             .par_iter()
             .map(|r| {
                 let a = analyze_module_shared(r, &aopts, &files, &store);
-                let out = linter.run_with(
+                let mut out = linter.run_with(
                     &a,
                     Some(crate::engine::Sources {
                         store: &store,
                         files: &files,
                     }),
                 );
+                let (findings, suppressed) = crate::suppress::checkov_skips(
+                    std::mem::take(&mut out.findings),
+                    &a,
+                    &files,
+                    Some(&store),
+                );
+                out.findings = findings;
+                out.suppressed = suppressed;
                 RootResult {
                     module_instances: a.modules.len(),
                     resources: a.stats.resources,
@@ -213,6 +224,7 @@ pub fn scan_with(
     let results = pool.install(work);
     let mut findings = Vec::new();
     let mut rule_errors = Vec::new();
+    let mut suppressed = Vec::new();
     let mut diagnostics = Vec::new();
     let mut analyses = Vec::new();
     let mut module_instances = 0;
@@ -222,6 +234,7 @@ pub fn scan_with(
         resources += r.resources;
         findings.extend(r.out.findings);
         rule_errors.extend(r.out.rule_errors);
+        suppressed.extend(r.out.suppressed);
         match r.analysis {
             Some(a) => {
                 diagnostics.extend(a.diagnostics.iter().cloned());
@@ -245,6 +258,7 @@ pub fn scan_with(
             stats,
             rule_errors,
             files,
+            suppressed,
         },
         analyses,
     )

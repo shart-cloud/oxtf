@@ -1,11 +1,13 @@
 //! The native Checkov policy front-end against the Python importer.
 //!
 //! `pinned_catalog_matches_python_importer` needs a Checkov 3.2.328 install
-//! and a pack exported from it by `scripts/import_checkov.py`:
+//! and a graph pack exported by the retired Python translator, kept as an
+//! oracle in `bench/checkov/legacy_graph_importer.py`:
 //!
 //! ```sh
+//! "$CHECKOV_PYTHON" -I bench/checkov/legacy_graph_importer.py --export /tmp/graph-pack
 //! CHECKOV_GRAPH_CHECKS=.../site-packages/checkov/terraform/checks/graph_checks \
-//! CHECKOV_PACK=bench/results/out/checkov-3.2.328 \
+//! CHECKOV_PACK=/tmp/graph-pack \
 //!   cargo test -p tf_rule_ir --test checkov_policy -- --include-ignored
 //! ```
 

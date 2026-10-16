@@ -27,7 +27,14 @@ fn schema_2_field_set_is_pinned() {
     let json = serde_json::to_value(&r).unwrap();
     assert_eq!(
         keys(&json),
-        ["diagnostics", "findings", "rule_errors", "schema", "stats"]
+        [
+            "diagnostics",
+            "findings",
+            "rule_errors",
+            "schema",
+            "stats",
+            "suppressed"
+        ]
     );
     assert_eq!(
         keys(&json["stats"]),
@@ -69,7 +76,21 @@ fn schema_2_field_set_is_pinned() {
         f["subject"],
         serde_json::json!({"kind": "resource", "address": "aws_db_instance.db"})
     );
-    assert_eq!(keys(&f["rule"]), ["category", "description", "id", "level"]);
+    assert_eq!(
+        keys(&f["rule"]),
+        [
+            "category",
+            "description",
+            "guideline",
+            "id",
+            "level",
+            "source"
+        ]
+    );
+    assert_eq!(
+        f["rule"]["source"],
+        serde_json::json!({"engine": "builtin", "file": null, "line": null})
+    );
     assert_eq!(
         keys(&f["resource"]),
         [

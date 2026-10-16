@@ -59,6 +59,9 @@ pub struct Policies {
     pub namespaces: Vec<String>,
     /// Every namespace (`--all-namespaces`).
     pub all_namespaces: bool,
+    /// Files under `foreign` that are not part of the bundle (rule files of
+    /// other formats found in the same directory).
+    pub exclude: Vec<PathBuf>,
 }
 
 impl Policies {
@@ -102,6 +105,7 @@ pub fn catalog(policies: &Policies) -> Result<Vec<Box<dyn DynRule>>, PolicyError
             entries: &policies.entries,
             namespaces: &policies.namespaces,
             all_namespaces: policies.all_namespaces,
+            exclude: &policies.exclude,
             shape: policies.shape.unwrap_or(Shape::Plan),
             rego_v0: policies.rego_v0,
         })?);

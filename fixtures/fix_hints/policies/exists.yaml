@@ -1,0 +1,9 @@
+metadata:
+  id: CKV2_FIX_NONE_EXISTS
+  name: RDS names a KMS key
+  category: ENCRYPTION
+definition:
+  cond_type: attribute
+  resource_types: [aws_db_instance]
+  attribute: kms_key_id
+  operator: exists

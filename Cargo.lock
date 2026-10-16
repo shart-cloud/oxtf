@@ -1563,6 +1563,7 @@ dependencies = [
 name = "tf_cli"
 version = "0.0.0"
 dependencies = [
+ "miette",
  "mimalloc",
  "serde_json",
  "tf_linter",

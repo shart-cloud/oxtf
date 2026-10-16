@@ -461,11 +461,11 @@ fn conftest_conventions_files_ablation_and_exceptions() {
 /// `parse_config_file` builtins work. `conftest verify` gives the same.
 #[test]
 fn policy_tests_run_as_conftest_verify() {
-    let policies = tf_rego::Policies {
-        foreign: vec![repo().join("fixtures/rego/conftest/policy")],
-        ..Default::default()
+    let catalog = Catalog {
+        rule_files: vec![repo().join("fixtures/rego/conftest/policy")],
+        ..Catalog::default()
     };
-    let outcomes = tf_scan::verify_policies(&policies).unwrap();
+    let outcomes = tf_scan::verify_policies(&catalog).unwrap();
     let got: Vec<(String, tf_scan::TestResult)> =
         outcomes.into_iter().map(|o| (o.rule, o.result)).collect();
     use tf_scan::TestResult::*;
