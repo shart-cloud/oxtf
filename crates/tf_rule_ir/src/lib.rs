@@ -51,6 +51,7 @@ use tf_eval::{Kind, Known, Prov, Value, Verdict};
 use tf_linter::{Category, DynRule, Judgement, Level, RuleFailure, RuleInfo};
 use tf_semantic::{Module, Resource};
 
+pub mod bundled;
 pub mod checkov;
 pub mod checkov_policy;
 pub mod goyaml;

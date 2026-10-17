@@ -295,7 +295,7 @@ def main():
     # every root: findings grow with policies x roots and the scan exhausts
     # memory (~200 MB per policy at 397 policies) for rows that are never read.
     command = [str(args.native.resolve()), 'scan', str(corpus.resolve() / '{rule}'), '--recursive', '--format',
-               'json', '--rule-file', str(policies.resolve() / '{policy}'), '--rule', '{rule}']
+               'json', '--no-bundled', '--rule-file', str(policies.resolve() / '{policy}'), '--rule', '{rule}']
 
     def scan(r):
         policy = next(policies.glob(f'{r["rule"]}.*')).name

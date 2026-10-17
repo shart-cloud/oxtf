@@ -12,6 +12,7 @@
 //! [`ScanError`]; a rule that fails *while* running is a rule error on the
 //! result, never an `Err`.
 
+use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -76,9 +77,14 @@ pub enum ScanInput {
 
 /// Where rules come from. Sources are resolved in field order and a later
 /// rule **shadows** an earlier one of the same name, so a native-tier Rego
-/// policy named `aws-rds-unencrypted` replaces the seed rule.
+/// policy named `aws-rds-unencrypted` replaces the seed rule, and a Checkov
+/// policy loaded from a file replaces the bundled one with its ID.
 #[derive(Default)]
 pub struct Catalog {
+    /// The bundled Checkov catalog (`tf_rule_ir::bundled`): Checkov's
+    /// Terraform value checks and graph policies, translated at a pinned
+    /// version and compiled into the binary.
+    pub bundled: bool,
     /// The seed rules (`tf_linter::rules::all`).
     pub builtin: bool,
     /// Rule-IR JSON files (`--rule-file`).
@@ -100,18 +106,36 @@ impl Catalog {
         }
     }
 
+    /// What a scan runs when not told otherwise: the bundled Checkov
+    /// catalog and the seed rules.
+    pub fn standard() -> Catalog {
+        Catalog {
+            bundled: true,
+            builtin: true,
+            ..Catalog::default()
+        }
+    }
+
     /// The rules this catalog yields, in order, shadowed by name, and a
     /// warning for each rule-directory file that was skipped.
     pub fn resolve(mut self) -> Result<Resolved, ScanError> {
         let mut warnings = Vec::new();
-        let mut rules: Vec<Box<dyn DynRule>> = Vec::new();
+        // A shadowed rule leaves a hole, so each rule keeps the position of
+        // its source; holes are dropped at the end.
+        let mut rules: Vec<Option<Box<dyn DynRule>>> = Vec::new();
+        let mut by_name: HashMap<Arc<str>, usize> = HashMap::new();
         let mut add = |batch: Vec<Box<dyn DynRule>>| {
             for rule in batch {
-                let name = rule.info().name;
-                rules.retain(|r| r.info().name != name);
-                rules.push(rule);
+                if let Some(old) = by_name.insert(rule.info().name, rules.len()) {
+                    rules[old] = None;
+                }
+                rules.push(Some(rule));
             }
         };
+        if self.bundled {
+            let specs = tf_rule_ir::bundled::checkov().map_err(ScanError::Rules)?;
+            add(compile_specs(specs)?);
+        }
         if self.builtin {
             add(tf_linter::rules::all());
         }
@@ -139,7 +163,10 @@ impl Catalog {
         if !self.policies.is_empty() {
             add(tf_rego::catalog(&self.policies)?);
         }
-        Ok(Resolved { rules, warnings })
+        Ok(Resolved {
+            rules: rules.into_iter().flatten().collect(),
+            warnings,
+        })
     }
 }
 

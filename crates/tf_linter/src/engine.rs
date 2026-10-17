@@ -106,17 +106,32 @@ impl Linter {
         let root = analysis.root_dir.as_path();
         let mut out = Vec::new();
         let mut rule_errors = Vec::new();
-        let graph = self
-            .rules
+        // A graph rule judges only resources of its declared types (data
+        // sources as `data.TYPE`), so one with none of them in this root
+        // has nothing to judge; nor is the graph built for no rule.
+        let present: std::collections::HashSet<String> = analysis
+            .modules
             .iter()
-            .any(|r| r.needs_graph())
-            .then(|| tf_semantic::graph::ResourceGraph::new(analysis));
-        for (i, rule) in self
-            .rules
-            .iter()
-            .enumerate()
-            .filter(|(_, r)| r.needs_graph())
-        {
+            .flat_map(|m| &m.resources)
+            .map(|r| match r.mode {
+                tf_semantic::Mode::Data => format!("data.{}", r.ty),
+                _ => r.ty.to_string(),
+            })
+            .collect();
+        let graph_rules: Vec<usize> = (0..self.rules.len())
+            .filter(|&i| {
+                let types = &self.infos[i].resource_types;
+                self.rules[i].needs_graph()
+                    && (types.is_empty()
+                        || types
+                            .iter()
+                            .any(|t| &**t == ANY_TYPE || present.contains(&**t)))
+            })
+            .collect();
+        let graph =
+            (!graph_rules.is_empty()).then(|| tf_semantic::graph::ResourceGraph::new(analysis));
+        for i in graph_rules {
+            let rule = &self.rules[i];
             match rule.judge_graph(graph.as_ref().expect("graph requested")) {
                 Ok(judgements) => {
                     for (r, j) in judgements {

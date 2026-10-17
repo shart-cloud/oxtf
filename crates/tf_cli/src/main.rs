@@ -42,12 +42,19 @@ const USAGE: &str = "usage:
   oxtf rules test --policy PATH... [--data PATH]... [--namespace NS]... [--rego-v0]
                                   run the policies' test_* rules (as `conftest verify`)
 
+Built in are the seed rules and the bundled Checkov catalog: Checkov 3.2.328's Terraform
+value checks and graph policies that translate exactly (693 rules), run natively.
+
 scan options:
   -r, --recursive         every directory under PATH containing .tf files is a root module
   -f, --format FMT        text (default) or json
       --var-file FILE     extra .tfvars for the root module(s) (repeatable)
       --rule ID           only run this rule (repeatable); ids come from the whole
-                          catalog: seed rules, --rule-file rules and Rego policies
+                          catalog: bundled Checkov rules, seed rules, --rule-file rules
+                          and Rego policies
+      --no-bundled        do not run the bundled Checkov catalog
+      --no-builtin        run neither the bundled catalog nor the seed rules, only
+                          --rule-file / --policy rules
       --rule-file PATH    also run rules from PATH (repeatable), each file by its format:
                           rule-IR JSON (e.g. from the tfscan Python expression API),
                           Checkov YAML/JSON policies, Rego (.rego), or a directory of any
@@ -87,7 +94,7 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut recursive = false;
     let mut plan: Option<PathBuf> = None;
     let mut source: Option<PathBuf> = None;
-    let mut catalog = Catalog::seed();
+    let mut catalog = Catalog::standard();
     let mut selection: Option<Vec<String>> = None;
     let mut var_files = Vec::new();
     let mut threads = None;
@@ -115,6 +122,11 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
                 .rule_files
                 .push(it.next().ok_or("--rule-file needs a value")?.into()),
             "--rego-native" => catalog.policies.native = true,
+            "--no-bundled" => catalog.bundled = false,
+            "--no-builtin" => {
+                catalog.bundled = false;
+                catalog.builtin = false;
+            }
             // An alias: every format is detected.
             "--policy" => catalog
                 .rule_files

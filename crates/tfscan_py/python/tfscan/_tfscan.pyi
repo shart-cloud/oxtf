@@ -198,6 +198,7 @@ def scan(
     all_namespaces: bool = False,
     policy_entries: Sequence[str] = ...,
     rego_v0: bool = False,
+    bundled: bool = True,
 ) -> tuple[ScanResult, int]: ...
 def compile_rules(json: str) -> list[CompiledRule]: ...
 def builtin_rules() -> list[dict[str, Any]]: ...
@@ -210,6 +211,7 @@ def rules_info(
     policy_entries: Sequence[str] = ...,
     policy_shape: Optional[str] = None,
     rego_v0: bool = False,
+    bundled: bool = True,
 ) -> tuple[list[dict[str, Any]], list[str]]: ...
 def test_policies(
     rule_files: Sequence[str | os.PathLike[str]],

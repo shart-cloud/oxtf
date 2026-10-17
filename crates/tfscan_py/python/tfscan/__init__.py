@@ -263,6 +263,7 @@ def _run(
     var_files: Sequence[PathLike] = (),
     rules: Sequence[Union[Rule, CallbackRule, CompiledRule]] = (),
     builtin: bool = True,
+    bundled: bool = True,
     select: Optional[Sequence[str]] = None,
     rule_files: Sequence[PathLike] = (),
     policies: Sequence[PathLike] = (),
@@ -285,6 +286,7 @@ def _run(
         source=source,
         var_files=[os.fspath(v) for v in var_files],
         builtin=builtin,
+        bundled=bundled,
         select=None if select is None else list(select),
         ir_rules=ir,
         callbacks=callbacks,
@@ -311,6 +313,7 @@ def scan(
     var_files: Sequence[PathLike] = (),
     rules: Sequence[Union[Rule, CallbackRule, CompiledRule]] = (),
     builtin: bool = True,
+    bundled: bool = True,
     select: Optional[Sequence[str]] = None,
     rule_files: Sequence[PathLike] = (),
     policies: Sequence[PathLike] = (),
@@ -328,8 +331,10 @@ def scan(
     """Scan Terraform root module directories.
 
     ``recursive``: every directory under ``path`` containing ``.tf`` files is
-    a root module. The rule catalog is the built-in rules (``builtin``),
-    plus ``rules``: expression rules (``tfscan.rule``), compiled IR rules
+    a root module. The rule catalog is the shipped rules (unless
+    ``builtin`` is false): the seed rules and, unless ``bundled`` is false,
+    the bundled Checkov catalog (Checkov 3.2.328's Terraform value checks
+    and graph policies, run natively); plus ``rules``: expression rules (``tfscan.rule``), compiled IR rules
     and callback rules, plus ``rule_files``: files and directories of any
     rule format (rule IR JSON, Checkov YAML/JSON policies, Rego), each file
     detected by its content, exactly as ``oxtf scan --rule-file``.
@@ -352,6 +357,7 @@ def scan(
         var_files=var_files,
         rules=rules,
         builtin=builtin,
+        bundled=bundled,
         select=select,
         rule_files=rule_files,
         policies=policies,
@@ -374,6 +380,7 @@ def scan_plan(
     source: Optional[PathLike] = None,
     rules: Sequence[Union[Rule, CallbackRule, CompiledRule]] = (),
     builtin: bool = True,
+    bundled: bool = True,
     select: Optional[Sequence[str]] = None,
     rule_files: Sequence[PathLike] = (),
     policies: Sequence[PathLike] = (),
@@ -397,6 +404,7 @@ def scan_plan(
         source=None if source is None else os.fspath(source),
         rules=rules,
         builtin=builtin,
+        bundled=bundled,
         select=select,
         rule_files=rule_files,
         policies=policies,
@@ -434,6 +442,7 @@ def rules(
     rule_files: Sequence[PathLike] = (),
     *,
     builtin: bool = True,
+    bundled: bool = True,
     data: Sequence[PathLike] = (),
     namespaces: Sequence[str] = (),
     all_namespaces: bool = False,
@@ -441,8 +450,9 @@ def rules(
     policy_shape: Optional[str] = None,
     rego_v0: bool = False,
 ) -> list[dict[str, Any]]:
-    """The rule catalog, as ``oxtf rules``: the built-in rules (unless
-    ``builtin`` is false) and every rule in ``rule_files`` (any format), each
+    """The rule catalog, as ``oxtf rules``: the shipped rules (unless
+    ``builtin`` is false: the seed rules and, unless ``bundled`` is false,
+    the bundled Checkov catalog) and every rule in ``rule_files`` (any format), each
     a dict with ``name``, ``level``, ``category``, ``description``,
     ``resource_types``, ``runs_on_module``, ``guideline`` and ``source``
     (``engine``, ``file``, ``line``). A rule file in a directory that does
@@ -452,6 +462,7 @@ def rules(
     out, skipped = _tfscan.rules_info(
         [os.fspath(p) for p in rule_files],
         builtin=builtin,
+        bundled=bundled,
         data=[os.fspath(p) for p in data],
         namespaces=list(namespaces),
         all_namespaces=all_namespaces,

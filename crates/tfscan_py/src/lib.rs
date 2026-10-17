@@ -1040,13 +1040,21 @@ struct PolicyArgs {
 }
 
 impl PolicyArgs {
-    fn catalog(self, builtin: bool, rego_native: bool, ir_rules: Vec<String>) -> PyResult<Catalog> {
+    fn catalog(
+        self,
+        builtin: bool,
+        bundled: bool,
+        rego_native: bool,
+        ir_rules: Vec<String>,
+    ) -> PyResult<Catalog> {
         let shape = self
             .shape
             .as_deref()
             .map(|s| s.parse::<tf_scan::Shape>().map_err(PyValueError::new_err))
             .transpose()?;
         Ok(Catalog {
+            // `builtin=False` means nothing shipped, as `oxtf --no-builtin`.
+            bundled: builtin && bundled,
             builtin,
             rule_files: self.rule_files,
             rule_json: ir_rules,
@@ -1067,12 +1075,13 @@ impl PolicyArgs {
 
 fn build_catalog(
     builtin: bool,
+    bundled: bool,
     ir_rules: Vec<String>,
     callbacks: Vec<Bound<'_, PyAny>>,
     rego_native: bool,
     policy: PolicyArgs,
 ) -> PyResult<PyCatalog> {
-    let mut catalog = policy.catalog(builtin, rego_native, ir_rules)?;
+    let mut catalog = policy.catalog(builtin, bundled, rego_native, ir_rules)?;
     let error = Arc::new(Mutex::new(None));
     let calls = Arc::new(std::sync::atomic::AtomicU64::new(0));
     for cb in &callbacks {
@@ -1114,7 +1123,9 @@ fn scan_error(e: tf_scan::ScanError) -> PyErr {
 
 /// Run one scan request. `paths` are root module directories, or `plan`
 /// is a `terraform show -json` file (with `source` as its module
-/// directory). `builtin`: run the seed rules. `select`: rule ids from the
+/// directory). `builtin`: run the shipped rules; `bundled`: with them, the
+/// bundled Checkov catalog (`tf_rule_ir::bundled`), not only the seed
+/// rules. `select`: rule ids from the
 /// whole catalog, or `None` for all. `ir_rules`: rule IR JSON documents.
 /// `callbacks`: `tfscan.CallbackRule` objects (attributes `name`,
 /// `resource_types`, `level`, `category`, `description`, `func`).
@@ -1126,7 +1137,7 @@ fn scan_error(e: tf_scan::ScanError) -> PyErr {
 /// of their seed rules. `overlay`: `(path, text)` pairs that shadow the
 /// disk for this scan.
 #[pyfunction]
-#[pyo3(signature = (paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], callbacks=vec![], rego_native=false, policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, _release_gil=true, rule_files=vec![], data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], rego_v0=false))]
+#[pyo3(signature = (paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], callbacks=vec![], rego_native=false, policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, _release_gil=true, rule_files=vec![], data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], rego_v0=false, bundled=true))]
 #[allow(clippy::too_many_arguments)]
 fn scan(
     py: Python<'_>,
@@ -1152,6 +1163,7 @@ fn scan(
     all_namespaces: bool,
     policy_entries: Vec<String>,
     rego_v0: bool,
+    bundled: bool,
 ) -> PyResult<(ScanResult, u64)> {
     if !_release_gil && !callbacks.is_empty() {
         // Workers would block on the GIL held by this thread.
@@ -1165,6 +1177,7 @@ fn scan(
         calls,
     } = build_catalog(
         builtin,
+        bundled,
         ir_rules,
         callbacks,
         rego_native,
@@ -1239,7 +1252,14 @@ fn _rule_time(
         catalog,
         error,
         calls,
-    } = build_catalog(builtin, ir_rules, callbacks, false, PolicyArgs::default())?;
+    } = build_catalog(
+        builtin,
+        false,
+        ir_rules,
+        callbacks,
+        false,
+        PolicyArgs::default(),
+    )?;
     let result = py.detach(move || -> Result<_, tf_scan::ScanError> {
         // Analyse once with no rules, then time the rules alone.
         let mut analyse = ScanRequest::dirs(paths, recursive);
@@ -1298,11 +1318,13 @@ fn rule_dict<'py>(py: Python<'py>, r: &RuleInfo) -> PyResult<Bound<'py, PyDict>>
     Ok(d)
 }
 
-/// The catalog `oxtf rules` lists: the built-in rules (unless `builtin` is
-/// false) and the rules in `rule_files` (any format), with the policy
-/// options. Returns (rules, warnings for skipped files).
+/// The catalog `oxtf rules` lists: the shipped rules (unless `builtin` is
+/// false: the seed rules, and the bundled Checkov catalog unless `bundled`
+/// is false) and the
+/// rules in `rule_files` (any format), with the policy options. Returns
+/// (rules, warnings for skipped files).
 #[pyfunction]
-#[pyo3(signature = (rule_files=vec![], builtin=true, data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], policy_shape=None, rego_v0=false))]
+#[pyo3(signature = (rule_files=vec![], builtin=true, data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], policy_shape=None, rego_v0=false, bundled=true))]
 #[allow(clippy::too_many_arguments)]
 fn rules_info<'py>(
     py: Python<'py>,
@@ -1314,6 +1336,7 @@ fn rules_info<'py>(
     policy_entries: Vec<String>,
     policy_shape: Option<String>,
     rego_v0: bool,
+    bundled: bool,
 ) -> PyResult<(Bound<'py, PyList>, Vec<String>)> {
     let catalog = PolicyArgs {
         rule_files,
@@ -1324,7 +1347,7 @@ fn rules_info<'py>(
         shape: policy_shape,
         rego_v0,
     }
-    .catalog(builtin, false, Vec::new())?;
+    .catalog(builtin, bundled, false, Vec::new())?;
     let resolved = catalog.resolve().map_err(scan_error)?;
     let out = PyList::empty(py);
     for r in Linter::new(resolved.rules).rules() {
@@ -1354,7 +1377,7 @@ fn test_policies(
         rego_v0,
         ..PolicyArgs::default()
     }
-    .catalog(false, false, Vec::new())?;
+    .catalog(false, false, false, Vec::new())?;
     let outcomes = tf_scan::verify_policies(&catalog).map_err(scan_error)?;
     Ok(outcomes
         .into_iter()

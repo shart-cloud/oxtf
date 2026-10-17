@@ -18,7 +18,7 @@ RESOURCE_COLUMNS = [
 
 
 def test_findings_table():
-    r = tfscan.scan(FIXTURES, recursive=True)
+    r = tfscan.scan(FIXTURES, recursive=True, bundled=False)
     t = r.findings_arrow()
     assert isinstance(t, pa.Table)
     assert t.column_names == FINDING_COLUMNS
@@ -53,7 +53,7 @@ def test_resources_table():
 
 
 def test_capsule_protocol_and_empty():
-    r = tfscan.scan(SSH_FIXTURES / "pass_restricted")
+    r = tfscan.scan(SSH_FIXTURES / "pass_restricted", bundled=False)
     t = pa.table(r)  # ScanResult implements __arrow_c_stream__
     assert t.num_rows == 0 and t.column_names == FINDING_COLUMNS
     stream = r._inner._findings_stream()

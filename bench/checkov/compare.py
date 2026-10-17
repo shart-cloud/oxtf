@@ -133,7 +133,7 @@ def main():
                              "case": value, "checkov": outcome})
                 blocks.append(text)
             (root / "main.tf").write_text("\n".join(blocks))
-    command = [str(args.native.resolve()), "scan", str(corpus), "--recursive", "--format", "json", "--rule-file", str(rules_file)]
+    command = [str(args.native.resolve()), "scan", str(corpus), "--recursive", "--format", "json", "--no-bundled", "--rule-file", str(rules_file)]
     start = time.perf_counter()
     native = subprocess.run(command, capture_output=True, text=True, timeout=120)
     elapsed = time.perf_counter() - start
