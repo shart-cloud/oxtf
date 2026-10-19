@@ -5,14 +5,20 @@
 //!
 //! `data/checkov/` holds the generated `rules.json`, the `manifest.json`
 //! inventory (every upstream check, translated or not, with its reason)
-//! and Checkov's license. `examples/bundle_checkov.rs` regenerates it from
+//! and Checkov's license. `build.rs` tabulates `rules.json` so a scan
+//! compiles only the rules it uses ([`rules`]).
+//! `examples/bundle_checkov.rs` regenerates the data from
 //! a value pack exported by `scripts/import_checkov.py` and the graph
 //! policies of the same Checkov install; `tests/bundled.rs` checks it
 //! against both when they are available.
 
-use serde::{Deserialize, Serialize};
+use std::sync::{Arc, OnceLock};
 
-use crate::{Origin, RuleSpec};
+use serde::{Deserialize, Serialize};
+use tf_linter::{DynRule, Judgement, RuleFailure, RuleInfo};
+use tf_semantic::{Module, Resource};
+
+use crate::{CompiledRule, Origin, RuleSpec};
 
 /// The Checkov release the bundled catalog was generated from.
 pub const CHECKOV_VERSION: &str = "3.2.328";
@@ -61,6 +67,114 @@ pub fn checkov() -> Result<Vec<RuleSpec>, String> {
             ..b.rule
         })
         .collect())
+}
+
+/// One bundled rule as `build.rs` tabulates it: what the linter reads
+/// before judging, and the rule's JSON.
+struct Header {
+    name: &'static str,
+    description: &'static str,
+    level: &'static str,
+    category: &'static str,
+    guideline: Option<&'static str>,
+    file: &'static str,
+    line: Option<u32>,
+    types: &'static [&'static str],
+    needs_graph: bool,
+    json: &'static str,
+}
+
+static TABLE: &[Header] = include!(concat!(env!("OUT_DIR"), "/bundled_checkov.rs"));
+
+/// The bundled Checkov rules, each compiled the first time it judges.
+///
+/// A scan judges only the rules of the resource types it meets, so it
+/// pays for those and not for the whole catalog. Listing rules compiles
+/// none.
+pub fn rules() -> Result<Vec<Box<dyn DynRule>>, String> {
+    TABLE
+        .iter()
+        .map(|h| {
+            let ctx = |e: String| format!("bundled rule {:?}: {e}", h.name);
+            Ok(Box::new(LazyRule {
+                header: h,
+                info: RuleInfo {
+                    name: Arc::from(h.name),
+                    category: crate::parse_category(h.category).map_err(ctx)?,
+                    level: crate::parse_level(h.level).map_err(ctx)?,
+                    description: Arc::from(h.description),
+                    resource_types: h.types.iter().map(|t| Arc::from(*t)).collect(),
+                    runs_on_module: false,
+                    guideline: h.guideline.map(Arc::from),
+                    source: tf_linter::RuleSource {
+                        engine: tf_linter::Engine::Checkov,
+                        file: Some(h.file.into()),
+                        line: h.line,
+                    },
+                },
+                compiled: OnceLock::new(),
+            }) as Box<dyn DynRule>)
+        })
+        .collect()
+}
+
+struct LazyRule {
+    header: &'static Header,
+    info: RuleInfo,
+    compiled: OnceLock<Result<CompiledRule, String>>,
+}
+
+impl LazyRule {
+    fn compiled(&self) -> Result<&CompiledRule, RuleFailure> {
+        self.compiled
+            .get_or_init(|| {
+                COMPILES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let spec: RuleSpec = serde_json::from_str(self.header.json)
+                    .map_err(|e| format!("bundled rule {:?}: {e}", self.header.name))?;
+                crate::compile(RuleSpec {
+                    origin: Origin(self.info.source.clone()),
+                    ..spec
+                })
+            })
+            .as_ref()
+            .map_err(Clone::clone)
+    }
+}
+
+static COMPILES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// How many bundled rules this process has compiled, for tests.
+#[doc(hidden)]
+pub fn compiled_count() -> usize {
+    COMPILES.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+impl DynRule for LazyRule {
+    fn info(&self) -> RuleInfo {
+        self.info.clone()
+    }
+    fn needs_graph(&self) -> bool {
+        self.header.needs_graph
+    }
+    fn judge_graph<'a>(
+        &self,
+        graph: &tf_semantic::graph::ResourceGraph<'a>,
+    ) -> Result<Vec<(&'a Resource, Judgement)>, RuleFailure> {
+        self.compiled()?.judge_graph(graph)
+    }
+    fn judge_resource(&self, r: &Resource) -> Result<Vec<Judgement>, RuleFailure> {
+        // A graph rule judges in `judge_graph` only (see `CompiledRule`).
+        if self.header.needs_graph {
+            return Ok(Vec::new());
+        }
+        self.compiled()?.judge_resource(r)
+    }
+    fn judge_module<'m>(
+        &self,
+        m: &'m Module,
+    ) -> Result<Vec<(&'m Resource, Judgement)>, RuleFailure> {
+        self.compiled()?.judge_module(m)
+    }
 }
 
 /// The generated catalog: `rules.json` and `manifest.json` text.

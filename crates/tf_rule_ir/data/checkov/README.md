@@ -7,6 +7,9 @@ rule IR. No Checkov code is included or run. Upstream IDs, names and
 categories are kept, and each rule records the upstream file it came from.
 
 - `rules.json`: the rules compiled into oxtf (`tf_rule_ir::bundled`).
+  `build.rs` turns it into a static table at build time, so a scan reads
+  no JSON at startup and compiles a rule only when it first judges a
+  resource.
 - `manifest.json`: every upstream Terraform check, `translated` or
   `unsupported` with the reason. Checks that are Python programs
   (`custom Python scan_resource_conf`) are not translated.

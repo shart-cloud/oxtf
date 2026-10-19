@@ -133,8 +133,7 @@ impl Catalog {
             }
         };
         if self.bundled {
-            let specs = tf_rule_ir::bundled::checkov().map_err(ScanError::Rules)?;
-            add(compile_specs(specs)?);
+            add(tf_rule_ir::bundled::rules().map_err(ScanError::Rules)?);
         }
         if self.builtin {
             add(tf_linter::rules::all());

@@ -58,6 +58,31 @@ fn bundled_catalog_compiles_and_matches_its_manifest() {
     assert_eq!(compiled.len(), names.len());
 }
 
+/// The lazy rules a scan uses report, before compiling, what their
+/// compiled rules would.
+#[test]
+fn lazy_rules_match_their_compiled_rules() {
+    use tf_linter::DynRule;
+
+    let lazy = bundled::rules().unwrap();
+    let specs = bundled::checkov().unwrap();
+    assert_eq!(lazy.len(), specs.len());
+    for (lazy, spec) in lazy.iter().zip(specs) {
+        let compiled = tf_rule_ir::compile(spec).unwrap();
+        let (l, c) = (lazy.info(), compiled.info());
+        assert_eq!(l.name, c.name);
+        assert_eq!(l.category, c.category, "{}", c.name);
+        assert_eq!(l.level, c.level, "{}", c.name);
+        assert_eq!(l.description, c.description, "{}", c.name);
+        assert_eq!(l.resource_types, c.resource_types, "{}", c.name);
+        assert_eq!(l.runs_on_module, c.runs_on_module, "{}", c.name);
+        assert_eq!(l.guideline, c.guideline, "{}", c.name);
+        assert_eq!(l.source, c.source, "{}", c.name);
+        assert_eq!(lazy.needs_graph(), compiled.needs_graph(), "{}", c.name);
+        assert_eq!(lazy.needs_files(), compiled.needs_files(), "{}", c.name);
+    }
+}
+
 #[test]
 #[ignore = "needs CHECKOV_PACK and CHECKOV_GRAPH_CHECKS"]
 fn bundled_catalog_is_current() {
