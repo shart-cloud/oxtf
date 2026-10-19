@@ -25,8 +25,9 @@
 //! check that raises. A finding is located by the check's
 //! `evaluated_keys` (the paths Checkov reports), else the resource.
 
+use rustc_hash::FxHashMap as HashMap;
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -406,7 +407,70 @@ impl Program {
 /// Every program function `stmts` call or reference (`{"func": key}`,
 /// a `{"funcref": key}` constant).
 fn calls(stmts: &[Stmt], f: &mut dyn FnMut(&str)) {
-    fn target(t: &Target, f: &mut dyn FnMut(&str)) {
+    walk(stmts, &mut |n| match n {
+        Node::Expr(Expr::Const { v }) => {
+            if let Some(Json::String(key)) = v.get("funcref") {
+                f(key);
+            }
+        }
+        Node::Expr(Expr::Call {
+            func: Func::Func { func },
+            ..
+        }) => f(func),
+        _ => {}
+    });
+}
+
+/// Methods that change their receiver in place.
+const MUTATING_METHODS: &[&str] = &[
+    "append",
+    "extend",
+    "insert",
+    "pop",
+    "remove",
+    "clear",
+    "reverse",
+    "sort",
+    "update",
+    "setdefault",
+    "popitem",
+    "add",
+    "discard",
+];
+
+/// Whether `stmts` could change a container reachable from the check's
+/// input in place: a subscript assignment, an augmented assignment (which
+/// extends a list or set in place), or a mutating method, named as a call
+/// or taken as a value. Conservative: any such construct counts, whatever
+/// its receiver.
+fn mutates(stmts: &[Stmt]) -> bool {
+    let mut found = false;
+    walk(stmts, &mut |n| {
+        found |= match n {
+            Node::Stmt(Stmt::Aug { .. }) => true,
+            Node::Stmt(Stmt::Assign { targets, .. }) => {
+                targets.iter().any(|t| matches!(t, Target::Sub { .. }))
+            }
+            Node::Expr(Expr::Call {
+                func: Func::Method { method, .. },
+                ..
+            }) => MUTATING_METHODS.contains(&method.as_str()),
+            Node::Expr(Expr::Attr { attr, .. }) => MUTATING_METHODS.contains(&attr.as_str()),
+            _ => false,
+        };
+    });
+    found
+}
+
+/// A node of a program, as [`walk`] visits them.
+enum Node<'a> {
+    Stmt(&'a Stmt),
+    Expr(&'a Expr),
+}
+
+/// Visit every statement and expression of `stmts`, outer first.
+fn walk(stmts: &[Stmt], f: &mut dyn FnMut(Node<'_>)) {
+    fn target(t: &Target, f: &mut dyn FnMut(Node<'_>)) {
         match t {
             Target::Tuple { elts } => elts.iter().for_each(|t| target(t, f)),
             Target::Sub { value, index } => {
@@ -417,28 +481,23 @@ fn calls(stmts: &[Stmt], f: &mut dyn FnMut(&str)) {
             Target::Name { .. } | Target::SelfAttr { .. } => {}
         }
     }
-    fn exprs(es: &[Expr], f: &mut dyn FnMut(&str)) {
+    fn exprs(es: &[Expr], f: &mut dyn FnMut(Node<'_>)) {
         es.iter().for_each(|e| expr(e, f));
     }
-    fn generators(gs: &[Generator], f: &mut dyn FnMut(&str)) {
+    fn generators(gs: &[Generator], f: &mut dyn FnMut(Node<'_>)) {
         for g in gs {
             target(&g.target, f);
             expr(&g.iter, f);
             exprs(&g.ifs, f);
         }
     }
-    fn expr(e: &Expr, f: &mut dyn FnMut(&str)) {
+    fn expr(e: &Expr, f: &mut dyn FnMut(Node<'_>)) {
+        f(Node::Expr(e));
         match e {
-            Expr::Const { v } => {
-                if let Some(Json::String(key)) = v.get("funcref") {
-                    f(key);
-                }
-            }
+            Expr::Const { .. } => {}
             Expr::Call { func, args, kwargs } => {
-                match func {
-                    Func::Func { func } => f(func),
-                    Func::Method { obj, .. } => expr(obj, f),
-                    Func::Builtin { .. } | Func::Local { .. } | Func::Class { .. } => {}
+                if let Func::Method { obj, .. } = func {
+                    expr(obj, f);
                 }
                 exprs(args, f);
                 kwargs.iter().for_each(|(_, e)| expr(e, f));
@@ -505,6 +564,7 @@ fn calls(stmts: &[Stmt], f: &mut dyn FnMut(&str)) {
         }
     }
     for s in stmts {
+        f(Node::Stmt(s));
         match s {
             Stmt::Expr { value } => expr(value, f),
             Stmt::Return { value } => {
@@ -514,8 +574,8 @@ fn calls(stmts: &[Stmt], f: &mut dyn FnMut(&str)) {
             }
             Stmt::If { test, body, orelse } => {
                 expr(test, f);
-                calls(body, f);
-                calls(orelse, f);
+                walk(body, f);
+                walk(orelse, f);
             }
             Stmt::For {
                 target: t,
@@ -525,8 +585,8 @@ fn calls(stmts: &[Stmt], f: &mut dyn FnMut(&str)) {
             } => {
                 target(t, f);
                 expr(iter, f);
-                calls(body, f);
-                calls(orelse, f);
+                walk(body, f);
+                walk(orelse, f);
             }
             Stmt::Assign { targets, value } => {
                 targets.iter().for_each(|t| target(t, f));
@@ -544,12 +604,12 @@ fn calls(stmts: &[Stmt], f: &mut dyn FnMut(&str)) {
                 orelse,
                 finalbody,
             } => {
-                calls(body, f);
+                walk(body, f);
                 for h in handlers {
-                    calls(&h.body, f);
+                    walk(&h.body, f);
                 }
-                calls(orelse, f);
-                calls(finalbody, f);
+                walk(orelse, f);
+                walk(finalbody, f);
             }
             Stmt::Pass | Stmt::Break | Stmt::Continue | Stmt::Raise { .. } => {}
         }
@@ -658,7 +718,7 @@ impl Py {
                     "iam" => Py::Data(iam::definition()?),
                     "object" => {
                         let class = inner["class"].as_str().ok_or("object class")?;
-                        let mut attrs = HashMap::new();
+                        let mut attrs = HashMap::default();
                         for (k, v) in inner["attrs"].as_object().ok_or("object attrs")? {
                             attrs.insert(k.clone(), Py::from_const(v)?);
                         }
@@ -1395,13 +1455,10 @@ impl<'p> Interp<'p> {
                 let i = self.index_of(index, chars.len())?;
                 Ok(Py::str(chars[i].encode_utf8(&mut [0; 4])))
             }
-            Py::Dict(d) => {
-                let items = d.borrow().clone();
-                match self.dict_get(&items, index)? {
-                    Some(v) => Ok(v),
-                    None => exc("KeyError"),
-                }
-            }
+            Py::Dict(d) => match self.dict_get(&d.borrow(), index)? {
+                Some(v) => Ok(v),
+                None => exc("KeyError"),
+            },
             Py::Match(groups) => {
                 let i = self.index_of(index, groups.len())?;
                 Ok(groups[i].as_deref().map_or(Py::None, Py::str))
@@ -1715,6 +1772,11 @@ impl<'p> Interp<'p> {
 
     fn binop(&self, op: BinOp, a: &Py, b: &Py, in_place: bool) -> R<Py> {
         let (a, b) = (self.concrete(a)?, self.concrete(b)?);
+        let int = |v: &Py| match v {
+            Py::Int(i) => Some(*i),
+            Py::Bool(b) => Some(*b as i64),
+            _ => None,
+        };
         // Set algebra: `-` `|` `&` `^`, keeping the left operand's order.
         if let (Py::Set(x), Py::Set(y)) = (&a, &b)
             && matches!(
@@ -1749,11 +1811,6 @@ impl<'p> Interp<'p> {
             return Ok(Py::Set(Rc::new(RefCell::new(out))));
         }
         if matches!(op, BinOp::Bitor | BinOp::Bitand | BinOp::Bitxor) {
-            let int = |v: &Py| match v {
-                Py::Int(i) => Some(*i),
-                Py::Bool(b) => Some(*b as i64),
-                _ => None,
-            };
             return match (int(&a), int(&b)) {
                 (Some(x), Some(y)) => {
                     let r = match op {
@@ -1792,11 +1849,6 @@ impl<'p> Interp<'p> {
             (Py::Str(_), _, BinOp::Mod) => return unsupported("printf-style formatting"),
             _ => {}
         }
-        let int = |v: &Py| match v {
-            Py::Int(i) => Some(*i),
-            Py::Bool(b) => Some(*b as i64),
-            _ => None,
-        };
         if let (Some(x), Some(y)) = (int(&a), int(&b)) {
             return Ok(match op {
                 BinOp::Add => Py::Int(x.checked_add(y).ok_or_else(overflow)?),
@@ -1926,7 +1978,7 @@ impl<'p> Interp<'p> {
         let def = self.class(class)?;
         let obj = Py::Instance(Rc::new(Instance {
             class: Rc::from(class),
-            attrs: RefCell::new(HashMap::new()),
+            attrs: RefCell::new(HashMap::default()),
         }));
         if let Some(init) = def.methods.get("__init__") {
             let mut all = vec![obj.clone()];
@@ -1996,7 +2048,7 @@ impl<'p> Interp<'p> {
         let Some(f) = program.functions.get(key) else {
             return unsupported(format!("undefined function {key}"));
         };
-        let mut env = Env::new();
+        let mut env = Env::default();
         if args.len() > f.params.len() && f.vararg.is_none() {
             return exc("TypeError");
         }
@@ -2017,7 +2069,7 @@ impl<'p> Interp<'p> {
             if !env.contains_key(p) {
                 match f.defaults.get(i).and_then(Option::as_ref) {
                     Some(d) => {
-                        let v = self.expr(d, &mut Env::new())?;
+                        let v = self.expr(d, &mut Env::default())?;
                         env.insert(p.clone(), v);
                     }
                     None => return exc("TypeError"),
@@ -2356,12 +2408,10 @@ impl<'p> Interp<'p> {
                     return exc("TypeError");
                 };
                 match (self.concrete(&n)?, self.concrete(p)?) {
-                    (Py::Str(n), Py::Str(p)) if !p.contains('[') => {
-                        Py::Bool(glob(p.as_bytes(), n.as_bytes()))
-                    }
+                    (Py::Str(n), Py::Str(p)) if !p.contains('[') => Py::Bool(glob(&p, &n)),
                     (Py::Str(n), Py::Str(p)) => {
                         thread_local! {
-                            static COMPILED: RefCell<HashMap<Rc<str>, regex::Regex>> = RefCell::new(HashMap::new());
+                            static COMPILED: RefCell<HashMap<Rc<str>, regex::Regex>> = RefCell::new(HashMap::default());
                         }
                         let re = match COMPILED.with(|m| m.borrow().get(&p).cloned()) {
                             Some(re) => re,
@@ -2425,7 +2475,7 @@ impl<'p> Interp<'p> {
                 }
             }
             "yaml.safe_load" => match self.concrete(&a0.ok_or_else(type_error)?)? {
-                Py::Str(s) => match crate::pyyaml::load(&s) {
+                Py::Str(s) => match tf_yaml::pyyaml::load(&s) {
                     Ok(doc) => json_to_py(&doc.value),
                     Err(_) => return exc("YAMLError"),
                 },
@@ -2762,8 +2812,7 @@ impl<'p> Interp<'p> {
         Ok(match (&recv, name) {
             (Py::Dict(d), "get") => {
                 let key = a0.ok_or_else(type_error)?;
-                let items = d.borrow().clone();
-                match self.dict_get(&items, &key)? {
+                match self.dict_get(&d.borrow(), &key)? {
                     Some(v) => v,
                     None => Self::arg(&args, &kwargs, 1, "default").unwrap_or(Py::None),
                 }
@@ -2818,12 +2867,14 @@ impl<'p> Interp<'p> {
             }
             (Py::Dict(d), "setdefault") => {
                 let key = a0.ok_or_else(type_error)?;
-                let items = d.borrow().clone();
-                match self.dict_get(&items, &key)? {
+                let found = self.dict_get(&d.borrow(), &key)?;
+                match found {
                     Some(v) => v,
                     None => {
                         let v = args.get(1).cloned().unwrap_or(Py::None);
-                        let mut items = items;
+                        // Insert on a copy: comparing keys must not hold
+                        // the dict mutably.
+                        let mut items = d.borrow().clone();
                         self.dict_insert(&mut items, key, v.clone())?;
                         *d.borrow_mut() = items;
                         v
@@ -2926,30 +2977,14 @@ impl<'p> Interp<'p> {
                     keyed.push((k, item));
                 }
                 // A stable sort; the first comparison that fails (a
-                // TypeError across types) fails the call, as in Python.
-                let mut failed = None;
-                keyed.sort_by(|(a, _), (b, _)| {
-                    if failed.is_some() {
-                        return std::cmp::Ordering::Equal;
-                    }
-                    match self.order(a, b) {
-                        Ok(o) => {
-                            if reverse {
-                                o.reverse()
-                            } else {
-                                o
-                            }
-                        }
-                        Err(f) => {
-                            failed = Some(f);
-                            std::cmp::Ordering::Equal
-                        }
-                    }
-                });
-                if let Some(f) = failed {
-                    return Err(f);
-                }
-                *l.borrow_mut() = keyed.into_iter().map(|(_, v)| v).collect();
+                // TypeError across types, an abstract value) fails the
+                // call, as in Python. (`slice::sort_by` may panic on a
+                // comparator that stops being a total order mid-sort.)
+                let sorted = sort_fallible(keyed, |(a, _), (b, _)| {
+                    let o = self.order(a, b)?;
+                    Ok(if reverse { o.reverse() } else { o })
+                })?;
+                *l.borrow_mut() = sorted.into_iter().map(|(_, v)| v).collect();
                 Py::None
             }
             (Py::Set(s), "add") => {
@@ -3658,15 +3693,17 @@ impl Interp<'_> {
                 self.action_data(&service, &action)?
             }
             "iam.remove_actions_not_matching_access_level" => {
-                let actions = self.iterate(&arg(0, "actions_list").ok_or_else(type_error)?)?;
+                let list = arg(0, "actions_list").ok_or_else(type_error)?;
+                let (actions, star) = (self.iterate(&list)?, self.is_star_list(&list)?);
                 let level = text(self, arg(1, "access_level"))?;
-                Py::list(self.matching_level(&actions, &level)?)
+                Py::list(self.matching_level(&actions, star, &level)?)
             }
             "iam.remove_read_level_actions" => {
-                let actions = self.iterate(&arg(0, "actions_list").ok_or_else(type_error)?)?;
+                let list = arg(0, "actions_list").ok_or_else(type_error)?;
+                let (actions, star) = (self.iterate(&list)?, self.is_star_list(&list)?);
                 let mut out = Vec::new();
                 for level in ["Write", "Permissions management", "Tagging"] {
-                    out.extend(self.matching_level(&actions, level)?);
+                    out.extend(self.matching_level(&actions, star, level)?);
                 }
                 Py::list(out)
             }
@@ -3767,16 +3804,7 @@ impl Interp<'_> {
             if let Some(deps) = entry["dependent_actions"].as_array() {
                 dependent.borrow_mut().extend(deps.iter().map(json_to_py));
             }
-            let arn = if rt.is_empty() {
-                "*".to_string()
-            } else {
-                sd["resources"]
-                    .get(rt)
-                    .and_then(|r| r.get("arn"))
-                    .and_then(Json::as_str)
-                    .unwrap_or("*")
-                    .to_string()
-            };
+            let arn = iam::arn_format(sd, rt);
             let pairs = vec![
                 (
                     Py::str("action"),
@@ -3788,7 +3816,7 @@ impl Interp<'_> {
                     json_to_py(&privilege["access_level"]),
                 ),
                 (Py::str("api_documentation_link"), Py::str("")),
-                (Py::str("resource_arn_format"), Py::str(&arn)),
+                (Py::str("resource_arn_format"), Py::str(arn)),
                 (Py::str("condition_keys"), Py::list(Vec::new())),
                 (Py::str("dependent_actions"), Py::List(dependent.clone())),
             ];
@@ -3797,10 +3825,20 @@ impl Interp<'_> {
         out
     }
 
-    /// `remove_actions_not_matching_access_level`.
-    fn matching_level(&self, actions: &[Py], level: &str) -> R<Vec<Py>> {
+    /// `actions_list == ["*"]`: a list (no other iterable) of just `"*"`.
+    fn is_star_list(&self, v: &Py) -> R<bool> {
+        let Py::List(l) = self.concrete(v)? else {
+            return Ok(false);
+        };
+        let items = l.borrow().clone();
+        Ok(items.len() == 1 && self.eq(&items[0], &Py::str("*"))?)
+    }
+
+    /// `remove_actions_not_matching_access_level`; `star` is whether the
+    /// argument was the list `["*"]`, which stands for every action.
+    fn matching_level(&self, actions: &[Py], star: bool, level: &str) -> R<Vec<Py>> {
         let mut actions = actions.to_vec();
-        if actions.len() == 1 && self.eq(&actions[0], &Py::str("*"))? {
+        if star {
             actions = Vec::new();
             for prefix in iam::prefixes() {
                 let Some(sd) = iam::service(prefix) else {
@@ -3854,7 +3892,7 @@ impl Interp<'_> {
         // A pure function of the bundled database: each wildcard is
         // expanded once per thread, however many checks and resources ask.
         thread_local! {
-            static EXPANDED: RefCell<Expansions> = RefCell::new(HashMap::new());
+            static EXPANDED: RefCell<Expansions> = RefCell::new(HashMap::default());
         }
         if let Some(hit) = EXPANDED.with(|m| m.borrow().get(&action).cloned()) {
             return Ok(hit.iter().map(|a| Py::Str(a.clone())).collect());
@@ -3884,7 +3922,7 @@ impl Interp<'_> {
                     .iter()
                     .filter(|(_, lower)| match &regex {
                         Some(re) => re.is_match(lower),
-                        None => glob(name_glob.as_bytes(), lower.as_bytes()),
+                        None => glob(name_glob, lower),
                     })
                     .map(|(name, _)| Rc::from(format!("{prefix}:{name}").as_str()))
                     .collect()
@@ -3907,14 +3945,24 @@ impl Interp<'_> {
 type Expansions = HashMap<Rc<str>, Rc<Vec<Rc<str>>>>;
 
 /// `fnmatchcase` for a pattern of `*` and `?` (and literal characters).
-fn glob(p: &[u8], s: &[u8]) -> bool {
+/// `?` matches one character, as in Python, not one byte.
+fn glob(p: &str, s: &str) -> bool {
+    if p.is_ascii() && s.is_ascii() {
+        glob_units(p.as_bytes(), s.as_bytes(), b'*', b'?')
+    } else {
+        let (p, s): (Vec<char>, Vec<char>) = (p.chars().collect(), s.chars().collect());
+        glob_units(&p, &s, '*', '?')
+    }
+}
+
+fn glob_units<T: Copy + PartialEq>(p: &[T], s: &[T], star_unit: T, any: T) -> bool {
     let (mut pi, mut si) = (0, 0);
     let (mut star, mut mark) = (None, 0);
     while si < s.len() {
-        if pi < p.len() && (p[pi] == b'?' || p[pi] == s[si]) {
+        if pi < p.len() && (p[pi] == any || p[pi] == s[si]) {
             pi += 1;
             si += 1;
-        } else if pi < p.len() && p[pi] == b'*' {
+        } else if pi < p.len() && p[pi] == star_unit {
             star = Some(pi);
             mark = si;
             pi += 1;
@@ -3926,10 +3974,56 @@ fn glob(p: &[u8], s: &[u8]) -> bool {
             return false;
         }
     }
-    while pi < p.len() && p[pi] == b'*' {
+    while pi < p.len() && p[pi] == star_unit {
         pi += 1;
     }
     pi == p.len()
+}
+
+/// A stable sort by a fallible comparison (a bottom-up merge sort): the
+/// first comparison that fails fails the sort, as a Python `TypeError`
+/// does, and no comparison runs after it. `slice::sort_by` cannot be
+/// used: a comparator that goes inconsistent after an error is no longer
+/// a total order, which it may panic on.
+fn sort_fallible<T>(
+    items: Vec<T>,
+    mut cmp: impl FnMut(&T, &T) -> R<std::cmp::Ordering>,
+) -> R<Vec<T>> {
+    let n = items.len();
+    let mut order: Vec<usize> = (0..n).collect();
+    let mut scratch = order.clone();
+    let mut width = 1;
+    while width < n {
+        let mut start = 0;
+        while start < n {
+            let mid = (start + width).min(n);
+            let end = (start + 2 * width).min(n);
+            let (mut l, mut r, mut k) = (start, mid, start);
+            while l < mid && r < end {
+                // Equal elements keep their order: take the right one only
+                // when it is strictly less.
+                if cmp(&items[order[r]], &items[order[l]])? == std::cmp::Ordering::Less {
+                    scratch[k] = order[r];
+                    r += 1;
+                } else {
+                    scratch[k] = order[l];
+                    l += 1;
+                }
+                k += 1;
+            }
+            scratch[k..k + (mid - l)].copy_from_slice(&order[l..mid]);
+            k += mid - l;
+            scratch[k..k + (end - r)].copy_from_slice(&order[r..end]);
+            start = end;
+        }
+        std::mem::swap(&mut order, &mut scratch);
+        width *= 2;
+    }
+    let mut slots: Vec<Option<T>> = items.into_iter().map(Some).collect();
+    Ok(order
+        .into_iter()
+        .map(|i| slots[i].take().expect("each index placed once"))
+        .collect())
 }
 
 /// An element of bundled data: a container stays a view, a scalar is read.
@@ -3976,7 +4070,7 @@ pub mod iam {
                 let header: Json = serde_json::from_str(lines.next().ok_or("iam.ndjson: empty")?)
                     .map_err(|e| format!("iam.ndjson: {e}"))?;
                 let mut prefixes = Vec::new();
-                let mut services = std::collections::HashMap::new();
+                let mut services = std::collections::HashMap::default();
                 for line in lines {
                     // {"prefix":"<p>","service":...}: the prefix without a parse.
                     let rest = line
@@ -4011,6 +4105,17 @@ pub mod iam {
                 .map(|mut v| v["service"].take())
                 .unwrap_or(Json::Null)
         }))
+    }
+
+    /// The prefix `get_service_prefix_data` reads for `prefix`: itself, or
+    /// `servicecatalog` for `catalog` (the service name in Service Catalog
+    /// resource ARNs).
+    fn aliased(prefix: &str) -> &str {
+        if prefix == "catalog" && !compact().is_ok_and(|c| c.services.contains_key(prefix)) {
+            "servicecatalog"
+        } else {
+            prefix
+        }
     }
 
     /// `policy_sentry.shared.iam_data.iam_definition`, built (once) for
@@ -4055,11 +4160,7 @@ pub mod iam {
     /// `get_service_prefix_data`: the service, or `servicecatalog` for the
     /// `catalog` ARNs of its resource types; `None` where it returns `{}`.
     pub fn service(prefix: &str) -> Option<&'static Json> {
-        raw_service(prefix).or_else(|| {
-            (prefix == "catalog")
-                .then(|| raw_service("servicecatalog"))
-                .flatten()
-        })
+        raw_service(aliased(prefix))
     }
 
     /// A service's action names, as written and lowercased.
@@ -4073,7 +4174,7 @@ pub mod iam {
         if let Some(found) = names.get(prefix) {
             return found;
         }
-        let list: Vec<(String, String)> = compact_service(prefix)
+        let list: Vec<(String, String)> = compact_service(aliased(prefix))
             .and_then(|s| s["actions"].as_object())
             .into_iter()
             .flatten()
@@ -4093,11 +4194,7 @@ pub mod iam {
 
     /// `get_actions_for_service(prefix, lowercase)`, from the compact data.
     pub fn actions_for_service(prefix: &str, lowercase: bool) -> Vec<String> {
-        let Some(service) = compact_service(prefix).or_else(|| {
-            (prefix == "catalog")
-                .then(|| compact_service("servicecatalog"))
-                .flatten()
-        }) else {
+        let Some(service) = compact_service(aliased(prefix)) else {
             return Vec::new();
         };
         service["actions"]
@@ -4127,19 +4224,21 @@ pub mod iam {
             .as_object()
             .into_iter()
             .flatten()
-            .map(|(rt, _)| {
-                if rt.is_empty() {
-                    "*".to_string()
-                } else {
-                    service["resources"]
-                        .get(rt)
-                        .and_then(|r| r.get("arn"))
-                        .and_then(Json::as_str)
-                        .unwrap_or("*")
-                        .to_string()
-                }
-            })
+            .map(|(rt, _)| arn_format(service, rt).to_string())
             .collect()
+    }
+
+    /// `create_action_data_entries`' `resource_arn_format` for resource
+    /// type `rt`: its ARN, or `*` for the empty type or one without an ARN.
+    pub fn arn_format<'a>(service: &'a Json, rt: &str) -> &'a str {
+        if rt.is_empty() {
+            return "*";
+        }
+        service["resources"]
+            .get(rt)
+            .and_then(|r| r.get("arn"))
+            .and_then(Json::as_str)
+            .unwrap_or("*")
     }
 
     fn build_service(service: &Json) -> Json {
@@ -4243,16 +4342,91 @@ impl Converter {
 
 // -- running a check -----------------------------------------------------
 
-/// Run `program` on `resource`.
-pub fn evaluate(program: &Program, resource: &Resource) -> Verdict {
+/// A program ready to run: what [`compile`](crate::compile) keeps.
+#[derive(Debug)]
+pub struct Check {
+    program: Arc<Program>,
+    /// The program never changes its input in place ([`mutates`]), so
+    /// every run on a resource can read the one conversion of its
+    /// configuration instead of building its own.
+    shares_input: bool,
+}
+
+impl Check {
+    pub fn new(program: Program) -> Check {
+        let shares_input = !program.functions.values().any(|f| mutates(&f.body));
+        Check {
+            program: Arc::new(program),
+            shares_input,
+        }
+    }
+
+    pub fn program(&self) -> &Program {
+        &self.program
+    }
+
+    /// Run the check on `resource`.
+    pub fn evaluate(&self, resource: &Resource) -> Verdict {
+        evaluate(self, resource)
+    }
+}
+
+/// Per-thread state shared by the checks that judge one resource in
+/// turn: the resource's configuration as Python values (read by every
+/// check whose program does not mutate it) and the mutable class
+/// attributes (Checkov's class-level caches, shared by every check of the
+/// resource as in Checkov's process). The engine judges a resource's
+/// rules on one thread, one after the other, so one entry is enough.
+struct ResourceCache {
+    uid: u64,
+    input: Option<Py>,
+    statics: HashMap<String, Py>,
+}
+
+thread_local! {
+    static CACHE: RefCell<ResourceCache> = RefCell::new(ResourceCache {
+        uid: u64::MAX,
+        input: None,
+        statics: HashMap::default(),
+    });
+}
+
+/// The resource's configuration as the check receives it. Ids of `OneOf`
+/// values are assigned in a fixed traversal order, so every run sees the
+/// same `OneOf` under the same id, whether or not the conversion is
+/// shared. Checkov's runner adds the resource's address (and its lines,
+/// which no exported check reads).
+fn input(resource: &Resource, conf: &Value) -> Py {
+    let py_conf = Converter { next_id: 0 }.py(conf);
+    if let Py::Dict(d) = &py_conf {
+        d.borrow_mut()
+            .push((Py::str("__address__"), Py::str(&resource.address)));
+    }
+    py_conf
+}
+
+fn run(check: &Check, resource: &Resource, conf: &Value) -> Verdict {
+    let fresh = CACHE.with(|c| c.borrow().uid != resource.uid);
+    if fresh {
+        CACHE.with(|c| {
+            *c.borrow_mut() = ResourceCache {
+                uid: resource.uid,
+                input: None,
+                statics: HashMap::default(),
+            }
+        });
+    }
+    run_with(check, resource, conf, &mut HashMap::default(), &mut 0)
+}
+
+fn evaluate(check: &Check, resource: &Resource) -> Verdict {
     let conf = crate::checkov::resource_configuration(resource);
-    let mut runs = 0;
-    let t = std::time::Instant::now();
-    let v = run(program, resource, conf, &mut HashMap::new(), &mut runs);
-    if debug() == "time" {
+    let timer = (debug() == "time").then(std::time::Instant::now);
+    let v = run(check, resource, conf);
+    if let Some(t) = timer {
         eprintln!(
             "TIME {} {} {}us",
-            program.entry,
+            check.program.entry,
             resource.address,
             t.elapsed().as_micros()
         );
@@ -4260,50 +4434,41 @@ pub fn evaluate(program: &Program, resource: &Resource) -> Verdict {
     v
 }
 
-fn run(
-    program: &Program,
+fn run_with(
+    check: &Check,
     resource: &Resource,
     conf: &Value,
     choices: &mut HashMap<usize, usize>,
     runs: &mut usize,
 ) -> Verdict {
+    let program = &*check.program;
     *runs += 1;
     if *runs > RUN_BUDGET {
         return Verdict::new(Truth::Unknown, None);
     }
-    // Ids are assigned in a fixed traversal order, so every run sees the
-    // same OneOf under the same id.
-    let py_conf = Converter { next_id: 0 }.py(conf);
-    // Checkov's runner adds the resource's address (and its lines, which
-    // no exported check reads).
-    if let Py::Dict(d) = &py_conf {
-        d.borrow_mut()
-            .push((Py::str("__address__"), Py::str(&resource.address)));
-    }
+    let py_conf = if check.shares_input {
+        CACHE.with(|c| {
+            c.borrow_mut()
+                .input
+                .get_or_insert_with(|| input(resource, conf))
+                .clone()
+        })
+    } else {
+        input(resource, conf)
+    };
     let mut self_attrs: HashMap<String, Py> = program
         .self_attrs
         .iter()
         .filter_map(|(k, v)| Py::from_const(v).ok().map(|p| (k.clone(), p)))
         .collect();
     self_attrs.insert("entity_type".into(), Py::str(&resource.ty));
-    // Mutable class attributes (Checkov's class-level caches, such as the
-    // cloudsplaining checks' policy documents) are shared by every check of
-    // this resource, as in Checkov's process; a forked run starts afresh.
-    thread_local! {
-        static SHARED: RefCell<(u64, HashMap<String, Py>)> = RefCell::new((u64::MAX, HashMap::new()));
-    }
+    // Mutable class attributes are shared by every check of this
+    // resource; a forked run starts afresh.
     let shared = choices.is_empty();
     let statics = if shared {
-        SHARED.with(|s| {
-            let s = s.borrow();
-            if s.0 == resource.uid {
-                s.1.clone()
-            } else {
-                HashMap::new()
-            }
-        })
+        CACHE.with(|c| c.borrow().statics.clone())
     } else {
-        HashMap::new()
+        HashMap::default()
     };
     let mut interp = Interp {
         program,
@@ -4316,7 +4481,7 @@ fn run(
     let outcome = interp.call_function(&program.entry, vec![py_conf], Vec::new());
     if shared && !matches!(outcome, Err(Flow::Fork(..))) {
         let statics = std::mem::take(&mut interp.statics);
-        SHARED.with(|s| *s.borrow_mut() = (resource.uid, statics));
+        CACHE.with(|c| c.borrow_mut().statics = statics);
     }
     if debug() == "2" {
         let what = match &outcome {
@@ -4351,7 +4516,7 @@ fn run(
             let verdicts = (0..n)
                 .map(|i| {
                     choices.insert(id, i);
-                    let v = run(program, resource, conf, choices, runs);
+                    let v = run_with(check, resource, conf, choices, runs);
                     choices.remove(&id);
                     v
                 })
@@ -4458,4 +4623,50 @@ fn _assert_send_sync() {
     fn check<T: Send + Sync>() {}
     check::<Program>();
     check::<Arc<Program>>();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn glob_matches_characters_not_bytes() {
+        assert!(glob("?", "é"));
+        assert!(glob("s3:get*", "s3:getobject"));
+        assert!(!glob("s3:get?", "s3:getobject"));
+        assert!(glob("a*b*", "ab"));
+        assert!(!glob("a", ""));
+        assert!(glob("*", ""));
+    }
+
+    #[test]
+    fn sort_fallible_is_stable_and_surfaces_the_first_error() {
+        fn sorted<T: Ord + Clone>(items: &[(T, char)], reverse: bool) -> Vec<(T, char)> {
+            sort_fallible(items.to_vec(), |a, b| {
+                let o = a.0.cmp(&b.0);
+                Ok(if reverse { o.reverse() } else { o })
+            })
+            .unwrap_or_else(|_| panic!("comparison failed"))
+        }
+        // Stable: equal keys keep their order, forwards and reversed.
+        let items = [(2, 'a'), (1, 'b'), (2, 'c'), (1, 'd'), (0, 'e')];
+        assert_eq!(
+            sorted(&items, false),
+            [(0, 'e'), (1, 'b'), (1, 'd'), (2, 'a'), (2, 'c')]
+        );
+        assert_eq!(
+            sorted(&items, true),
+            [(2, 'a'), (2, 'c'), (1, 'b'), (1, 'd'), (0, 'e')]
+        );
+        // Degenerate sizes.
+        assert_eq!(sorted(&[] as &[(i32, char)], false), []);
+        assert_eq!(sorted(&[(7, 'x')], false), [(7, 'x')]);
+        // A failing comparison fails the sort (no panic, no partial order).
+        let mixed = vec![Py::Int(1), Py::None, Py::Int(0)];
+        let err = sort_fallible(mixed, |a, b| match (a, b) {
+            (Py::Int(x), Py::Int(y)) => Ok(x.cmp(y)),
+            _ => exc("TypeError"),
+        });
+        assert!(matches!(err, Err(Flow::Exc(name)) if &*name == "TypeError"));
+    }
 }

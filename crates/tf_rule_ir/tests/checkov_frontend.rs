@@ -4,7 +4,7 @@
 
 use serde_json::Value as Json;
 use tf_rule_ir::checkov_policy::compile_jsonpath;
-use tf_rule_ir::pyyaml;
+use tf_yaml::pyyaml;
 
 fn fixtures() -> Json {
     serde_json::from_str(include_str!("fixtures/checkov_frontend.json")).unwrap()

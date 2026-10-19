@@ -7,7 +7,7 @@
 //! Python importer did (`_translate_graph`, now the oracle in
 //! `bench/checkov/legacy_graph_importer.py`), and every shape
 //! that importer rejected is rejected here, with the same blocker codes and
-//! JSON Pointer paths. YAML is read as Checkov reads it ([`crate::pyyaml`]).
+//! JSON Pointer paths. YAML is read as Checkov reads it ([`tf_yaml::pyyaml`]).
 //!
 //! Where Checkov's own loader and the old importer disagree, this follows
 //! Checkov: `resource_types: all` (which the importer treated as "any
@@ -23,7 +23,7 @@ use serde_json::{Value as Json, json};
 use crate::RuleSpec;
 use crate::checkov::{AttributeCheck, AttributeOp};
 use crate::jsonpath::field_name;
-use crate::pyyaml::{self, Position};
+use tf_yaml::pyyaml::{self, Position};
 
 /// One reason a policy cannot be translated.
 #[derive(Clone, Debug, PartialEq, Eq)]

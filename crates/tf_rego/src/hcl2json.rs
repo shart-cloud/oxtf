@@ -24,7 +24,7 @@ use tf_linter::ConfigFile;
 use tf_semantic::{Mode, Module, Resource};
 use tf_span::{FileId, GetSpan, Span};
 
-use crate::projection::{self, Abstraction, Projection, Shape};
+use crate::projection::{self, Abstraction, Projection};
 
 /// hcl2json's rendering of a parsed file (Conftest's `parse_config`).
 pub fn raw<'a>(ast: &'a tf_ast::File<'a>, text: &str) -> Result<Json, String> {
@@ -86,7 +86,7 @@ pub fn evaluated<'m>(cf: &ConfigFile<'m>) -> Result<FileDocument<'m>, String> {
 /// One instance's body: the per-resource projection plus `count` and
 /// `for_each` (the analysis keeps them off the body).
 fn instance_body(r: &Resource) -> (Map<String, Json>, Vec<Abstraction>) {
-    let mut p = projection::project(r, Shape::Hcl);
+    let mut p = projection::project(r);
     for (name, v) in [("count", &r.count), ("for_each", &r.for_each)] {
         if let Some(v) = v
             && let Some(j) = projection::project_value(v, name, &mut p)

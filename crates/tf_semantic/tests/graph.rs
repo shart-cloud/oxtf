@@ -138,6 +138,31 @@ resource "test_link" "length" { size = length([test_node.n["a"].id]) }
 }
 
 #[test]
+fn a_field_taken_from_a_local_object_does_not_carry_sibling_dependencies() {
+    let result = edges(&[(
+        "main.tf",
+        r#"
+resource "test_node" "a" {}
+resource "test_node" "b" {}
+locals { cfg = { a = test_node.a.id, b = test_node.b.id, lit = "x" } }
+resource "test_link" "a" { id = local.cfg.a }
+resource "test_link" "lit" { id = local.cfg.lit }
+resource "test_link" "all" { ids = values(local.cfg) }
+"#,
+    )]);
+    assert_eq!(
+        result,
+        vec![
+            ("test_node.a".into(), "test_link.a".into(), Truth::True),
+            ("test_node.a".into(), "test_link.lit".into(), Truth::True),
+            ("test_node.a".into(), "test_link.all".into(), Truth::True),
+            ("test_node.b".into(), "test_link.lit".into(), Truth::True),
+            ("test_node.b".into(), "test_link.all".into(), Truth::True),
+        ]
+    );
+}
+
+#[test]
 fn indexed_reference_to_unexpanded_count_is_uncertain_not_absent() {
     let result = edges(&[(
         "main.tf",

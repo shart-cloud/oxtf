@@ -160,7 +160,7 @@ fn call1(name: &str, args: Vec<Value>) -> Value {
     {
         let mut p = Prov::EMPTY;
         for a in &args {
-            p = p.then(&a.prov);
+            p = p.joined(&a.prov);
         }
         return r.with_prov(p);
     }

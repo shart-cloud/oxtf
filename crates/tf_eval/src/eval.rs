@@ -533,7 +533,7 @@ impl<'r, 'a> Evaluator<'r, 'a> {
                     let skipped = if condition.as_bool().is_none() {
                         tainted |=
                             crate::truth::uncertainty(&condition) == crate::truth::Truth::Tainted;
-                        prov = prov.then(&condition.prov);
+                        prov = prov.joined(&condition.prov);
                         if alternatives.len() * 2 > MAX_ALTERNATIVES {
                             return if tainted {
                                 Value::tainted("(conditional for filter)")
@@ -708,7 +708,7 @@ fn concat_parts(parts: &[Part]) -> Value {
                             Some(s) => {
                                 let mut t = a.0.clone();
                                 t.push_str(&s);
-                                next.push((t, a.1.then(&c.prov), a.2 || tainted));
+                                next.push((t, a.1.joined(&c.prov), a.2 || tainted));
                             }
                             None => return non_known_or(c, "template: value is not a string"),
                         }

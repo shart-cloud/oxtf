@@ -328,8 +328,9 @@ impl Bundle {
         engine
             .add_data(regorus::Value::from(data))
             .map_err(|e| format!("policy data: {e}"))?;
-        // Prepare once (see `engine_with`): per-evaluation clones then only
-        // pay for the evaluation.
+        // Prepare (schedule, hoist, gather rules) once: a clone of a
+        // prepared engine stays prepared, so per-evaluation clones only pay
+        // for the evaluation.
         engine
             .eval_query("true".to_string(), false)
             .map_err(|e| e.to_string())?;
@@ -841,7 +842,7 @@ fn collect(
         }
         "json" => serde_json::from_str::<Json>(&read()?)
             .map_err(|e| format!("{}: {e}", path.display()))?,
-        "yaml" | "yml" => tf_rule_ir::goyaml::load(&read()?)
+        "yaml" | "yml" => tf_yaml::goyaml::load(&read()?)
             .map_err(|e| format!("{}:{e}", path.display()))?
             .unwrap_or(Json::Null),
         _ if path == root => {
@@ -1068,7 +1069,7 @@ fn parse_annotations(
             continue;
         }
         let fields =
-            match tf_rule_ir::goyaml::load(&yaml).map_err(|e| format!("{at}: METADATA: {e}"))? {
+            match tf_yaml::goyaml::load(&yaml).map_err(|e| format!("{at}: METADATA: {e}"))? {
                 Some(Json::Object(m)) => m,
                 None => JsonMap::new(),
                 Some(_) => return Err(format!("{at}: METADATA must be a mapping")),
@@ -1300,17 +1301,6 @@ fn eval_value(
 
 fn to_serde(v: &regorus::Value) -> Result<Json, String> {
     serde_json::from_str(&v.to_json_str().map_err(|e| e.to_string())?).map_err(|e| e.to_string())
-}
-
-/// Conftest's exception query, `data.<ns>.exception[_][_] == "<name>"`:
-/// when it holds, every result of the rule on this input is suppressed.
-#[cfg(test)]
-fn excepted(
-    engine: &regorus::Engine,
-    input: &regorus::Value,
-    e: &Exception,
-) -> Result<bool, String> {
-    exception_names(&eval_value(engine, input.clone(), &e.rule)?, e)
 }
 
 /// Whether an `exception` set's value names the rule.
@@ -1773,20 +1763,14 @@ impl ForeignPolicy {
                     truth: a.truth,
                 })
                 .collect(),
-            fix_hint: r
-                .zip(v.fix.as_ref())
-                .map(|(r, (attribute, value))| tf_linter::FixHint {
-                    resource: r.id.clone(),
-                    attribute: attribute.clone(),
-                    action: tf_linter::FixAction::Set,
-                    value: value.clone(),
-                    site: r.attr(attribute).map(|a| a.span),
-                }),
+            fix_hint: r.zip(v.fix.as_ref()).map(|(r, (attribute, value))| {
+                tf_linter::FixHint::set(r, attribute, value.clone())
+            }),
         }
     }
 
     fn judge(&self, r: &Resource) -> Result<Vec<Judgement>, String> {
-        let projection = projection::project(r, self.shape);
+        let projection = projection::project(r);
         let input = projection::input(r, &projection, self.shape);
         let found = self.run(input)?;
         found
@@ -1818,7 +1802,7 @@ impl ForeignPolicy {
         let mut abstractions = Vec::new();
         let mut instances = Vec::new();
         for r in selected {
-            let p = projection::project(r, Shape::Plan);
+            let p = projection::project(r);
             let doc = projection::input(r, &p, Shape::Plan);
             changes.extend(
                 doc["resource_changes"]
@@ -1896,9 +1880,13 @@ impl ForeignPolicy {
         if found.is_empty() {
             return Ok(Vec::new());
         }
+        // The ablation runs are only needed for violations that name no
+        // instance.
         let mut alone: Vec<Vec<String>> = Vec::new();
-        for (_, doc) in instances {
-            alone.push(run(doc.clone())?.into_iter().map(|v| v.msg).collect());
+        if found.iter().any(|v| v.address.is_none()) {
+            for (_, doc) in instances {
+                alone.push(run(doc.clone())?.into_iter().map(|v| v.msg).collect());
+            }
         }
         found
             .into_iter()
@@ -2238,8 +2226,11 @@ mod tests {
             name: "old".into(),
         };
         let v = |j: Json| regorus::Value::from(j);
-        assert!(excepted(&bundle.engine, &v(json!({"skip_old": true})), &e).unwrap());
-        assert!(!excepted(&bundle.engine, &v(json!({})), &e).unwrap());
+        let excepted = |input: Json| {
+            exception_names(&eval_value(&bundle.engine, v(input), &e.rule).unwrap(), &e).unwrap()
+        };
+        assert!(excepted(json!({"skip_old": true})));
+        assert!(!excepted(json!({})));
     }
 
     #[test]

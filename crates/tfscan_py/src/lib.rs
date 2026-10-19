@@ -1040,13 +1040,7 @@ struct PolicyArgs {
 }
 
 impl PolicyArgs {
-    fn catalog(
-        self,
-        builtin: bool,
-        bundled: bool,
-        rego_native: bool,
-        ir_rules: Vec<String>,
-    ) -> PyResult<Catalog> {
+    fn catalog(self, builtin: bool, bundled: bool, ir_rules: Vec<String>) -> PyResult<Catalog> {
         let shape = self
             .shape
             .as_deref()
@@ -1060,7 +1054,6 @@ impl PolicyArgs {
             rule_json: ir_rules,
             runtime: Vec::new(),
             policies: tf_rego::Policies {
-                native: rego_native,
                 shape,
                 entries: self.entries,
                 rego_v0: self.rego_v0,
@@ -1078,10 +1071,9 @@ fn build_catalog(
     bundled: bool,
     ir_rules: Vec<String>,
     callbacks: Vec<Bound<'_, PyAny>>,
-    rego_native: bool,
     policy: PolicyArgs,
 ) -> PyResult<PyCatalog> {
-    let mut catalog = policy.catalog(builtin, bundled, rego_native, ir_rules)?;
+    let mut catalog = policy.catalog(builtin, bundled, ir_rules)?;
     let error = Arc::new(Mutex::new(None));
     let calls = Arc::new(std::sync::atomic::AtomicU64::new(0));
     for cb in &callbacks {
@@ -1134,11 +1126,10 @@ fn scan_error(e: tf_scan::ScanError) -> PyErr {
 /// Checkov policies, Rego), as `oxtf --rule-file`; `policies` is an alias.
 /// `data`, `namespaces`, `all_namespaces`, `policy_entries` (OPA mode),
 /// `policy_shape` and `rego_v0` are the policy flags; `policy_entry` adds
-/// one entry. `rego_native` runs the bundled native-tier policies in place
-/// of their seed rules. `overlay`: `(path, text)` pairs that shadow the
-/// disk for this scan.
+/// one entry. `overlay`: `(path, text)` pairs that shadow the disk for this
+/// scan.
 #[pyfunction]
-#[pyo3(signature = (paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], callbacks=vec![], rego_native=false, policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, _release_gil=true, rule_files=vec![], data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], rego_v0=false, bundled=true))]
+#[pyo3(signature = (paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], callbacks=vec![], policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, _release_gil=true, rule_files=vec![], data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], rego_v0=false, bundled=true))]
 #[allow(clippy::too_many_arguments)]
 fn scan(
     py: Python<'_>,
@@ -1151,7 +1142,6 @@ fn scan(
     select: Option<Vec<String>>,
     ir_rules: Vec<String>,
     callbacks: Vec<Bound<'_, PyAny>>,
-    rego_native: bool,
     policies: Vec<PathBuf>,
     policy_shape: Option<&str>,
     policy_entry: Option<String>,
@@ -1181,7 +1171,6 @@ fn scan(
         bundled,
         ir_rules,
         callbacks,
-        rego_native,
         PolicyArgs {
             rule_files: rule_files.into_iter().chain(policies).collect(),
             data,
@@ -1230,64 +1219,6 @@ fn scan(
         },
         calls.load(std::sync::atomic::Ordering::Relaxed),
     ))
-}
-
-/// Benchmark helper: analyse once (no rules), then time `repeat` runs of
-/// the given rules over every analysis, sequentially on one thread, with
-/// the GIL released (callbacks re-acquire it). Returns
-/// (seconds per run, findings per run, callback calls in total).
-#[pyfunction]
-#[pyo3(signature = (paths, recursive=false, builtin=true, select=None, ir_rules=vec![], callbacks=vec![], repeat=3))]
-#[allow(clippy::too_many_arguments)]
-fn _rule_time(
-    py: Python<'_>,
-    paths: Vec<PathBuf>,
-    recursive: bool,
-    builtin: bool,
-    select: Option<Vec<String>>,
-    ir_rules: Vec<String>,
-    callbacks: Vec<Bound<'_, PyAny>>,
-    repeat: usize,
-) -> PyResult<(Vec<f64>, usize, u64)> {
-    let PyCatalog {
-        catalog,
-        error,
-        calls,
-    } = build_catalog(
-        builtin,
-        false,
-        ir_rules,
-        callbacks,
-        false,
-        PolicyArgs::default(),
-    )?;
-    let result = py.detach(move || -> Result<_, tf_scan::ScanError> {
-        // Analyse once with no rules, then time the rules alone.
-        let mut analyse = ScanRequest::dirs(paths, recursive);
-        analyse.catalog = Catalog::default();
-        let analyses = tf_scan::scan(analyse)?.analyses;
-        let rules = catalog.resolve()?.rules;
-        let linter = match &select {
-            Some(ids) => Linter::filtered(rules, ids)?,
-            None => Linter::new(rules),
-        };
-        let mut times = Vec::new();
-        let mut n = 0;
-        for _ in 0..repeat {
-            let t = std::time::Instant::now();
-            n = analyses
-                .iter()
-                .map(|a| linter.run(a).findings.len())
-                .sum::<usize>();
-            times.push(t.elapsed().as_secs_f64());
-        }
-        Ok((times, n))
-    });
-    if let Some(e) = error.lock().unwrap().take() {
-        return Err(e);
-    }
-    let (times, n) = result.map_err(scan_error)?;
-    Ok((times, n, calls.load(std::sync::atomic::Ordering::Relaxed)))
 }
 
 /// One rule's metadata as a dict: `name`, `level`, `category`,
@@ -1352,7 +1283,7 @@ fn rules_info<'py>(
         shape: policy_shape,
         rego_v0,
     }
-    .catalog(builtin, bundled, false, Vec::new())?;
+    .catalog(builtin, bundled, Vec::new())?;
     let resolved = catalog.resolve().map_err(scan_error)?;
     let out = PyList::empty(py);
     for r in Linter::new(resolved.rules).rules() {
@@ -1382,7 +1313,7 @@ fn test_policies(
         rego_v0,
         ..PolicyArgs::default()
     }
-    .catalog(false, false, false, Vec::new())?;
+    .catalog(false, false, Vec::new())?;
     let outcomes = tf_scan::verify_policies(&catalog).map_err(scan_error)?;
     Ok(outcomes
         .into_iter()
@@ -1439,7 +1370,6 @@ fn _tfscan(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(builtin_rules, m)?)?;
     m.add_function(wrap_pyfunction!(rules_info, m)?)?;
     m.add_function(wrap_pyfunction!(test_policies, m)?)?;
-    m.add_function(wrap_pyfunction!(_rule_time, m)?)?;
     m.add("IR_VERSION", tf_rule_ir::IR_VERSION)?;
     m.add("PYO3_VERSION", "0.29.3")?;
     ast::register(m)?;

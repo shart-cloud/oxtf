@@ -120,7 +120,7 @@ pub struct Derived {
 }
 
 impl Derived {
-    pub const SLOTS: usize = 4;
+    pub const SLOTS: usize = 3;
 
     /// The view in `slot`, computed by `f` the first time.
     pub fn get_or_init(&self, slot: usize, f: impl FnOnce() -> Value) -> &Value {

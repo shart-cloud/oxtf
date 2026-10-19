@@ -12,7 +12,7 @@ tf_semantic.workspace = true
 tf_linter.workspace = true
 tf_rule_ir.workspace = true
 tf_plan.workspace = true
-tf_rego = { path = "../tf_rego" }
+tf_rego.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

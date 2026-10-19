@@ -21,7 +21,7 @@ use std::sync::Arc;
 
 use tf_semantic::source::FileTable;
 use tf_semantic::store::ModuleStore;
-use tf_semantic::{Analysis, Resource};
+use tf_semantic::{Address, Analysis, Resource};
 use tf_span::{FileId, FileSpan, Span};
 
 use crate::rule::{Engine, Finding, FindingSubject};
@@ -105,31 +105,31 @@ pub fn checkov_skips(
         return (findings, Vec::new());
     }
     let mut cache: HashMap<FileId, Vec<Skip>> = HashMap::new();
+    let by_id: HashMap<&Address, &Resource> = analysis
+        .modules
+        .iter()
+        .flat_map(|m| &m.resources)
+        .map(|r| (&r.id, r))
+        .collect();
     let mut kept = Vec::new();
     let mut suppressed = Vec::new();
     for f in findings {
         let hit = match &f.subject {
-            FindingSubject::Resource(id) if skippable(&f) => analysis
-                .modules
-                .iter()
-                .flat_map(|m| &m.resources)
-                .find(|r| r.id == *id)
-                .and_then(|r| {
-                    blocks(r, analysis, files, store)
-                        .into_iter()
-                        .find_map(|(file, first, last)| {
-                            let skips = cache.entry(file).or_insert_with(|| skips(files, file));
-                            skips
-                                .iter()
-                                .find(|s| {
-                                    first < s.line
-                                        && s.line < last
-                                        && (*s.id == *f.rule
-                                            || f.aliases.iter().any(|a| **a == *s.id))
-                                })
-                                .map(|s| (s.comment.clone(), s.at))
-                        })
-                }),
+            FindingSubject::Resource(id) if skippable(&f) => by_id.get(id).copied().and_then(|r| {
+                blocks(r, analysis, files, store)
+                    .into_iter()
+                    .find_map(|(file, first, last)| {
+                        let skips = cache.entry(file).or_insert_with(|| skips(files, file));
+                        skips
+                            .iter()
+                            .find(|s| {
+                                first < s.line
+                                    && s.line < last
+                                    && (*s.id == *f.rule || f.aliases.iter().any(|a| **a == *s.id))
+                            })
+                            .map(|s| (s.comment.clone(), s.at))
+                    })
+            }),
             _ => None,
         };
         match hit {

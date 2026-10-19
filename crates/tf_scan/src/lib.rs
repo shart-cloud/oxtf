@@ -76,8 +76,8 @@ pub enum ScanInput {
 }
 
 /// Where rules come from. Sources are resolved in field order and a later
-/// rule **shadows** an earlier one of the same name, so a native-tier Rego
-/// policy named `aws-rds-unencrypted` replaces the seed rule, and a Checkov
+/// rule **shadows** an earlier one of the same name, so a rule-IR or Rego
+/// rule named `aws-rds-unencrypted` replaces the seed rule, and a Checkov
 /// policy loaded from a file replaces the bundled one with its ID.
 #[derive(Default)]
 pub struct Catalog {
@@ -93,7 +93,7 @@ pub struct Catalog {
     pub rule_json: Vec<String>,
     /// Rules built at runtime by the adapter (Python callbacks).
     pub runtime: Vec<Box<dyn DynRule>>,
-    /// Rego policies, native tier and foreign.
+    /// Rego policies.
     pub policies: Policies,
 }
 
@@ -129,8 +129,12 @@ impl Catalog {
         let mut add = |batch: Vec<Box<dyn DynRule>>| {
             for rule in batch {
                 let info = rule.info();
+                // A rule that repeats a name among its own aliases shadows
+                // nothing: the repeated name maps to the rule being added.
                 for name in std::iter::once(info.name).chain(info.aliases) {
-                    if let Some(old) = by_name.insert(name, rules.len()) {
+                    if let Some(old) = by_name.insert(name, rules.len())
+                        && old != rules.len()
+                    {
                         rules[old] = None;
                     }
                 }

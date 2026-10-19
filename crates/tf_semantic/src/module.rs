@@ -147,9 +147,6 @@ impl<'a> ModuleDef<'a> {
     pub fn output(&self, name: &str) -> Option<&OutputDecl<'a>> {
         self.output_index.get(name).map(|&i| &self.outputs[i])
     }
-    pub fn file_source(&self, id: FileId) -> Option<&Arc<SourceFile>> {
-        self.files.iter().map(|(f, _)| f).find(|f| f.id == id)
-    }
 }
 
 /// The `.tf` files of a directory, sorted by name, as the file table sees

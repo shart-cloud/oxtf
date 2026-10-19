@@ -1,5 +1,5 @@
-//! The Rego backend through the scan request: native-tier parity with the
-//! seed rules on every fixture, and the foreign-policy seam.
+//! The Rego backend through the scan request: the foreign-policy seam,
+//! Conftest conventions and catalog shadowing.
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
@@ -9,10 +9,9 @@ fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-fn request(input: ScanInput, rego_native: bool) -> ScanRequest {
+fn request(input: ScanInput) -> ScanRequest {
     let mut req = ScanRequest::dirs(vec![], false);
     req.input = input;
-    req.catalog.policies.native = rego_native;
     req.threads = Some(4);
     req
 }
@@ -43,57 +42,9 @@ fn dirs(paths: Vec<PathBuf>, recursive: bool) -> ScanInput {
     ScanInput::Dirs { paths, recursive }
 }
 
-fn both(input: ScanInput, selection: Option<Vec<String>>) -> (Value, Value) {
-    let mut rego = request(input.clone(), true);
-    rego.selection = selection.clone();
-    let mut native = request(input, false);
-    native.selection = selection;
-    (run(rego), run(native))
-}
-
-fn visit(path: &Path, cases: &mut usize) {
-    if path.join("main.tf").is_file() {
-        let (r, n) = both(dirs(vec![path.to_path_buf()], false), None);
-        assert_eq!(r, n, "{}", path.display());
-        *cases += 1;
-    }
-    for entry in std::fs::read_dir(path).unwrap() {
-        let path = entry.unwrap().path();
-        if path.is_dir() {
-            visit(&path, cases);
-        } else if path.extension().is_some_and(|e| e == "json")
-            && path.file_name().unwrap() != "native.json"
-        {
-            let input = ScanInput::Plan {
-                plan: path.clone(),
-                source: None,
-            };
-            let (r, n) = both(input, None);
-            assert_eq!(r, n, "{}", path.display());
-            *cases += 1;
-        }
-    }
-}
-
 #[test]
-fn full_source_and_plan_outputs_match_native() {
-    let mut cases = 0;
-    for dir in ["rules", "plans", "baseline", "parity", "uncertainty"] {
-        visit(&repo().join("fixtures").join(dir), &mut cases);
-    }
-    assert!(cases >= 74, "only {cases} fixture scans");
-}
-
-#[test]
-fn parallel_roots_match_native() {
-    let (r, n) = both(dirs(vec![repo().join("fixtures/rules")], true), None);
-    assert_eq!(r, n);
-}
-
-#[test]
-fn existence_and_module_tfvars_provenance_match_native() {
-    let (actual, native) = both(dirs(vec![repo().join("fixtures/rego/rds")], false), None);
-    assert_eq!(actual, native);
+fn existence_and_module_tfvars_provenance() {
+    let actual = run(request(dirs(vec![repo().join("fixtures/rego/rds")], false)));
     let findings = actual["findings"].as_array().unwrap();
     assert_eq!(findings.len(), 3);
     assert!(
@@ -112,28 +63,8 @@ fn existence_and_module_tfvars_provenance_match_native() {
 }
 
 #[test]
-fn rule_selection_applies_to_native_tier_policies() {
-    for rule in ["aws-rds-unencrypted", "gcp-storage-uniform-access"] {
-        let (actual, native) = both(
-            dirs(vec![repo().join("fixtures/rules")], true),
-            Some(vec![rule.into()]),
-        );
-        assert_eq!(actual, native);
-        assert!(!actual["findings"].as_array().unwrap().is_empty());
-        assert!(
-            actual["findings"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .all(|f| f["rule"]["id"] == rule)
-        );
-    }
-}
-
-#[test]
-fn gcp_defaults_uncertainty_and_provenance_match_native() {
-    let (actual, native) = both(dirs(vec![repo().join("fixtures/rego/gcp")], false), None);
-    assert_eq!(actual, native);
+fn gcp_defaults_uncertainty_and_provenance() {
+    let actual = run(request(dirs(vec![repo().join("fixtures/rego/gcp")], false)));
     let findings = actual["findings"].as_array().unwrap();
     assert_eq!(findings.len(), 6);
     assert!(
@@ -281,21 +212,21 @@ fn foreign_policy_compile_errors_refuse_the_scan() {
 
 #[test]
 fn a_later_catalog_source_shadows_by_name() {
-    // The native-tier RDS policy carries the seed rule's name: one rule
-    // runs, not two, so findings are not doubled.
+    // A loaded rule carrying a seed rule's name replaces it: one rule runs,
+    // not two. This rule never fires, so the seed rule's finding is gone.
+    let shadow = r#"{"name": "aws-rds-unencrypted", "message": "never",
+        "clauses": [{"resource_types": ["aws_db_instance"],
+                     "condition": {"op": "lit", "value": false}}]}"#;
     let mut req = ScanRequest::dirs(
         vec![repo().join("fixtures/rules/aws-rds-unencrypted/fail_explicit_false")],
         false,
     );
-    req.catalog.policies.native = true;
+    req.catalog.rule_json.push(shadow.into());
     let out = scan(req).unwrap();
-    assert_eq!(out.result.findings.len(), 1);
+    assert_eq!(out.result.findings.len(), 0);
     let names: Vec<String> = Catalog {
         builtin: true,
-        policies: tf_rego::Policies {
-            native: true,
-            ..Default::default()
-        },
+        rule_json: vec![shadow.into()],
         ..Default::default()
     }
     .resolve()

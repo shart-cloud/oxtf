@@ -1,0 +1,11 @@
+[package]
+name = "tf_yaml"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "YAML as the policy tools read it: PyYAML's safe_load (Checkov) and go-yaml v2 (OPA, Conftest)"
+
+[dependencies]
+serde_json.workspace = true
+yaml-rust2 = { version = "=0.13.0", default-features = false }

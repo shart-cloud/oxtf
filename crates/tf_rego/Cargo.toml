@@ -14,7 +14,7 @@ tf_span.workspace = true
 tf_parser.workspace = true
 tf_allocator.workspace = true
 anyhow = "1"
-tf_rule_ir.workspace = true
+tf_yaml.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 regorus = { version = "=0.12.0", default-features = false, features = ["std", "arc", "base64", "base64url", "glob", "graph", "hex", "jsonpatch", "net", "regex", "semver", "time", "urlquery", "uuid", "yaml"] }

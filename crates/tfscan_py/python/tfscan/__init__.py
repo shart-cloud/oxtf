@@ -274,7 +274,6 @@ def _run(
     policy_shape: Optional[str] = None,
     policy_entry: Optional[str] = None,
     rego_v0: bool = False,
-    rego_native: bool = False,
     overlay: Mapping[PathLike, str] = {},
     threads: Optional[int] = None,
 ) -> ScanResult:
@@ -290,7 +289,6 @@ def _run(
         select=None if select is None else list(select),
         ir_rules=ir,
         callbacks=callbacks,
-        rego_native=rego_native,
         policies=[os.fspath(p) for p in policies],
         policy_shape=policy_shape,
         policy_entry=policy_entry,
@@ -324,7 +322,6 @@ def scan(
     policy_shape: Optional[str] = None,
     policy_entry: Optional[str] = None,
     rego_v0: bool = False,
-    rego_native: bool = False,
     overlay: Mapping[PathLike, str] = {},
     threads: Optional[int] = None,
 ) -> ScanResult:
@@ -368,7 +365,6 @@ def scan(
         policy_shape=policy_shape,
         policy_entry=policy_entry,
         rego_v0=rego_v0,
-        rego_native=rego_native,
         overlay=overlay,
         threads=threads,
     )
@@ -391,7 +387,6 @@ def scan_plan(
     policy_shape: Optional[str] = None,
     policy_entry: Optional[str] = None,
     rego_v0: bool = False,
-    rego_native: bool = False,
     overlay: Mapping[PathLike, str] = {},
     threads: Optional[int] = None,
 ) -> ScanResult:
@@ -415,7 +410,6 @@ def scan_plan(
         policy_shape=policy_shape,
         policy_entry=policy_entry,
         rego_v0=rego_v0,
-        rego_native=rego_native,
         overlay=overlay,
         threads=threads,
     )

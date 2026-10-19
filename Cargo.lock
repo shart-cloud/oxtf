@@ -1508,7 +1508,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys",
@@ -1632,9 +1632,9 @@ dependencies = [
  "tf_eval",
  "tf_linter",
  "tf_parser",
- "tf_rule_ir",
  "tf_semantic",
  "tf_span",
+ "tf_yaml",
 ]
 
 [[package]]
@@ -1642,12 +1642,13 @@ name = "tf_rule_ir"
 version = "0.0.0"
 dependencies = [
  "regex",
+ "rustc-hash",
  "serde",
  "serde_json",
  "tf_eval",
  "tf_linter",
  "tf_semantic",
- "yaml-rust2",
+ "tf_yaml",
 ]
 
 [[package]]
@@ -1700,6 +1701,14 @@ dependencies = [
 [[package]]
 name = "tf_span"
 version = "0.0.0"
+
+[[package]]
+name = "tf_yaml"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "yaml-rust2",
+]
 
 [[package]]
 name = "tfscan_py"

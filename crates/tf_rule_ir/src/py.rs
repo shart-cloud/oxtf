@@ -8,26 +8,7 @@
 
 use serde_json::Value as Json;
 
-/// Python's `repr(float)`: shortest round-trip digits, positional for
-/// exponents in -4..16.
-pub fn float_repr(f: f64) -> String {
-    if f.is_nan() {
-        return "nan".into();
-    }
-    if f.is_infinite() {
-        return if f > 0.0 { "inf" } else { "-inf" }.into();
-    }
-    let sci = format!("{f:e}");
-    let (mantissa, exp) = sci.split_once('e').expect("{:e} has an exponent");
-    let exp: i32 = exp.parse().expect("integer exponent");
-    if (-4..16).contains(&exp) {
-        let s = format!("{f}");
-        if s.contains('.') { s } else { format!("{s}.0") }
-    } else {
-        let sign = if exp < 0 { '-' } else { '+' };
-        format!("{mantissa}e{sign}{:02}", exp.abs())
-    }
-}
+pub use tf_yaml::pyyaml::float_repr;
 
 /// A number as Python holds it after HCL parsing: integral values are `int`.
 pub fn number_str(n: f64) -> String {

@@ -185,7 +185,6 @@ def scan(
     select: Optional[Sequence[str]] = None,
     ir_rules: Sequence[str] = ...,
     callbacks: Sequence[Any] = ...,
-    rego_native: bool = False,
     policies: Sequence[str | os.PathLike[str]] = ...,
     policy_shape: Optional[str] = None,
     policy_entry: Optional[str] = None,
@@ -220,5 +219,4 @@ def test_policies(
     rego_v0: bool = False,
 ) -> list[tuple[str, str, str, Optional[str]]]: ...
 def parse_hcl(source: str) -> Document: ...
-def _rule_time(paths: Sequence[str | os.PathLike[str]], recursive: bool = False, builtin: bool = True, select: Optional[Sequence[str]] = None, ir_rules: Sequence[str] = ..., callbacks: Sequence[Any] = ..., repeat: int = 3) -> tuple[list[float], int, int]: ...
 def _bench_node_access(doc: Document, n: int, mode: Literal["cell", "owned"]) -> float: ...

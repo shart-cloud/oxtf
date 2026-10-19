@@ -293,9 +293,6 @@ impl<'a> Attribute<'a> {
     pub fn is_sensitive(&self) -> bool {
         self.flags & flags::SENSITIVE != 0
     }
-    pub fn is_deprecated(&self) -> bool {
-        self.flags & flags::DEPRECATED != 0
-    }
     pub fn is_write_only(&self) -> bool {
         self.flags & flags::WRITE_ONLY != 0
     }
@@ -447,9 +444,6 @@ impl<'a> Block<'a> {
             return Some(Member::Attribute(a));
         }
         self.block_type(name).map(Member::Block)
-    }
-    pub fn is_block_type(&self, name: &str) -> bool {
-        self.block_type(name).is_some()
     }
     pub fn is_attribute(&self, name: &str) -> bool {
         self.attribute(name).is_some()

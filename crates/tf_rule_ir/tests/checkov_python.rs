@@ -293,8 +293,15 @@ fn bundled_iam_database() {
     assert_eq!(s3["privileges"]["GetObject"]["access_level"], "Read");
     assert_eq!(s3["privileges_lower_name"]["getobject"], "GetObject");
     assert!(iam::actions_for_service("s3", false).contains(&"s3:GetObject".to_string()));
-    // The `catalog` ARNs of Service Catalog resources.
+    // The `catalog` ARNs of Service Catalog resources: every query that
+    // takes a prefix reads `servicecatalog` for it, as policy_sentry does.
     assert!(iam::service("catalog").is_some());
+    assert!(!iam::action_names("catalog").is_empty());
+    assert!(
+        iam::actions_for_service("catalog", false)
+            .iter()
+            .all(|a| a.starts_with("catalog:"))
+    );
     assert!(iam::service("no-such-service").is_none());
     assert!(iam::prefixes().count() > 400);
 }

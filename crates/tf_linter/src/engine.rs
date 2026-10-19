@@ -135,16 +135,7 @@ impl Linter {
             match rule.judge_graph(graph.as_ref().expect("graph requested")) {
                 Ok(judgements) => {
                     for (r, j) in judgements {
-                        out.extend(Finding::build(
-                            &self.infos[i],
-                            r,
-                            j.severity,
-                            j.witness.as_ref(),
-                            &j.message,
-                            root,
-                            j.hidden,
-                            j.fix_hint,
-                        ));
+                        out.extend(Finding::build(&self.infos[i], r, j, root));
                     }
                 }
                 Err(message) => rule_errors.push(RuleError {
@@ -180,16 +171,9 @@ impl Linter {
                     Ok(judgements) => {
                         for (subject, j) in judgements {
                             match subject {
-                                Subject::Resource(r) => out.extend(Finding::build(
-                                    &self.infos[i],
-                                    r,
-                                    j.severity,
-                                    j.witness.as_ref(),
-                                    &j.message,
-                                    root,
-                                    j.hidden,
-                                    j.fix_hint,
-                                )),
+                                Subject::Resource(r) => {
+                                    out.extend(Finding::build(&self.infos[i], r, j, root))
+                                }
                                 Subject::File { module, file } => {
                                     let sf = config
                                         .iter()
@@ -200,11 +184,8 @@ impl Linter {
                                         &self.infos[i],
                                         module,
                                         &sf,
-                                        j.severity,
-                                        j.witness.as_ref(),
-                                        &j.message,
+                                        j,
                                         root,
-                                        j.hidden,
                                     ));
                                 }
                             }
@@ -232,16 +213,7 @@ impl Linter {
                     }
                 };
                 for (r, j) in judged {
-                    out.extend(Finding::build(
-                        &self.infos[i],
-                        r,
-                        j.severity,
-                        j.witness.as_ref(),
-                        &j.message,
-                        root,
-                        j.hidden,
-                        j.fix_hint,
-                    ));
+                    out.extend(Finding::build(&self.infos[i], r, j, root));
                 }
             }
             for r in &m.resources {
@@ -262,16 +234,7 @@ impl Linter {
                         }
                     };
                     for j in judged {
-                        out.extend(Finding::build(
-                            &self.infos[i],
-                            r,
-                            j.severity,
-                            j.witness.as_ref(),
-                            &j.message,
-                            root,
-                            j.hidden,
-                            j.fix_hint,
-                        ));
+                        out.extend(Finding::build(&self.infos[i], r, j, root));
                     }
                 }
             }

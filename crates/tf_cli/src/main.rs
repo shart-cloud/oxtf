@@ -1,4 +1,4 @@
-//! `oxtf`: Terraform security scanner (spike).
+//! `oxtf`: Terraform security scanner.
 //!
 //! ```text
 //! oxtf scan [PATH...] [-r|--recursive] [--format text|json] [--var-file FILE]...
@@ -59,8 +59,6 @@ scan options:
                           rule-IR JSON (e.g. from the tfscan Python expression API),
                           Checkov YAML/JSON policies, Rego (.rego), or a directory of any
                           mix of them (searched recursively)
-      --rego-native       run the seed rules that have a bundled native-tier Rego
-                          policy (RDS encryption, GCS uniform access) as Rego
       --policy PATH       the same as --rule-file. Rego files load as one bundle and run
                           unchanged; by default they follow Conftest: every
                           deny/violation/warn rule (and deny_*, ...) in the selected
@@ -121,7 +119,6 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
             "--rule-file" => catalog
                 .rule_files
                 .push(it.next().ok_or("--rule-file needs a value")?.into()),
-            "--rego-native" => catalog.policies.native = true,
             "--no-bundled" => catalog.bundled = false,
             "--no-builtin" => {
                 catalog.bundled = false;

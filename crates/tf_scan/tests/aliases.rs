@@ -57,6 +57,48 @@ fn the_seed_rule_replaces_the_bundled_rule_it_aliases() {
     assert_eq!(ids(&run(bundled_only(), None, UNIFORM_ABSENT)), [CHECKOV]);
 }
 
+/// A rule whose aliases repeat its own name (and one another).
+struct SelfAliased(Box<dyn tf_linter::DynRule>);
+
+impl tf_linter::DynRule for SelfAliased {
+    fn info(&self) -> tf_linter::RuleInfo {
+        let mut info = self.0.info();
+        info.aliases.push(info.name.clone());
+        info.aliases.push(Arc::from("twice"));
+        info.aliases.push(Arc::from("twice"));
+        info
+    }
+    fn judge_resource(
+        &self,
+        resource: &tf_semantic::Resource,
+    ) -> Result<Vec<tf_linter::Judgement>, tf_linter::RuleFailure> {
+        self.0.judge_resource(resource)
+    }
+    fn judge_module<'m>(
+        &self,
+        module: &'m tf_semantic::Module,
+    ) -> Result<Vec<(&'m tf_semantic::Resource, tf_linter::Judgement)>, tf_linter::RuleFailure>
+    {
+        self.0.judge_module(module)
+    }
+}
+
+#[test]
+fn a_rule_repeating_its_own_name_among_its_aliases_shadows_nothing() {
+    let seed = tf_linter::rules::all()
+        .into_iter()
+        .find(|r| &*r.info().name == SEED)
+        .unwrap();
+    let catalog = Catalog {
+        runtime: vec![Box::new(SelfAliased(seed))],
+        ..Catalog::default()
+    };
+    let resolved = catalog.resolve().unwrap();
+    let names: Vec<_> = resolved.rules.iter().map(|r| r.info().name).collect();
+    assert_eq!(names.len(), 1);
+    assert_eq!(&*names[0], SEED);
+}
+
 #[test]
 fn a_checkov_skip_of_the_alias_suppresses_the_seed_rule() {
     let text = r#"resource "google_storage_bucket" "b" {

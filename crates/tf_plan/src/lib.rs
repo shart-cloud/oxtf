@@ -1,4 +1,4 @@
-//! Plan JSON front end (W5).
+//! Plan JSON front end.
 //!
 //! Reads `terraform show -json <planfile>` into the same owned resource
 //! model the HCL front end produces ([`tf_semantic::Analysis`]), so the W4
@@ -213,6 +213,12 @@ struct Builder<'p> {
     /// Source module instances by key-stripped address.
     src_modules: HashMap<String, &'p Module>,
     config: HashMap<String, ConfigModule<'p>>,
+    /// Whether the source analysis was evaluated with the plan's root
+    /// inputs, so a source instance may supply a resource's graph edges.
+    source_inputs_match: bool,
+    /// Every module instance address in the plan (resource modules and
+    /// their ancestors), for resolving `module.<name>` references.
+    module_instances: BTreeSet<String>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -255,6 +261,29 @@ impl<'p> Builder<'p> {
                 at: None,
             });
         }
+        // A representative source instance can supply display spans, but must
+        // not supply a sibling instance's graph edges. The source analysis
+        // evaluated the root with variable defaults: a planned input whose
+        // source value is known and differs was overridden on the command
+        // line, so source edges may not match the plan. An input the source
+        // could not evaluate (no default) contradicts nothing.
+        let source_inputs_match =
+            plan.get("variables")
+                .and_then(J::as_object)
+                .is_none_or(|variables| {
+                    source.and_then(|a| a.modules.first()).is_some_and(|root| {
+                        variables.iter().all(|(name, planned)| {
+                            root.variables
+                                .iter()
+                                .find(|v| v.name.as_ref() == name)
+                                .is_some_and(|v| {
+                                    !v.value.is_known()
+                                        || tf_eval::value::to_json(&v.value).as_ref()
+                                            == planned.get("value")
+                                })
+                        })
+                    })
+                });
         Builder {
             plan,
             plan_file,
@@ -262,6 +291,8 @@ impl<'p> Builder<'p> {
             source,
             src_modules,
             config,
+            source_inputs_match,
+            module_instances: BTreeSet::new(),
             diagnostics,
         }
     }
@@ -278,6 +309,7 @@ impl<'p> Builder<'p> {
                 addrs.insert(a);
             }
         }
+        self.module_instances = addrs.clone();
         let addrs: Vec<String> = addrs.into_iter().collect();
         let index: HashMap<&str, usize> = addrs
             .iter()
@@ -558,29 +590,11 @@ impl<'p> Builder<'p> {
             .config
             .get(&strip_keys(&pr.module))
             .and_then(|c| c.resource_blocks.get(&local));
-        // A representative source instance can supply display spans, but must
-        // not supply a sibling instance's graph edges. Prefer plan references.
-        let source_inputs_match = self
-            .plan
-            .get("variables")
-            .and_then(J::as_object)
-            .is_none_or(|variables| {
-                self.source
-                    .and_then(|a| a.modules.first())
-                    .is_some_and(|root| {
-                        variables.iter().all(|(name, planned)| {
-                            root.variables
-                                .iter()
-                                .find(|v| v.name.as_ref() == name)
-                                .and_then(|v| tf_eval::value::to_json(&v.value))
-                                .as_ref()
-                                == planned.get("value")
-                        })
-                    })
-            });
+        // Prefer plan references; a source instance supplies edges only when
+        // the source was evaluated with the plan's inputs.
         let graph_source = self
             .source
-            .filter(|_| source_inputs_match)
+            .filter(|_| self.source_inputs_match)
             .and_then(|a| a.modules.iter().find(|m| m.address.as_ref() == pr.module))
             .and_then(|m| {
                 m.resources.iter().find(|r| {
@@ -684,15 +698,18 @@ impl<'p> Builder<'p> {
                     } else {
                         format!("{module}.module.{name}")
                     };
-                    let candidates: BTreeSet<_> = self
-                        .collect()
-                        .into_iter()
-                        .map(|r| r.module)
+                    // Instances of the child module: `child` itself, or its
+                    // keyed instances `child[...]`, which sort right after it.
+                    let candidates: Vec<String> = self
+                        .module_instances
+                        .range(child.clone()..)
+                        .take_while(|m| m.starts_with(&child))
                         .filter(|m| {
                             parent_module(m).as_deref() == Some(module)
                                 && strip_keys(m) == strip_keys(&child)
-                                && key.is_none_or(|k| *m == format!("{child}[{k}]"))
+                                && key.is_none_or(|k| **m == format!("{child}[{k}]"))
                         })
+                        .cloned()
                         .collect();
                     if candidates.is_empty() {
                         complete = false;

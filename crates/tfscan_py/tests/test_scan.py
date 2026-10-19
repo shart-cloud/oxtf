@@ -149,14 +149,6 @@ def test_scan_plan_maps_to_source():
         tfscan.scan_plan(src / "main.tf")
 
 
-def test_rego_native_matches_builtin():
-    root = FIXTURES / "aws-rds-unencrypted"
-    rego = tfscan.scan(root, recursive=True, rego_native=True, bundled=False)
-    native = tfscan.scan(root, recursive=True, bundled=False)
-    key = lambda r: sorted((f.rule, f.address, f.severity, f.message) for f in r.findings)
-    assert key(rego) == key(native) and len(rego.findings) == 5
-
-
 def test_foreign_policy_and_rule_errors():
     rego = FIXTURES.parent / "rego"
     policy = rego / "foreign" / "conftest_hcl2_deny.rego"

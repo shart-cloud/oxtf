@@ -77,10 +77,10 @@ impl Projection {
     }
 }
 
-/// Project a resource instance's body for `shape`.
-pub fn project(r: &Resource, shape: Shape) -> Projection {
+/// Project a resource instance's body. Both shapes share one body
+/// projection; they differ in the envelope ([`input`]).
+pub fn project(r: &Resource) -> Projection {
     let mut p = Projection::default();
-    let _ = shape; // both shapes share one body projection; they differ in the envelope
     project_body(&r.body, "", &mut p);
     p
 }
@@ -243,7 +243,11 @@ mod tests {
             j,
             json!({"enabled": false, "cidrs": ["0.0.0.0/0"], "nested": {}})
         );
-        let mut paths: Vec<_> = p.abstractions.iter().map(|a| (a.path.as_str(), a.truth)).collect();
+        let mut paths: Vec<_> = p
+            .abstractions
+            .iter()
+            .map(|a| (a.path.as_str(), a.truth))
+            .collect();
         paths.sort();
         assert_eq!(
             paths,

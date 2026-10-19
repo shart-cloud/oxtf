@@ -156,21 +156,12 @@ impl Value {
         }
     }
     pub fn known(k: Known) -> Self {
-        let mut prov = Prov::EMPTY;
-        match &k {
-            Known::List(items) => {
-                for value in items.iter() {
-                    prov.join_dependencies(&value.prov);
-                }
-            }
-            Known::Object(items) => {
-                for value in items.values() {
-                    prov.join_dependencies(&value.prov);
-                }
-            }
-            Known::Json(value) => prov.join_dependencies(&value.prov),
-            _ => {}
-        }
+        let prov = match &k {
+            Known::List(items) => Prov::union_of(items.iter().map(|v| &v.prov)),
+            Known::Object(items) => Prov::union_of(items.values().map(|v| &v.prov)),
+            Known::Json(value) => Prov::union_of([&value.prov]),
+            _ => Prov::EMPTY,
+        };
         Value {
             kind: Kind::Known(k),
             prov,

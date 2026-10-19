@@ -31,7 +31,7 @@ tf_eval.workspace = true
 tf_semantic.workspace = true
 tf_linter.workspace = true
 tf_rule_ir.workspace = true
-tf_rego = { path = "../tf_rego" }
+tf_rego.workspace = true
 tf_scan.workspace = true
 arrow-array = { version = "60.0.0", default-features = false, features = ["ffi"] }
 arrow-schema = { version = "60.0.0", default-features = false, features = ["ffi"] }

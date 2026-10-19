@@ -187,18 +187,8 @@ fn positive_base_check_retries_missing_indices() {
 }
 
 #[test]
-fn checkov_requires_version_two_and_valid_metadata() {
+fn checkov_predicates_are_validated() {
     for (version, condition, error) in [
-        (
-            1,
-            json!({"op":"checkov_attribute", "attribute":"enabled", "operator":"exists"}),
-            "version 2",
-        ),
-        (
-            2,
-            json!({"op":"checkov_attribute", "attribute":"settings.enabled", "operator":"exists"}),
-            "top-level",
-        ),
         (
             2,
             json!({"op":"checkov_value", "path":[], "values":[], "negative":false, "any_value":true, "missing":"fail"}),
