@@ -57,5 +57,5 @@ def test_callback_exception_propagates():
 def test_mixed_rules():
     from tfscan.examples.sg_open_ssh import CALLBACK_RULE, EXPR_RULE
 
-    r = tfscan.scan(SSH_FIXTURES / "fail_inline_literal", rules=[EXPR_RULE, CALLBACK_RULE])
+    r = tfscan.scan(SSH_FIXTURES / "fail_inline_literal", rules=[EXPR_RULE, CALLBACK_RULE], bundled=False)
     assert sorted(f.rule for f in r.findings) == ["aws-sg-open-ssh", "py-cb-sg-open-ssh", "py-sg-open-ssh"]

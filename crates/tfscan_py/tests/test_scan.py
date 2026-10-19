@@ -5,7 +5,7 @@ from conftest import FIXTURES, SSH_FIXTURES
 
 
 def test_scan_fixture_findings_fields():
-    r = tfscan.scan(SSH_FIXTURES / "fail_tfvars_through_local")
+    r = tfscan.scan(SSH_FIXTURES / "fail_tfvars_through_local", bundled=False)
     assert len(r.findings) == 1
     f = r.findings[0]
     assert f.rule == "aws-sg-open-ssh"
@@ -30,14 +30,14 @@ def test_scan_fixture_findings_fields():
 
 
 def test_conditional_severity():
-    r = tfscan.scan(SSH_FIXTURES / "conditional_unconstrained_variable")
+    r = tfscan.scan(SSH_FIXTURES / "conditional_unconstrained_variable", bundled=False)
     (f,) = r.findings
     assert f.severity == "conditional"
     assert "var.ssh_cidr" in f.message
 
 
 def test_recursive_all_fixtures_match_expect():
-    r = tfscan.scan(FIXTURES, recursive=True)
+    r = tfscan.scan(FIXTURES, recursive=True, bundled=False)
     got = {(f.rule, f.address, f.severity, f.root.rsplit("/", 1)[1]) for f in r.findings}
     expected = set()
     for case in FIXTURES.glob("*/*"):
@@ -57,7 +57,7 @@ def test_recursive_all_fixtures_match_expect():
 
 
 def test_builtin_selection_and_paths():
-    r = tfscan.scan([SSH_FIXTURES / "fail_inline_literal", SSH_FIXTURES / "pass_restricted"])
+    r = tfscan.scan([SSH_FIXTURES / "fail_inline_literal", SSH_FIXTURES / "pass_restricted"], bundled=False)
     assert r.stats["roots"] == 2 and len(r.findings) == 1
     assert tfscan.scan(SSH_FIXTURES / "fail_inline_literal", builtin=False).findings == []
     assert len(tfscan.scan(SSH_FIXTURES / "fail_inline_literal", select=["aws-sg-open-ssh"]).findings) == 1
@@ -69,7 +69,7 @@ def test_builtin_selection_and_paths():
 def test_var_files(tmp_path):
     vf = tmp_path / "open.tfvars"
     vf.write_text('admin_cidr = "10.0.0.0/8"\n')
-    r = tfscan.scan(SSH_FIXTURES / "fail_tfvars_through_local", var_files=[vf])
+    r = tfscan.scan(SSH_FIXTURES / "fail_tfvars_through_local", var_files=[vf], bundled=False)
     assert r.findings == []
 
 
@@ -128,18 +128,18 @@ def test_explicit_empty_selection():
 def test_selection_covers_custom_rules_too():
     from tfscan.examples.sg_open_ssh import EXPR_RULE
 
-    r = tfscan.scan(SSH_FIXTURES / "fail_inline_literal", rules=[EXPR_RULE], select=[EXPR_RULE.name])
+    r = tfscan.scan(SSH_FIXTURES / "fail_inline_literal", rules=[EXPR_RULE], select=[EXPR_RULE.name], bundled=False)
     assert {f.rule for f in r.findings} == {EXPR_RULE.name}
-    r = tfscan.scan(SSH_FIXTURES / "fail_inline_literal", rules=[EXPR_RULE], select=["aws-sg-open-ssh"])
+    r = tfscan.scan(SSH_FIXTURES / "fail_inline_literal", rules=[EXPR_RULE], select=["aws-sg-open-ssh"], bundled=False)
     assert {f.rule for f in r.findings} == {"aws-sg-open-ssh"}
-    r = tfscan.scan(SSH_FIXTURES / "fail_inline_literal", rules=[EXPR_RULE])
+    r = tfscan.scan(SSH_FIXTURES / "fail_inline_literal", rules=[EXPR_RULE], bundled=False)
     assert {f.rule for f in r.findings} == {EXPR_RULE.name, "aws-sg-open-ssh"}
 
 
 def test_scan_plan_maps_to_source():
     plan = FIXTURES.parent / "plans" / "aws-s3-public-access-block" / "fail_permissive_block.json"
     src = FIXTURES / "aws-s3-public-access-block" / "fail_permissive_block"
-    r = tfscan.scan_plan(plan, source=src)
+    r = tfscan.scan_plan(plan, source=src, bundled=False)
     (f,) = r.findings
     assert (f.address, f.severity) == ("aws_s3_bucket.data", "definite")
     assert f.file.endswith("fail_permissive_block/main.tf") and f.line == 1
@@ -147,14 +147,6 @@ def test_scan_plan_maps_to_source():
     assert len(r.resources) >= 2
     with pytest.raises(ValueError, match="invalid JSON"):
         tfscan.scan_plan(src / "main.tf")
-
-
-def test_rego_native_matches_builtin():
-    root = FIXTURES / "aws-rds-unencrypted"
-    rego = tfscan.scan(root, recursive=True, rego_native=True)
-    native = tfscan.scan(root, recursive=True)
-    key = lambda r: sorted((f.rule, f.address, f.severity, f.message) for f in r.findings)
-    assert key(rego) == key(native) and len(rego.findings) == 5
 
 
 def test_foreign_policy_and_rule_errors():
@@ -208,16 +200,16 @@ def test_rule_files_of_every_format_and_policy_options():
 
 def test_overlay_shadows_disk_and_verifies_a_fix():
     case = FIXTURES / "aws-rds-unencrypted" / "fail_explicit_false"
-    before = tfscan.scan(case)
+    before = tfscan.scan(case, bundled=False)
     (f,) = before.findings
     fixed = (case / "main.tf").read_text().replace("= false", "= true")
-    after = tfscan.scan(case, overlay={case / "main.tf": fixed})
+    after = tfscan.scan(case, overlay={case / "main.tf": fixed}, bundled=False)
     assert after.findings == [] and after.stats["files"] == 1
     assert f.fingerprint not in {g.fingerprint for g in after.findings}
     assert "= false" in (case / "main.tf").read_text()
     # A module that exists only in memory.
     mem = "/nonexistent/oxtf-py-overlay"
-    r = tfscan.scan(mem, overlay={f"{mem}/main.tf": 'resource "aws_db_instance" "x" { storage_encrypted = false }'})
+    r = tfscan.scan(mem, overlay={f"{mem}/main.tf": 'resource "aws_db_instance" "x" { storage_encrypted = false }'}, bundled=False)
     assert [(g.address, g.severity) for g in r.findings] == [("aws_db_instance.x", "definite")]
     assert r.findings[0].file == f"{mem}/main.tf"
 
@@ -232,3 +224,26 @@ def test_checkov_skip_comments_are_reported():
         ("aws_db_instance.skipped", "encrypted by the platform"),
         ("module.child.aws_db_instance.inner", "module-wide"),
     ]
+
+
+def test_bundled_checkov_catalog_runs_by_default():
+    case = FIXTURES / "aws-rds-unencrypted" / "fail_explicit_false"
+    ids = {f.rule for f in tfscan.scan(case).findings}
+    assert {"CKV_AWS_16", "aws-rds-unencrypted"} <= ids
+    assert {f.rule for f in tfscan.scan(case, bundled=False).findings} == {"aws-rds-unencrypted"}
+    assert tfscan.scan(case, builtin=False).findings == []
+    assert [f.rule for f in tfscan.scan(case, select=["CKV_AWS_16"]).findings] == ["CKV_AWS_16"]
+    listed = {r["name"]: r for r in tfscan.rules()}
+    assert listed["CKV_AWS_16"]["source"]["engine"] == "checkov"
+    # gcp-storage-uniform-access replaces CKV_GCP_29, its alias.
+    assert len(listed) == len(tfscan.rules(bundled=False)) + 1079 - 1
+    assert listed["gcp-storage-uniform-access"]["aliases"] == ["CKV_GCP_29"]
+    assert "CKV_GCP_29" not in listed
+
+
+def test_a_seed_rule_answers_to_its_checkov_alias():
+    case = FIXTURES / "gcp-storage-uniform-access" / "fail_absent"
+    ids = {f.rule for f in tfscan.scan(case).findings}
+    assert "gcp-storage-uniform-access" in ids and "CKV_GCP_29" not in ids
+    selected = tfscan.scan(case, select=["CKV_GCP_29"]).findings
+    assert [f.rule for f in selected] == ["gcp-storage-uniform-access"]

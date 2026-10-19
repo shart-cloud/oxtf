@@ -555,21 +555,6 @@ fn float_value(s: &str, mark: Marker) -> Result<Json, Error> {
         })
 }
 
-/// Python's `repr(float)` (what `json.dumps` writes for a float key):
-/// shortest round-trip digits, positional for exponents in -4..16.
-fn py_float_repr(f: f64) -> String {
-    let sci = format!("{f:e}"); // shortest digits: `-1.5e-7`, `1e16`
-    let (mantissa, exp) = sci.split_once('e').expect("{:e} has an exponent");
-    let exp: i32 = exp.parse().expect("integer exponent");
-    if (-4..16).contains(&exp) {
-        let s = format!("{f}");
-        if s.contains('.') { s } else { format!("{s}.0") }
-    } else {
-        let sign = if exp < 0 { '-' } else { '+' };
-        format!("{mantissa}e{sign}{:02}", exp.abs())
-    }
-}
-
 fn scalar(
     value: &str,
     style: TScalarStyle,
@@ -628,7 +613,7 @@ fn key(node: &Node) -> Result<Option<String>, Error> {
         Json::Null => "null".into(),
         Json::Bool(b) => b.to_string(),
         Json::Number(n) => match n.as_f64() {
-            Some(f) if n.is_f64() => py_float_repr(f),
+            Some(f) if n.is_f64() => float_repr(f),
             _ => n.to_string(),
         },
         _ => unreachable!(),
@@ -717,6 +702,27 @@ fn construct(
             }
             Ok(Json::Object(map))
         }
+    }
+}
+
+/// Python's `repr(float)`: shortest round-trip digits, positional for
+/// exponents in -4..16.
+pub fn float_repr(f: f64) -> String {
+    if f.is_nan() {
+        return "nan".into();
+    }
+    if f.is_infinite() {
+        return if f > 0.0 { "inf" } else { "-inf" }.into();
+    }
+    let sci = format!("{f:e}");
+    let (mantissa, exp) = sci.split_once('e').expect("{:e} has an exponent");
+    let exp: i32 = exp.parse().expect("integer exponent");
+    if (-4..16).contains(&exp) {
+        let s = format!("{f}");
+        if s.contains('.') { s } else { format!("{s}.0") }
+    } else {
+        let sign = if exp < 0 { '-' } else { '+' };
+        format!("{mantissa}e{sign}{:02}", exp.abs())
     }
 }
 

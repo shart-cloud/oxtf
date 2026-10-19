@@ -28,6 +28,9 @@ from checkov.terraform import runner
 from checkov.terraform.graph_builder.graph_components.blocks import TerraformBlock
 from checkov.common.checks_infra.checks_parser import GraphCheckParser
 from checkov.common.checks_infra.registry import Registry
+# Checkov's parser applies this to every parsed file before the graph is
+# built (string booleans become booleans); parse cases the same way.
+from checkov.terraform.modules.module_utils import clean_parser_types
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -182,7 +185,7 @@ def seed(leaf, all_leaves, variant, rng, rich, offset=0):
         'contains' in l.get('operator', '') and (l['attribute'] == leaf['attribute']
                                                   or l['attribute'].startswith(leaf['attribute'] + '.'))
         for l in all_leaves)
-    choices = [expected, None, '', 'unexpected', []] if containment else [expected, None, False, True, '', 'unexpected', [], 0, 1]
+    choices = [expected, None, '', 'unexpected', []] if containment else [expected, None, False, True, 'true', 'false', '', 'unexpected', [], 0, 1]
     if rich:
         nested = '.' in leaf['attribute'] or '[' in leaf['attribute']
         # python-hcl2 unwraps single-element lists inside lists of objects.
@@ -269,7 +272,7 @@ def main():
                 mode, real_ty = ('data', ty[5:]) if ty.startswith('data.') else ('resource', ty)
                 text = f'{mode} "{real_ty}" "{name_}" {{\n{contents}\n}}\n'
                 blocks.append(text)
-                conf = hcl2.loads(text)[mode][0][real_ty][name_]
+                conf = clean_parser_types(hcl2.loads(text)[mode][0][real_ty][name_])
                 block = TerraformBlock(name=address, config=conf, path=str(root / 'main.tf'), block_type=mode,
                                        attributes=conf, id=f'{real_ty}.{name_}', source='terraform')
                 vertex = block.get_attribute_dict()
@@ -295,7 +298,7 @@ def main():
     # every root: findings grow with policies x roots and the scan exhausts
     # memory (~200 MB per policy at 397 policies) for rows that are never read.
     command = [str(args.native.resolve()), 'scan', str(corpus.resolve() / '{rule}'), '--recursive', '--format',
-               'json', '--rule-file', str(policies.resolve() / '{policy}'), '--rule', '{rule}']
+               'json', '--no-bundled', '--rule-file', str(policies.resolve() / '{policy}'), '--rule', '{rule}']
 
     def scan(r):
         policy = next(policies.glob(f'{r["rule"]}.*')).name

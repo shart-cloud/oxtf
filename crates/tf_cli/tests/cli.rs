@@ -1,5 +1,6 @@
 //! `oxtf scan` end-to-end: the W4 exit output (finding + full provenance
-//! chain) and the JSON format.
+//! chain) and the JSON format. These run the seed rules alone
+//! (`--no-bundled`); the bundled Checkov catalog has its own tests below.
 
 use std::process::Command;
 
@@ -12,6 +13,7 @@ fn scan_prints_provenance_chain() {
     let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
         .args([
             "scan",
+            "--no-bundled",
             &fixture("aws-sg-open-ssh/fail_tfvars_through_local"),
         ])
         .output()
@@ -38,6 +40,7 @@ fn scan_json_and_recursive() {
     let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
         .args([
             "scan",
+            "--no-bundled",
             "--recursive",
             "--format",
             "json",
@@ -65,7 +68,7 @@ fn var_file_wins_over_terraform_tfvars() {
     std::fs::write(&vf, "admin_cidr = \"0.0.0.0/0\"\n").unwrap();
     let case = fixture("aws-sg-open-ssh/pass_tfvars_overrides_open_default");
     let run = |extra: &[&str]| {
-        let mut args = vec!["scan", "--format", "json", case.as_str()];
+        let mut args = vec!["scan", "--no-bundled", "--format", "json", case.as_str()];
         args.extend_from_slice(extra);
         let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
             .args(&args)
@@ -86,7 +89,8 @@ fn current_directory_scan_loads_terraform_tfvars() {
     std::fs::write(dir.join("terraform.tfvars"), "encrypt = false\n").unwrap();
     for path in [None, Some("."), Some("./"), dir.to_str()] {
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_oxtf"));
-        cmd.current_dir(&dir).args(["scan", "--format", "json"]);
+        cmd.current_dir(&dir)
+            .args(["scan", "--no-bundled", "--format", "json"]);
         if let Some(path) = path {
             cmd.arg(path);
         }
@@ -117,6 +121,7 @@ fn scan_rule_file() {
         let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
             .args([
                 "scan",
+                "--no-bundled",
                 &fixture("aws-sg-open-ssh/conditional_unconstrained_variable"),
                 "--rule-file",
                 &rules,
@@ -150,7 +155,13 @@ fn scan_rule_file() {
     assert_eq!(ir.len(), 1);
     assert_eq!(ir, run("aws-sg-open-ssh"));
     let bad = Command::new(env!("CARGO_BIN_EXE_oxtf"))
-        .args(["scan", ".", "--rule-file", "/nonexistent.json"])
+        .args([
+            "scan",
+            "--no-bundled",
+            ".",
+            "--rule-file",
+            "/nonexistent.json",
+        ])
         .output()
         .unwrap();
     assert_eq!(bad.status.code(), Some(2));
@@ -166,6 +177,7 @@ fn scan_plan_maps_to_source() {
     let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
         .args([
             "scan",
+            "--no-bundled",
             "--plan",
             &plan,
             "--source",
@@ -189,7 +201,7 @@ fn scan_plan_maps_to_source() {
     );
     assert_eq!(f["location"]["line"], 1);
     let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
-        .args(["scan", "--plan", &plan, "."])
+        .args(["scan", "--no-bundled", "--plan", &plan, "."])
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(2));
@@ -204,6 +216,7 @@ fn unknown_rule_ids_are_errors_even_with_valid_ids() {
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_oxtf"));
         cmd.args([
             "scan",
+            "--no-bundled",
             &fixture("aws-rds-unencrypted/fail_absent_uses_default"),
             "--format",
             "json",
@@ -227,6 +240,7 @@ fn rule_errors_exit_one_with_output() {
     let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
         .args([
             "scan",
+            "--no-bundled",
             "--format",
             "json",
             &format!("{repo}/fixtures/rego/foreign_sprintf"),
@@ -271,6 +285,7 @@ fn policy_compile_errors_exit_two() {
     let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
         .args([
             "scan",
+            "--no-bundled",
             "--format",
             "json",
             &format!("{repo}/fixtures/rego/foreign"),
@@ -299,6 +314,7 @@ fn overlay_from_stdin_shadows_the_file() {
     let mut child = Command::new(env!("CARGO_BIN_EXE_oxtf"))
         .args([
             "scan",
+            "--no-bundled",
             "--format",
             "json",
             &case,
@@ -321,7 +337,7 @@ fn overlay_from_stdin_shadows_the_file() {
     assert_eq!(v["stats"]["findings"], 0);
     assert_eq!(v["stats"]["files"], 1);
     let bad = Command::new(env!("CARGO_BIN_EXE_oxtf"))
-        .args(["scan", &case, "--overlay", "nope"])
+        .args(["scan", "--no-bundled", &case, "--overlay", "nope"])
         .output()
         .unwrap();
     assert_eq!(bad.status.code(), Some(2));
@@ -347,7 +363,8 @@ fn current_directory_scan_discovers_new_overlay_files_once() {
         for path in [None, Some("."), Some("./"), dir.to_str()] {
             for recursive in [false, true] {
                 let mut cmd = Command::new(env!("CARGO_BIN_EXE_oxtf"));
-                cmd.current_dir(&dir).args(["scan", "--format", "json"]);
+                cmd.current_dir(&dir)
+                    .args(["scan", "--no-bundled", "--format", "json"]);
                 if let Some(path) = path {
                     cmd.arg(path);
                 }
@@ -384,4 +401,63 @@ fn current_directory_scan_discovers_new_overlay_files_once() {
     assert!(!dir.join("new.tf").exists());
     assert!(!dir.join("nested").exists());
     std::fs::remove_dir_all(dir).unwrap();
+}
+
+/// With no flags a scan runs the bundled Checkov catalog next to the seed
+/// rules; its findings carry the upstream check file and the same
+/// provenance as a seed rule's.
+#[test]
+fn default_scan_runs_the_bundled_checkov_catalog() {
+    let run = |extra: &[&str]| {
+        let case = fixture("aws-rds-unencrypted/fail_explicit_false");
+        let mut args = vec!["scan", "--format", "json", case.as_str()];
+        args.extend_from_slice(extra);
+        let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+            .args(&args)
+            .output()
+            .unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        v["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| (f["rule"]["id"].as_str().unwrap().to_string(), f.clone()))
+            .collect::<std::collections::BTreeMap<_, _>>()
+    };
+    let all = run(&[]);
+    let ckv = &all["CKV_AWS_16"];
+    assert_eq!(ckv["rule"]["source"]["engine"], "checkov");
+    assert_eq!(
+        ckv["rule"]["source"]["file"],
+        "checkov/terraform/checks/resource/aws/RDSEncryption.py"
+    );
+    assert_eq!(ckv["attribute"], "storage_encrypted");
+    assert!(all.contains_key("aws-rds-unencrypted"));
+    let seed = run(&["--no-bundled"]);
+    assert_eq!(seed.keys().collect::<Vec<_>>(), ["aws-rds-unencrypted"]);
+    assert!(run(&["--no-builtin"]).is_empty());
+    // A rule selection reaches the bundled catalog.
+    assert_eq!(
+        run(&["--rule", "CKV_AWS_16"]).keys().collect::<Vec<_>>(),
+        ["CKV_AWS_16"]
+    );
+}
+
+#[test]
+fn rules_lists_the_bundled_catalog() {
+    let count = |extra: &[&str]| {
+        let mut args = vec!["rules", "-f", "json"];
+        args.extend_from_slice(extra);
+        let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+            .args(&args)
+            .output()
+            .unwrap();
+        assert!(out.status.success());
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        v.as_array().unwrap().len()
+    };
+    assert_eq!(count(&["--no-bundled"]), 5);
+    // gcp-storage-uniform-access replaces CKV_GCP_29, its alias.
+    assert_eq!(count(&[]), 5 + 1079 - 1);
+    assert_eq!(count(&["--no-builtin"]), 0);
 }

@@ -185,7 +185,6 @@ def scan(
     select: Optional[Sequence[str]] = None,
     ir_rules: Sequence[str] = ...,
     callbacks: Sequence[Any] = ...,
-    rego_native: bool = False,
     policies: Sequence[str | os.PathLike[str]] = ...,
     policy_shape: Optional[str] = None,
     policy_entry: Optional[str] = None,
@@ -198,6 +197,7 @@ def scan(
     all_namespaces: bool = False,
     policy_entries: Sequence[str] = ...,
     rego_v0: bool = False,
+    bundled: bool = True,
 ) -> tuple[ScanResult, int]: ...
 def compile_rules(json: str) -> list[CompiledRule]: ...
 def builtin_rules() -> list[dict[str, Any]]: ...
@@ -210,6 +210,7 @@ def rules_info(
     policy_entries: Sequence[str] = ...,
     policy_shape: Optional[str] = None,
     rego_v0: bool = False,
+    bundled: bool = True,
 ) -> tuple[list[dict[str, Any]], list[str]]: ...
 def test_policies(
     rule_files: Sequence[str | os.PathLike[str]],
@@ -218,5 +219,4 @@ def test_policies(
     rego_v0: bool = False,
 ) -> list[tuple[str, str, str, Optional[str]]]: ...
 def parse_hcl(source: str) -> Document: ...
-def _rule_time(paths: Sequence[str | os.PathLike[str]], recursive: bool = False, builtin: bool = True, select: Optional[Sequence[str]] = None, ir_rules: Sequence[str] = ..., callbacks: Sequence[Any] = ..., repeat: int = 3) -> tuple[list[float], int, int]: ...
 def _bench_node_access(doc: Document, n: int, mode: Literal["cell", "owned"]) -> float: ...

@@ -51,17 +51,21 @@ use tf_eval::{Kind, Known, Prov, Value, Verdict};
 use tf_linter::{Category, DynRule, Judgement, Level, RuleFailure, RuleInfo};
 use tf_semantic::{Module, Resource};
 
+pub mod bundled;
 pub mod checkov;
 pub mod checkov_policy;
-pub mod goyaml;
+pub mod checkov_python;
 pub mod graph;
 pub mod jsonpath;
 pub mod py;
+pub mod pyliteral;
 pub mod pyre;
-pub mod pyyaml;
 
-/// Current IR version. Versions 1 and 2 remain readable; graph policies need 3.
-pub const IR_VERSION: u32 = 3;
+/// The IR version this build writes. A document's `version` says which
+/// build wrote it; every build reads every version up to its own, and
+/// reads each operator the same way whatever the version says. (Versions
+/// 2, 3 and 4 added the Checkov value, graph and Python operators.)
+pub const IR_VERSION: u32 = 4;
 
 fn ir_version() -> u32 {
     IR_VERSION
@@ -148,6 +152,11 @@ pub enum Expr {
     CheckovAttribute {
         #[serde(flatten)]
         check: checkov::AttributeCheck,
+    },
+    /// A Checkov check's own Python (`scan_resource_conf`), interpreted
+    /// natively over the Checkov-shaped configuration.
+    CheckovPython {
+        program: Box<checkov_python::Program>,
     },
     /// Checkov's declarative value-check semantics, over configured values.
     /// Imported checks carry their own missing-value policy; provider defaults
@@ -415,7 +424,7 @@ fn is_rule_document(path: &std::path::Path) -> bool {
         return true;
     };
     let value = match path.extension().and_then(|e| e.to_str()) {
-        Some("yaml" | "yml") => pyyaml::load(&text).ok().map(|d| d.value),
+        Some("yaml" | "yml") => tf_yaml::pyyaml::load(&text).ok().map(|d| d.value),
         _ => serde_json::from_str::<serde_json::Value>(&text).ok(),
     };
     let rule = |v: &serde_json::Value| v.get("clauses").is_some();
@@ -468,6 +477,7 @@ enum Node {
     CheckovGraph(graph::GraphExpr),
     CheckovAttribute(checkov::AttributeCheck),
     CheckovValue(checkov::ValueCheck),
+    CheckovPython(checkov_python::Check),
     Col { path: Vec<Seg>, default: bool },
     Element,
     Lit(Value),
@@ -557,30 +567,23 @@ fn lit(v: &serde_json::Value) -> Result<Value, String> {
     }
 }
 
-fn compile_expr(e: &Expr, version: u32) -> Result<Node, String> {
-    if version < 2 && matches!(e, Expr::CheckovValue { .. } | Expr::CheckovAttribute { .. }) {
-        return Err("Checkov predicates require IR version 2".into());
-    }
-    let b = |e: &Expr| compile_expr(e, version).map(Box::new);
+fn compile_expr(e: &Expr) -> Result<Node, String> {
+    let b = |e: &Expr| compile_expr(e).map(Box::new);
     Ok(match e {
         Expr::CheckovGraph { .. } => {
-            return Err(
-                "checkov_graph must be the complete clause condition in IR version 3".into(),
-            );
+            return Err("checkov_graph must be the complete clause condition".into());
         }
         Expr::CheckovAttribute { check } => {
-            if version < 3 && check.attribute.contains(['.', '*']) {
-                return Err(
-                    "checkov_attribute: version 2 supports only literal top-level attributes"
-                        .into(),
-                );
-            }
             check.validate()?;
             Node::CheckovAttribute(check.clone())
         }
         Expr::CheckovValue { check } => {
             check.validate()?;
             Node::CheckovValue(check.clone())
+        }
+        Expr::CheckovPython { program } => {
+            program.validate()?;
+            Node::CheckovPython(checkov_python::Check::new((**program).clone()))
         }
         Expr::Col { path, default } => {
             if path.is_empty() {
@@ -616,10 +619,7 @@ fn compile_expr(e: &Expr, version: u32) -> Result<Node, String> {
             if args.is_empty() {
                 return Err("and/or: no arguments".into());
             }
-            let args = args
-                .iter()
-                .map(|e| compile_expr(e, version))
-                .collect::<Result<_, _>>()?;
+            let args = args.iter().map(compile_expr).collect::<Result<_, _>>()?;
             if matches!(e, Expr::And { .. }) {
                 Node::And(args)
             } else {
@@ -716,14 +716,12 @@ pub fn compile(spec: RuleSpec) -> Result<CompiledRule, String> {
             for_each: c
                 .for_each
                 .as_ref()
-                .map(|e| compile_expr(e, spec.version))
+                .map(compile_expr)
                 .transpose()
                 .map_err(|e| ctx(format!("clause {i}: for_each: {e}")))?,
             condition: if let Expr::CheckovGraph { definition } = &c.condition {
-                if spec.version < 3 || c.for_each.is_some() {
-                    return Err(ctx(
-                        "checkov_graph requires IR version 3 and no for_each".into()
-                    ));
+                if c.for_each.is_some() {
+                    return Err(ctx("checkov_graph takes no for_each".into()));
                 }
                 definition.validate().map_err(ctx)?;
                 if definition.is_filter() {
@@ -731,7 +729,7 @@ pub fn compile(spec: RuleSpec) -> Result<CompiledRule, String> {
                 }
                 Node::CheckovGraph(definition.clone())
             } else {
-                compile_expr(&c.condition, spec.version)
+                compile_expr(&c.condition)
                     .map_err(|e| ctx(format!("clause {i}: condition: {e}")))?
             },
         });
@@ -745,6 +743,7 @@ pub fn compile(spec: RuleSpec) -> Result<CompiledRule, String> {
         runs_on_module: false,
         guideline: spec.guideline.as_deref().map(Arc::from),
         source: spec.origin.0.clone(),
+        aliases: Vec::new(),
     };
     let fix = derive_fix(&spec);
     Ok(CompiledRule {
@@ -919,6 +918,10 @@ fn eval_pred(n: &Node, s: Scope<'_>) -> Verdict {
             Scope::Value(_) => Verdict::new(Truth::Unknown, None),
         },
         Node::CheckovValue(check) => match s {
+            Scope::Resource(r) => check.evaluate(r),
+            Scope::Value(_) => Verdict::new(Truth::Unknown, None),
+        },
+        Node::CheckovPython(check) => match s {
             Scope::Resource(r) => check.evaluate(r),
             Scope::Value(_) => Verdict::new(Truth::Unknown, None),
         },

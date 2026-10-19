@@ -151,6 +151,10 @@ pub trait RuleMeta {
     const RESOURCE_TYPES: &'static [&'static str] = &[];
     /// Whether [`Rule::module_verdicts`] should be called (cross-resource rules).
     const RUNS_ON_MODULE: bool = false;
+    /// IDs of bundled rules this rule replaces: proven to flag the same
+    /// resources, so a catalog holding both keeps only this one. It is
+    /// selected by, and `checkov:skip`-suppressed by, any of them too.
+    const ALIASES: &'static [&'static str] = &[];
 }
 
 /// What a rule says. Both hooks default to "nothing".
@@ -288,6 +292,8 @@ pub struct RuleInfo {
     /// A page explaining the rule and its fix, when the rule names one.
     pub guideline: Option<Arc<str>>,
     pub source: RuleSource,
+    /// Other IDs of this rule ([`RuleMeta::ALIASES`]).
+    pub aliases: Vec<Arc<str>>,
 }
 
 /// Where a rule comes from.
@@ -388,6 +394,7 @@ impl<T: Rule> DynRule for T {
             runs_on_module: T::RUNS_ON_MODULE,
             guideline: None,
             source: RuleSource::default(),
+            aliases: T::ALIASES.iter().map(|s| Arc::from(*s)).collect(),
         }
     }
     fn judge_resource(&self, resource: &Resource) -> Result<Vec<Judgement>, RuleFailure> {
@@ -444,6 +451,8 @@ pub struct Finding {
     pub level: Level,
     pub guideline: Option<Arc<str>>,
     pub source: RuleSource,
+    /// The rule's other IDs ([`RuleInfo::aliases`]).
+    pub aliases: Vec<Arc<str>>,
     /// What the finding is about.
     pub subject: FindingSubject,
     /// Resource address, module path included (`module.m.aws_s3_bucket.b`);
@@ -519,28 +528,33 @@ impl Finding {
         Self::build(
             info,
             resource,
-            severity,
-            witness,
-            message,
+            Judgement {
+                severity,
+                witness: witness.cloned(),
+                message: message.to_string(),
+                hidden: Vec::new(),
+                fix_hint: None,
+            },
             root,
-            Vec::new(),
-            None,
         )
     }
 
-    /// [`Finding::with_severity`] plus the hidden inputs and fix hint a
-    /// judgement carries. The engine's entry point.
-    #[allow(clippy::too_many_arguments)]
+    /// The finding for a judgement on a resource, or `None`. The engine's
+    /// entry point: this is where the existence gate, the downgrade, the
+    /// primary location and the certainty suffix are decided.
     pub fn build(
         info: &RuleInfo,
         resource: &Resource,
-        severity: Severity,
-        witness: Option<&tf_eval::Value>,
-        message: &str,
+        judgement: Judgement,
         root: &Path,
-        hidden: Vec<Hidden>,
-        fix_hint: Option<FixHint>,
     ) -> Option<Finding> {
+        let Judgement {
+            severity,
+            witness,
+            message,
+            hidden,
+            fix_hint,
+        } = judgement;
         let mut downgraded = false;
         let severity = match resource.existence {
             Truth::False | Truth::Unknown => return None,
@@ -550,7 +564,7 @@ impl Finding {
             }
             Truth::True => severity,
         };
-        let provenance = witness.map(|w| w.prov.steps()).unwrap_or_default();
+        let provenance = witness.as_ref().map(|w| w.prov.steps()).unwrap_or_default();
         let deciding = provenance
             .iter()
             .rev()
@@ -562,21 +576,7 @@ impl Finding {
             .map(|p| p.split(['.', '[']).next().unwrap_or(p).to_string());
         let configured = top.as_deref().and_then(|t| resource.value(t));
         let effective = top.as_deref().and_then(|t| resource.value_or_default(t));
-        let message = match (severity, witness.map(|w| &w.kind)) {
-            (Severity::Conditional, Some(Kind::Tainted(t))) if !t.variable.starts_with('(') => {
-                format!(
-                    "{message} (depends on unconstrained variable var.{})",
-                    t.variable
-                )
-            }
-            (Severity::Conditional, _) if downgraded => {
-                format!("{message} (resource exists depending on an unconstrained variable)")
-            }
-            (Severity::Conditional, _) => {
-                format!("{message} (depends on an unconstrained variable)")
-            }
-            _ => message.to_string(),
-        };
+        let message = certainty_suffix(message, severity, witness.as_ref(), downgraded);
         Some(Finding {
             rule: info.name.clone(),
             category: info.category,
@@ -584,6 +584,7 @@ impl Finding {
             level: info.level,
             guideline: info.guideline.clone(),
             source: info.source.clone(),
+            aliases: info.aliases.clone(),
             subject: FindingSubject::Resource(resource.id.clone()),
             address: resource.address.clone(),
             resource_type: Some(resource.ty.clone()),
@@ -604,18 +605,21 @@ impl Finding {
     /// A finding on a configuration file of `module` (a whole-file policy
     /// result no single resource accounts for). The primary location is the
     /// witness's newest provenance step in that file, else the file's start.
-    #[allow(clippy::too_many_arguments)]
     pub fn for_file(
         info: &RuleInfo,
         module: &Module,
         file: &SourceFile,
-        severity: Severity,
-        witness: Option<&tf_eval::Value>,
-        message: &str,
+        judgement: Judgement,
         root: &Path,
-        hidden: Vec<Hidden>,
     ) -> Finding {
-        let provenance = witness.map(|w| w.prov.steps()).unwrap_or_default();
+        let Judgement {
+            severity,
+            witness,
+            message,
+            hidden,
+            ..
+        } = judgement;
+        let provenance = witness.as_ref().map(|w| w.prov.steps()).unwrap_or_default();
         let primary = provenance
             .iter()
             .rev()
@@ -625,18 +629,7 @@ impl Finding {
                 file: file.id,
                 span: Span::new(0, 0),
             });
-        let message = match (severity, witness.map(|w| &w.kind)) {
-            (Severity::Conditional, Some(Kind::Tainted(t))) if !t.variable.starts_with('(') => {
-                format!(
-                    "{message} (depends on unconstrained variable var.{})",
-                    t.variable
-                )
-            }
-            (Severity::Conditional, _) => {
-                format!("{message} (depends on an unconstrained variable)")
-            }
-            _ => message.to_string(),
-        };
+        let message = certainty_suffix(message, severity, witness.as_ref(), false);
         Finding {
             rule: info.name.clone(),
             category: info.category,
@@ -644,6 +637,7 @@ impl Finding {
             level: info.level,
             guideline: info.guideline.clone(),
             source: info.source.clone(),
+            aliases: info.aliases.clone(),
             subject: FindingSubject::File {
                 path: file.path.clone(),
             },
@@ -661,5 +655,31 @@ impl Finding {
             hidden,
             fix_hint: None,
         }
+    }
+}
+
+/// The rule's wording, with a suffix naming what a conditional finding
+/// depends on: the unconstrained variable where the witness names one,
+/// the resource's own existence when that is what was downgraded.
+fn certainty_suffix(
+    message: String,
+    severity: Severity,
+    witness: Option<&tf_eval::Value>,
+    downgraded: bool,
+) -> String {
+    match (severity, witness.map(|w| &w.kind)) {
+        (Severity::Conditional, Some(Kind::Tainted(t))) if !t.variable.starts_with('(') => {
+            format!(
+                "{message} (depends on unconstrained variable var.{})",
+                t.variable
+            )
+        }
+        (Severity::Conditional, _) if downgraded => {
+            format!("{message} (resource exists depending on an unconstrained variable)")
+        }
+        (Severity::Conditional, _) => {
+            format!("{message} (depends on an unconstrained variable)")
+        }
+        _ => message,
     }
 }

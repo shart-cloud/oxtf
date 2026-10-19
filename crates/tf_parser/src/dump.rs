@@ -32,16 +32,6 @@ pub fn dump_file(file: &File<'_>, opts: Options) -> String {
     d.out
 }
 
-pub fn dump_expr(expr: &Expression<'_>, opts: Options) -> String {
-    let mut d = Dumper {
-        out: String::new(),
-        opts,
-        indent: 0,
-    };
-    d.expr(expr);
-    d.out
-}
-
 struct Dumper {
     out: String,
     opts: Options,

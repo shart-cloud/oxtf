@@ -67,20 +67,32 @@ def _translate(check):
     from checkov.terraform.checks.resource.base_resource_value_check import BaseResourceValueCheck as Positive
     from checkov.terraform.checks.resource.base_resource_negative_value_check import BaseResourceNegativeValueCheck as Negative
 
+    if type(check).scan_entity_conf is not BaseResourceCheck.scan_entity_conf:
+        raise Unsupported("overridden scan_entity_conf")
     if isinstance(check, Positive):
         base, negative = Positive, False
     elif isinstance(check, Negative):
         base, negative = Negative, True
     else:
-        raise Unsupported("custom Python scan_resource_conf")
+        return _translate_python(check, "custom Python scan_resource_conf")
     if type(check).scan_resource_conf is not base.scan_resource_conf:
-        raise Unsupported("overridden scan_resource_conf; metadata alone is insufficient")
-    if type(check).scan_entity_conf is not BaseResourceCheck.scan_entity_conf:
-        raise Unsupported("overridden scan_entity_conf")
+        return _translate_python(check, "overridden scan_resource_conf")
     if not negative and type(check)._is_variable_dependant is not BaseResourceCheck._is_variable_dependant:
         raise Unsupported("overridden variable-dependency predicate")
 
-    clauses = []
+    clauses = [{"resource_types": [t], "condition": {"op": "checkov_value", **params}}
+               for t, params in _value_check_params(check, negative).items()]
+    if not clauses:
+        raise Unsupported("no supported resource types")
+    return {**_metadata(check), "clauses": clauses}
+
+
+def _value_check_params(check, negative):
+    """The generic value check's parameters per resource type (the
+    ``checkov_value`` condition without its op)."""
+    from checkov.common.models.consts import ANY_VALUE
+
+    out = {}
     for resource_type in sorted(check.supported_entities):
         if any(c in resource_type for c in "*?["):
             raise Unsupported("resource-type wildcard")
@@ -107,13 +119,49 @@ def _translate(check):
         missing = {"PASSED": "pass", "FAILED": "fail", "UNKNOWN": "unknown"}.get(missing.value)
         if missing is None:
             raise Unsupported("unsupported missing-value outcome")
-        clauses.append({"resource_types": [resource_type], "condition": {
-            "op": "checkov_value", "path": path, "values": values,
-            "negative": negative, "any_value": any_value, "missing": missing,
-        }})
-    if not clauses:
-        raise Unsupported("no supported resource types")
-    return {**_metadata(check), "clauses": clauses}
+        out[resource_type] = {"path": path, "values": values, "negative": negative,
+                              "any_value": any_value, "missing": missing}
+    return out
+
+
+def _sibling(name):
+    """A module of this package, also when this file runs as a script
+    (``scripts/import_checkov.py`` runs it without the package)."""
+    import importlib
+    if __package__:
+        return importlib.import_module(f"{__package__}.{name}")
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(name, Path(__file__).with_name(f"{name}.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _translate_python(check, kind):
+    """A check whose scan_resource_conf is Python of its own, as a
+    ``checkov_python`` program (see ``checkov_python.py``)."""
+    from checkov.common.checks.base_check import BaseCheck
+    from checkov.terraform.checks.resource.base_resource_check import BaseResourceCheck
+    from checkov.terraform.checks.resource.base_resource_value_check import BaseResourceValueCheck
+    from checkov.terraform.checks.resource.base_resource_negative_value_check import BaseResourceNegativeValueCheck
+    checkov_python = _sibling("checkov_python")
+
+    generic = {BaseResourceCheck, BaseResourceValueCheck, BaseResourceNegativeValueCheck, BaseCheck, object}
+    types = sorted(check.supported_entities)
+    if any(any(c in t for c in "*?[") for t in types):
+        raise Unsupported(f"{kind}: resource-type wildcard")
+    def value_check(c):
+        try:
+            return _value_check_params(c, isinstance(c, BaseResourceNegativeValueCheck))
+        except Unsupported as exc:
+            raise checkov_python.Unsupported(f"the generic value check: {exc}") from None
+
+    try:
+        program = checkov_python.export(check, generic, value_check)
+    except checkov_python.Unsupported as exc:
+        raise Unsupported(f"{kind}: {exc}") from None
+    return {**_metadata(check), "version": 4, "clauses": [{"resource_types": types, "condition": {
+        "op": "checkov_python", "program": program}}]}
 
 
 def export_rules(directory, *, expected_version=SUPPORTED_VERSION):
@@ -152,7 +200,7 @@ def export_rules(directory, *, expected_version=SUPPORTED_VERSION):
     if license_file is None:
         raise ValueError("installed Checkov distribution has no LICENSE")
     manifest = {
-        "schema": 1, "source": "checkov", "source_version": version, "ir_version": 3,
+        "schema": 1, "source": "checkov", "source_version": version, "ir_version": 4,
         "translated": len(rules), "unsupported": sum(x["status"] == "unsupported" for x in inventory),
         "checks": inventory,
         "semantics": "configured values; Checkov missing-value policy; oxtf abstract-value lattice",
@@ -162,6 +210,16 @@ def export_rules(directory, *, expected_version=SUPPORTED_VERSION):
     out = Path(directory)
     out.mkdir(parents=True, exist_ok=False)
     (out / "rules.json").write_text(payload)
+    # The IAM database programs that use cloudsplaining read (policy_sentry).
+    if '"iam": "definition"' in payload or '"iam":"definition"' in payload:
+        iam = _sibling("checkov_python").iam_data()
+        # One service per line, after a header line: a scan parses only the
+        # services its policies name.
+        services = iam.pop("services")
+        lines = [json.dumps({"header": iam}, separators=(",", ":"), sort_keys=True)]
+        lines += [json.dumps({"prefix": p, "service": services[p]}, separators=(",", ":"), sort_keys=True)
+                  for p in sorted(services)]
+        (out / "iam.ndjson").write_text("\n".join(lines) + "\n")
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     shutil.copyfile(license_file, out / "LICENSE.checkov")
     return manifest

@@ -21,7 +21,9 @@ impl Allocator {
     }
 
     pub fn with_capacity(bytes: usize) -> Self {
-        Self { bump: bumpalo::Bump::with_capacity(bytes) }
+        Self {
+            bump: bumpalo::Bump::with_capacity(bytes),
+        }
     }
 
     #[inline]
@@ -57,7 +59,6 @@ impl<'a, T> Box<'a, T> {
     pub fn new_in(value: T, allocator: &'a Allocator) -> Self {
         Box(allocator.bump.alloc(value))
     }
-
 }
 
 impl<T: ?Sized> AsRef<T> for Box<'_, T> {
@@ -101,20 +102,6 @@ impl<'a, T> Vec<'a, T> {
     #[inline]
     pub fn new_in(allocator: &'a Allocator) -> Self {
         Vec(bumpalo::collections::Vec::new_in(&allocator.bump))
-    }
-
-    #[inline]
-    pub fn with_capacity_in(cap: usize, allocator: &'a Allocator) -> Self {
-        Vec(bumpalo::collections::Vec::with_capacity_in(cap, &allocator.bump))
-    }
-
-    pub fn from_iter_in<I: IntoIterator<Item = T>>(iter: I, allocator: &'a Allocator) -> Self {
-        Vec(bumpalo::collections::Vec::from_iter_in(iter, &allocator.bump))
-    }
-
-    /// Freeze into an arena slice.
-    pub fn into_bump_slice(self) -> &'a [T] {
-        self.0.into_bump_slice()
     }
 }
 

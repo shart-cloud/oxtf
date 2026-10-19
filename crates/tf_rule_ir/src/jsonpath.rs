@@ -2,7 +2,7 @@
 //! compiled at export time; runtime traversal retains abstract values.
 use std::cell::Cell;
 
-use crate::checkov::{AttributeCheck, AttributeOp, configuration};
+use crate::checkov::{AttributeCheck, AttributeOp, parsed_configuration};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 use tf_eval::{Kind, Known, Step, StepKind, Truth, Value, Verdict, truth};
@@ -135,15 +135,20 @@ impl JsonPathCheck {
     }
 
     pub fn evaluate(&self, resource: &Resource) -> Verdict {
-        let configured = configuration(&resource.body);
-        let vertex = Value::object(
-            configured
-                .as_object()
-                .expect("configuration object")
-                .iter()
-                .map(|(key, value)| (key.clone(), vertex_field(value)))
-                .collect(),
-        );
+        // Graph policies see vertex attributes, not the resource checks'
+        // rendered configuration. Computed once per resource instance.
+        let vertex = resource
+            .derived
+            .get_or_init(crate::checkov::slot::VERTEX, || {
+                Value::object(
+                    parsed_configuration(&resource.body)
+                        .as_object()
+                        .expect("configuration object")
+                        .iter()
+                        .map(|(key, value)| (key.clone(), vertex_field(value)))
+                        .collect(),
+                )
+            });
         let fields: Option<Vec<String>> = self
             .path
             .iter()
@@ -153,10 +158,10 @@ impl JsonPathCheck {
             })
             .collect();
         let mut result = if let Some(fields) = fields {
-            self.predicate(&lookup(&vertex, &fields, 0, true).unwrap_or_else(Value::null))
+            self.predicate(&lookup(vertex, &fields, 0, true).unwrap_or_else(Value::null))
         } else {
             let raised = Cell::new(false);
-            let matches = self.query(&vertex, &self.path, &raised);
+            let matches = self.query(vertex, &self.path, &raised);
             if raised.get() {
                 // An exception anywhere in the query aborts it: no result.
                 return Verdict::new(Truth::Unknown, Some(vertex.clone()));

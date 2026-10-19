@@ -155,15 +155,8 @@ resource "test_link" "l" {
 }
 
 #[test]
-fn graph_ir_requires_v3_and_complete_clause_scope() {
+fn graph_ir_is_the_complete_clause_condition() {
     let mut rule = policy(connection("exists"));
-    rule["version"] = json!(2);
-    assert!(
-        tf_rule_ir::compile_json(&rule.to_string())
-            .unwrap_err()
-            .contains("version 3")
-    );
-    rule = policy(connection("exists"));
     rule["clauses"][0]["condition"] =
         json!({"op":"not", "arg":rule["clauses"][0]["condition"].clone()});
     assert!(

@@ -164,14 +164,6 @@ mod embedded {
     pub fn blob_len() -> (usize, usize) {
         (BLOB.len(), SYMBOLS.len())
     }
-
-    /// Deserialize every schema now (eager mode). Returns how many.
-    pub fn preload_all() -> usize {
-        (0..N).for_each(|i| {
-            load(i);
-        });
-        N
-    }
 }
 
 #[cfg(feature = "embedded")]

@@ -106,30 +106,36 @@ impl Linter {
         let root = analysis.root_dir.as_path();
         let mut out = Vec::new();
         let mut rule_errors = Vec::new();
-        let graph = self
-            .rules
+        // A graph rule judges only resources of its declared types (data
+        // sources as `data.TYPE`), so one with none of them in this root
+        // has nothing to judge; nor is the graph built for no rule.
+        let present: std::collections::HashSet<String> = analysis
+            .modules
             .iter()
-            .any(|r| r.needs_graph())
-            .then(|| tf_semantic::graph::ResourceGraph::new(analysis));
-        for (i, rule) in self
-            .rules
-            .iter()
-            .enumerate()
-            .filter(|(_, r)| r.needs_graph())
-        {
+            .flat_map(|m| &m.resources)
+            .map(|r| match r.mode {
+                tf_semantic::Mode::Data => format!("data.{}", r.ty),
+                _ => r.ty.to_string(),
+            })
+            .collect();
+        let graph_rules: Vec<usize> = (0..self.rules.len())
+            .filter(|&i| {
+                let types = &self.infos[i].resource_types;
+                self.rules[i].needs_graph()
+                    && (types.is_empty()
+                        || types
+                            .iter()
+                            .any(|t| &**t == ANY_TYPE || present.contains(&**t)))
+            })
+            .collect();
+        let graph =
+            (!graph_rules.is_empty()).then(|| tf_semantic::graph::ResourceGraph::new(analysis));
+        for i in graph_rules {
+            let rule = &self.rules[i];
             match rule.judge_graph(graph.as_ref().expect("graph requested")) {
                 Ok(judgements) => {
                     for (r, j) in judgements {
-                        out.extend(Finding::build(
-                            &self.infos[i],
-                            r,
-                            j.severity,
-                            j.witness.as_ref(),
-                            &j.message,
-                            root,
-                            j.hidden,
-                            j.fix_hint,
-                        ));
+                        out.extend(Finding::build(&self.infos[i], r, j, root));
                     }
                 }
                 Err(message) => rule_errors.push(RuleError {
@@ -165,16 +171,9 @@ impl Linter {
                     Ok(judgements) => {
                         for (subject, j) in judgements {
                             match subject {
-                                Subject::Resource(r) => out.extend(Finding::build(
-                                    &self.infos[i],
-                                    r,
-                                    j.severity,
-                                    j.witness.as_ref(),
-                                    &j.message,
-                                    root,
-                                    j.hidden,
-                                    j.fix_hint,
-                                )),
+                                Subject::Resource(r) => {
+                                    out.extend(Finding::build(&self.infos[i], r, j, root))
+                                }
                                 Subject::File { module, file } => {
                                     let sf = config
                                         .iter()
@@ -185,11 +184,8 @@ impl Linter {
                                         &self.infos[i],
                                         module,
                                         &sf,
-                                        j.severity,
-                                        j.witness.as_ref(),
-                                        &j.message,
+                                        j,
                                         root,
-                                        j.hidden,
                                     ));
                                 }
                             }
@@ -217,16 +213,7 @@ impl Linter {
                     }
                 };
                 for (r, j) in judged {
-                    out.extend(Finding::build(
-                        &self.infos[i],
-                        r,
-                        j.severity,
-                        j.witness.as_ref(),
-                        &j.message,
-                        root,
-                        j.hidden,
-                        j.fix_hint,
-                    ));
+                    out.extend(Finding::build(&self.infos[i], r, j, root));
                 }
             }
             for r in &m.resources {
@@ -247,16 +234,7 @@ impl Linter {
                         }
                     };
                     for j in judged {
-                        out.extend(Finding::build(
-                            &self.infos[i],
-                            r,
-                            j.severity,
-                            j.witness.as_ref(),
-                            &j.message,
-                            root,
-                            j.hidden,
-                            j.fix_hint,
-                        ));
+                        out.extend(Finding::build(&self.infos[i], r, j, root));
                     }
                 }
             }
@@ -289,10 +267,18 @@ pub fn select_rules(
     rules: Vec<Box<dyn DynRule>>,
     ids: &[String],
 ) -> Result<Vec<Box<dyn DynRule>>, RuleSelectionError> {
-    let names: Vec<_> = rules.iter().map(|r| r.info().name).collect();
+    // A rule is selected by its name or any of its aliases.
+    let names: Vec<Vec<Arc<str>>> = rules
+        .iter()
+        .map(|r| {
+            let info = r.info();
+            std::iter::once(info.name).chain(info.aliases).collect()
+        })
+        .collect();
+    let named = |names: &[Arc<str>], id: &str| names.iter().any(|n| &**n == id);
     let mut unknown_ids = Vec::new();
     for id in ids {
-        if !names.iter().any(|name| name.as_ref() == id) && !unknown_ids.contains(id) {
+        if !names.iter().any(|n| named(n, id)) && !unknown_ids.contains(id) {
             unknown_ids.push(id.clone());
         }
     }
@@ -302,6 +288,6 @@ pub fn select_rules(
     Ok(rules
         .into_iter()
         .zip(names)
-        .filter_map(|(rule, name)| ids.iter().any(|id| name.as_ref() == id).then_some(rule))
+        .filter_map(|(rule, n)| ids.iter().any(|id| named(&n, id)).then_some(rule))
         .collect())
 }

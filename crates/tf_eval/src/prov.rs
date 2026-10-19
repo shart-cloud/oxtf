@@ -155,6 +155,10 @@ impl Prov {
         if other.dependencies().is_empty() {
             return;
         }
+        if self.dependencies().is_empty() {
+            *self = self.clone().inheriting(other);
+            return;
+        }
         let mut refs = self.dependencies().to_vec();
         let old_len = refs.len();
         for dependency in other.dependencies() {
@@ -164,6 +168,53 @@ impl Prov {
         }
         if refs.len() != old_len {
             *self = self.clone().referencing(refs);
+        }
+    }
+
+    /// `self` with the dependency list of `other` (shared, not copied).
+    fn inheriting(self, other: &Prov) -> Prov {
+        match other.0.as_ref().and_then(|n| n.dependencies.clone()) {
+            None => self,
+            Some(dependencies) => Prov(Some(Arc::new(Node {
+                step: None,
+                len: self.len() as u32,
+                dependencies: Some(dependencies),
+                prev: self.0,
+            }))),
+        }
+    }
+
+    /// The union of the dependencies of `parts`, as the provenance of a
+    /// container built from them. One allocation for the whole union.
+    pub(crate) fn union_of<'a>(parts: impl IntoIterator<Item = &'a Prov>) -> Prov {
+        let mut refs: Vec<ResourceDependency> = Vec::new();
+        let mut first: Option<&'a Prov> = None;
+        let mut single = true;
+        for part in parts {
+            let deps = part.dependencies();
+            if deps.is_empty() {
+                continue;
+            }
+            match first {
+                None => first = Some(part),
+                Some(f) if single && f.dependencies() != deps => {
+                    single = false;
+                    refs.extend_from_slice(f.dependencies());
+                }
+                _ => {}
+            }
+            if !single {
+                for dependency in deps {
+                    if !refs.contains(dependency) {
+                        refs.push(dependency.clone());
+                    }
+                }
+            }
+        }
+        match first {
+            None => Prov::EMPTY,
+            Some(f) if single => Prov::EMPTY.inheriting(f),
+            Some(_) => Prov::EMPTY.referencing(refs),
         }
     }
 
@@ -226,28 +277,45 @@ impl Prov {
 
     /// `self` (an inner value's history) followed by `outer` (the history of
     /// the container it was taken from). Steps of `outer` already present in
-    /// `self` are skipped.
+    /// `self` are skipped. Resource dependencies are the element's own when
+    /// it has any, else the container's; see [`Prov::joined`] for a union.
     #[must_use]
     pub fn then(&self, outer: &Prov) -> Prov {
-        let mut joined = self.clone();
-        joined.join_dependencies(outer);
-        if outer.is_empty() {
-            return joined;
+        // An element keeps its own resource dependencies: a container's
+        // list is the union over all of its elements, and an element with
+        // dependencies of its own is more precise than that union. Only an
+        // element that names no resource inherits the container's.
+        // A chain with no steps may still carry dependencies, so test the
+        // node, not the step count.
+        let (Some(inner), Some(container)) = (&self.0, &outer.0) else {
+            return if self.0.is_none() {
+                outer.clone()
+            } else {
+                self.clone()
+            };
+        };
+        if Arc::ptr_eq(inner, container) {
+            return self.clone();
         }
-        if self.is_empty() {
-            let mut joined = outer.clone();
-            joined.join_dependencies(self);
-            return joined;
+        let mut r = self.clone();
+        if r.dependencies().is_empty() {
+            r = r.inheriting(outer);
         }
-        if Arc::ptr_eq(self.0.as_ref().unwrap(), outer.0.as_ref().unwrap()) {
-            return joined;
-        }
-        let mut r = joined;
         for s in outer.steps() {
             if !r.iter_newest_first().any(|x| x.same_place(&s)) {
                 r = r.push(s);
             }
         }
+        r
+    }
+
+    /// `self` followed by `other`, with the resource dependencies of both: a
+    /// value computed from several parts (function arguments, template
+    /// parts, a filter condition) depends on all of them.
+    #[must_use]
+    pub fn joined(&self, other: &Prov) -> Prov {
+        let mut r = self.then(other);
+        r.join_dependencies(other);
         r
     }
 

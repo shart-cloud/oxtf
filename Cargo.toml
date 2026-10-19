@@ -20,6 +20,8 @@ tf_linter = { path = "crates/tf_linter" }
 tf_rule_ir = { path = "crates/tf_rule_ir" }
 tf_plan = { path = "crates/tf_plan" }
 tf_scan = { path = "crates/tf_scan" }
+tf_rego = { path = "crates/tf_rego" }
+tf_yaml = { path = "crates/tf_yaml" }
 bumpalo = { version = "3.20.3", features = ["collections", "boxed"] }
 insta = "1.49.0"
 miette = "7.6.0"

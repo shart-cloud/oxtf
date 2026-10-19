@@ -551,6 +551,62 @@ F1 → F2 (F2 needs the Rust front-end to add operators in one place). F3 →
 F4 (Conftest builds on the Rego loader). F1 and F3 can run in parallel; F5
 lands incrementally alongside each and closes last.
 
+## Bundled catalog (implemented 2026-10-17)
+
+Out of the box a scan ran 5 seed rules; the Checkov rules oxtf can run
+needed a Python export and a Checkov checkout. They now ship in the binary
+and run by default.
+
+- **What.** `crates/tf_rule_ir/data/checkov/`: 693 rules from Checkov
+  3.2.328 (508 resource value checks, 186 graph policies, `CKV_NCP_22`
+  being both). By provider: AWS 277, Azure 219, GCP 82, then 14 smaller
+  providers. The manifest inventories all 1,096 upstream Terraform checks;
+  the 402 untranslated are 343 custom Python checks, 45 overridden value
+  checks, 9 string-membership predicates, 4 meta-argument checks and 1
+  raw-expression comparison. Severities are Checkov's: most are
+  `severity_defaulted` (medium), as Checkov OSS ships few.
+- **How.** `tf_rule_ir::bundled` embeds `rules.json` and parses it straight
+  into `RuleSpec`s with the upstream file as origin (engine `checkov`).
+  `examples/bundle_checkov.rs` regenerates it from the value pack
+  (`scripts/import_checkov.py`) and the graph policies, read by the Rust
+  front-end. `Catalog::bundled` resolves first, so a user's policy with the
+  same ID shadows it. Catalog shadowing is now linear (it was quadratic:
+  ~18 ms for 700 rules).
+- **Defaults.** CLI and Python run `Catalog::standard()` (bundled + seed).
+  `--no-bundled` / `bundled=False` drops the catalog; `--no-builtin` /
+  `builtin=False` drops it and the seed rules. `ScanRequest::dirs` and
+  `::plan` stay seed-only for library callers and the fixture suites.
+- **Graph-rule dispatch.** The linter skips a graph rule when none of its
+  resource types (its clause types: every target and connected type) is in
+  the root, and builds no graph for no rule. Corpus JSON is byte-identical
+  with and without the skip.
+
+**Gate (all run 2026-10-17).**
+
+| Check | Result |
+| --- | --- |
+| `tests/bundled.rs` drift test against a fresh export of 3.2.328 | byte-identical |
+| `bench/checkov/compare.py` (value checks vs Checkov's own checks) | 7,022 cases, 7,010 comparable, 0 disagreements |
+| `bench/checkov/graph_compare.py` (186 built-in + 211 synthetic policies) | 41,208 cases, 0 disagreements, 0 rule errors |
+| Rust workspace / pytest | 231 passed / 50 passed, 1 skipped |
+
+Both harnesses now pass `--no-bundled`, so they measure exactly the rules
+under test; the drift test ties those to the embedded catalog.
+
+**Cost** (8 threads; medians, 12 corpus runs and 37 one-file runs each):
+
+| Build | Corpus (17 repos) | One file |
+| --- | ---: | ---: |
+| Seed only (before) | 111 ms | 5.4 ms |
+| Bundled, without the graph-rule skip | 152 ms | 12.0 ms |
+| Bundled (shipped) | 132 ms | 11.5 ms |
+
+Corpus findings go from 2 to 974 (970 definite, 4 conditional, 0 rule
+errors). The one-file cost is
+fixed load: parsing the 0.96 MB catalog (~2.5–4 ms) and compiling 693
+rules (~1.5 ms) on every run. Compiling only the rules whose resource types
+occur in the scanned roots would remove most of it.
+
 ## Roadmap (not in this plan)
 
 - **Checkov Python checks** (the ~390 custom `scan_resource_conf` checks and

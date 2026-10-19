@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Differential conformance of an exported value-check pack against Checkov.
 
-Run with the pinned Checkov interpreter. Generates real HCL configurations,
-uses Checkov's HCL parser and original check implementations as the reference,
-then scans the entire generated corpus once with oxtf. Artifacts are retained.
+Run with the pinned Checkov interpreter. Generates real HCL configurations
+and uses Checkov's runner (its parser, variable rendering and the original
+check implementations) over the generated corpus as the reference, then
+scans the same corpus once with oxtf. Artifacts are retained.
 """
 import argparse
 import copy
@@ -18,6 +19,9 @@ import time
 import hcl2
 from checkov.terraform import runner  # registers upstream checks
 from checkov.terraform.checks.resource.registry import resource_registry
+# Checkov's parser applies this to every parsed file before any check runs
+# (string booleans become booleans); parse cases the same way.
+from checkov.terraform.modules.module_utils import clean_parser_types
 
 
 def graph_cases(rule, manifest, corpus):
@@ -32,7 +36,7 @@ def graph_cases(rule, manifest, corpus):
 
     def leaves(node):
         if "attribute" in node:
-            values = attributes.setdefault(node["attribute"], [None, False, True, 0, 1, "", "unexpected", [], {}])
+            values = attributes.setdefault(node["attribute"], [None, False, True, 0, 1, "", "unexpected", "true", "false", [], {}])
             value = node.get("value")
             values.extend(value if isinstance(value, list) else [value])
         for key in ("and", "or"):
@@ -56,7 +60,7 @@ def graph_cases(rule, manifest, corpus):
         for i, values in enumerate(cases):
             contents = "\n".join(f"{k} = {json.dumps(v)}" for k, v in values.items())
             blocks.append(f'resource "{ty}" "case_{i}" {{\n{contents}\n}}\n')
-            graph.add_node(i, **values, resource_type=ty, block_type_="resource", source_="terraform",
+            graph.add_node(i, **clean_parser_types(copy.deepcopy(values)), resource_type=ty, block_type_="resource", source_="terraform",
                            id_=i, __address__=f"{ty}.case_{i}", file_path_=str(root / "main.tf"))
         passed, failed, unknown = check.run(graph)
         outcomes = {n["__address__"]: label for nodes, label in ((passed,"PASSED"), (failed,"FAILED"), (unknown,"UNKNOWN")) for n in nodes}
@@ -95,7 +99,9 @@ def main():
     # Graph v3 has its own graph_compare.py harness. Isolate resource clauses
     # here, including IDs shared by both kinds, so these cases test the original
     # resource predicate rather than the merged catalog rule.
-    rules = [{**r, "clauses": [c for c in r["clauses"] if c["condition"]["op"] != "checkov_graph"]} for r in rules]
+    # Python checks (checkov_python) have their own harness, python_compare.py.
+    rules = [{**r, "clauses": [c for c in r["clauses"] if c["condition"]["op"] not in ("checkov_graph", "checkov_python")]}
+             for r in rules]
     rules = [r for r in rules if r["clauses"]]
     checks = {c.id: c for registry in (resource_registry.checks, resource_registry.wildcard_checks)
               for group in registry.values() for c in group}
@@ -112,7 +118,7 @@ def main():
             condition = clause["condition"]
             if condition["op"] != "checkov_value":
                 continue
-            values = [None, False, True, 0, 1, "", "unexpected", [], ["unexpected", "other"], {}]
+            values = [None, False, True, 0, 1, "", "unexpected", "true", "false", "True", [], ["unexpected", "other"], {}]
             values.extend(condition["values"])
             # Missing is separate from explicit null.
             values = ["__missing__", *{json.dumps(x, sort_keys=True): x for x in values}.values()]
@@ -123,17 +129,25 @@ def main():
             for i, value in enumerate(values):
                 contents = "" if value == "__missing__" else body(condition["path"], value)
                 text = f'resource "{ty}" "case_{i}" {{\n{contents}\n}}\n'
-                conf = hcl2.loads(text)["resource"][0][ty][f"case_{i}"]
-                check = copy.deepcopy(checks[rule["name"]])
-                try:
-                    outcome = check.scan_entity_conf(conf, ty).value
-                except Exception as exc:
-                    outcome = f"ERROR: {type(exc).__name__}: {exc}"
                 rows.append({"root": str(root), "rule": rule["name"], "address": f"{ty}.case_{i}",
-                             "case": value, "checkov": outcome})
+                             "case": value, "checkov": None})
                 blocks.append(text)
             (root / "main.tf").write_text("\n".join(blocks))
-    command = [str(args.native.resolve()), "scan", str(corpus), "--recursive", "--format", "json", "--rule-file", str(rules_file)]
+    # The reference: Checkov's runner over the value-check corpus. A case it
+    # does not report (UNKNOWN, or a check that raised) is unresolved.
+    from checkov.runner_filter import RunnerFilter
+    from checkov.terraform.runner import Runner
+    value_ids = sorted({r["rule"] for r in rows if r["checkov"] is None})
+    report = Runner().run(root_folder=str(corpus.resolve()),
+                          runner_filter=RunnerFilter(checks=value_ids, framework=["terraform"]))
+    outcomes = {}
+    for label, records in (("PASSED", report.passed_checks), ("FAILED", report.failed_checks)):
+        for r in records:
+            outcomes[(str((corpus.resolve() / r.file_path.lstrip("/")).parent), r.check_id, r.resource)] = label
+    for row in rows:
+        if row["checkov"] is None:
+            row["checkov"] = outcomes.get((str(Path(row["root"]).resolve()), row["rule"], row["address"]), "UNKNOWN")
+    command = [str(args.native.resolve()), "scan", str(corpus), "--recursive", "--format", "json", "--no-bundled", "--rule-file", str(rules_file)]
     start = time.perf_counter()
     native = subprocess.run(command, capture_output=True, text=True, timeout=120)
     elapsed = time.perf_counter() - start

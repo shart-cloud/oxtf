@@ -42,6 +42,7 @@ pub fn translate(pattern: &str) -> Result<String, String> {
         out: String::new(),
         depth: 0,
         ignore_case: vec![false],
+        multiline: false,
         repeated: false,
     };
     t.run()?;
@@ -65,6 +66,9 @@ struct Translator<'a> {
     depth: usize,
     /// Case-insensitivity at each open group (and the pattern, at 0).
     ignore_case: Vec<bool>,
+    /// `re.MULTILINE` (`(?m)` at the start): `^` and `$` also match at
+    /// line boundaries, as the `regex` crate's `(?m:^)` / `(?m:$)` do.
+    multiline: bool,
     /// The previous item was a quantifier: Python rejects another.
     repeated: bool,
 }
@@ -108,12 +112,18 @@ impl Translator<'_> {
                 for f in flags.chars() {
                     match f {
                         'i' | 'u' => {}
+                        'm' => self.multiline = true,
+                        's' => {}
                         _ => return unsupported(&format!("the inline flag {f:?}")),
                     }
                 }
                 if flags.contains('i') {
                     self.out.push_str("(?i)");
                     self.ignore_case[0] = true;
+                }
+                // `re.DOTALL`: `.` also matches a newline, as `(?s)`.
+                if flags.contains('s') {
+                    self.out.push_str("(?s)");
                 }
                 self.i = j + 1;
             }
@@ -137,6 +147,8 @@ impl Translator<'_> {
                     self.ignore_case.pop();
                     self.out.push(')');
                 }
+                '^' if self.multiline => self.out.push_str("(?m:^)"),
+                '$' if self.multiline => self.out.push_str("(?m:$)"),
                 '|' | '.' | '^' => self.out.push(c),
                 '$' => {
                     let rest = &self.p[self.i..];
@@ -511,5 +523,17 @@ mod tests {
         assert!(compile(r"a$b", Mode::Search).is_err());
         assert!(compile(r"[z-a]", Mode::Search).is_err());
         assert!(compile(r"\q", Mode::Search).is_err());
+    }
+
+    /// `re.MULTILINE`, against CPython: `^`/`$` also at line boundaries,
+    /// while `re.match` stays anchored at the start of the string.
+    #[test]
+    fn multiline() {
+        let p = r"(?m)^-----BEGIN (RSA|EC) PRIVATE KEY-----$";
+        let s = |x: &str| compile(p, Mode::Search).unwrap().is_match(x);
+        assert!(s("-----BEGIN RSA PRIVATE KEY-----"));
+        assert!(s("x\n-----BEGIN EC PRIVATE KEY-----\nabc"));
+        assert!(!s("-----BEGIN RSA PRIVATE KEY----- x"));
+        assert!(!m(p, "x\n-----BEGIN EC PRIVATE KEY-----\nabc"));
     }
 }

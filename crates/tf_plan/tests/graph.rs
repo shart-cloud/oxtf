@@ -116,3 +116,42 @@ resource "test_link" "l" { target = local.target }
     assert!(!link.dependencies_complete);
     assert!(link.dependencies.is_empty());
 }
+
+#[test]
+fn a_required_input_without_a_default_does_not_contradict_the_plan() {
+    let plan = json!({"format_version":"1.2","variables":{"pick":{"value":"b"}},"resource_changes":[
+        {"address":"test_link.l","mode":"managed","type":"test_link","name":"l","change":{"actions":["create"],"after":{"target":"planned-b"}}}
+    ],"configuration":{"root_module":{"resources":[{"address":"test_link.l","expressions":{"target":{"references":["local.target"]}}}]}}});
+    let files = FileTable::with_overlay([
+        (
+            PathBuf::from("graph-required/plan.json"),
+            Arc::from(plan.to_string()),
+        ),
+        (
+            PathBuf::from("graph-required/main.tf"),
+            Arc::from(
+                r#"
+variable "pick" { type = string }
+resource "test_node" "n" { for_each = toset(["a", "b"]) }
+locals { target = test_node.n[var.pick].id }
+resource "test_link" "l" { target = local.target }
+"#,
+            ),
+        ),
+    ]);
+    let analysis = tf_plan::load_plan(
+        Path::new("graph-required/plan.json"),
+        &tf_plan::PlanOptions::default(),
+        &files,
+    )
+    .unwrap();
+    // The source could not evaluate `var.pick`, so it is compatible with any
+    // planned value: source edges are recovered, uncertain about the index.
+    let link = &analysis.modules[0].resources[0];
+    assert!(!link.dependencies.is_empty());
+    assert!(
+        link.dependencies
+            .iter()
+            .all(|d| &*d.resource == "test_node.n" && d.certainty != Truth::True)
+    );
+}
