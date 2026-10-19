@@ -240,3 +240,46 @@ fn a_runaway_program_is_unknown() {
     ];
     assert_eq!(truth(src, body), Truth::Unknown);
 }
+
+/// Classes of inlined modules (cloudsplaining's policy documents):
+/// `__init__` sets attributes, properties and methods read them.
+#[test]
+fn objects_of_inlined_classes() {
+    let src = r#"resource "test_resource" "r" { a = "x" }"#;
+    let attr = |obj: J, a: &str| json!({"e": "attr", "value": obj, "attr": a});
+    let program = json!({
+        "version": 1, "entry": "Check.scan_resource_conf", "self": {"evaluated_keys": {"list": []}},
+        "classes": {"m.Doc": {
+            "methods": {"__init__": "m.Doc.__init__", "has": "m.Doc.has"},
+            "properties": {"first": "m.Doc.first"},
+            "attrs": {"KIND": "doc"},
+        }},
+        "functions": {
+            "Check.scan_resource_conf": {"params": ["conf"], "defaults": [null], "body": [
+                {"s": "assign", "targets": [{"t": "name", "id": "d"}],
+                 "value": {"e": "call", "func": {"class": "m.Doc"}, "args": [get(name("conf"), "a")], "kwargs": []}},
+                if_(cmp(attr(name("d"), "first"), "eq", c(json!("x"))), vec![
+                    if_(json!({"e": "call", "func": {"method": "has", "obj": name("d")}, "args": [c(json!("x"))], "kwargs": []}),
+                        vec![if_(cmp(attr(name("d"), "KIND"), "eq", c(json!("doc"))), vec![ret(result("FAILED"))], vec![])], vec![]),
+                ], vec![]),
+                ret(result("PASSED")),
+            ]},
+            "m.Doc.__init__": {"params": ["self", "items"], "defaults": [null, null], "body": [
+                {"s": "assign", "targets": [{"t": "attr", "value": name("self"), "attr": "items"}], "value": name("items")},
+            ]},
+            "m.Doc.first": {"params": ["self"], "defaults": [null], "body": [
+                ret(sub(attr(name("self"), "items"), c(json!(0)))),
+            ]},
+            "m.Doc.has": {"params": ["self", "x"], "defaults": [null, null], "body": [
+                ret(cmp(name("x"), "in", attr(name("self"), "items"))),
+            ]},
+        },
+    });
+    let rule = json!({"version": 4, "name": "CKV_TEST_2", "message": "test", "clauses": [{
+        "resource_types": ["test_resource"], "condition": {"op": "checkov_python", "program": program}}]});
+    let compiled = tf_rule_ir::compile_json(&rule.to_string()).unwrap();
+    let files = FileTable::with_overlay([(PathBuf::from("py-test/main.tf"), Arc::from(src))]);
+    let a = tf_semantic::analyze_module(Path::new("py-test"), &AnalyzeOptions::default(), &files);
+    let v = compiled[0].verdict(&a.modules[0].resources[0]).unwrap();
+    assert_eq!(v.truth, Truth::True);
+}

@@ -42,6 +42,8 @@ NATIVE = {
     "checkov.common.util.var_utils.is_terraform_variable_dependent": "is_terraform_variable_dependent",
     "BaseResourceCheck._is_variable_dependant": "is_terraform_variable_dependent",
 }
+# Modules whose functions and classes are inlined as their Python.
+INLINE_MODULES = ("checkov.", "cloudsplaining.", "policy_sentry.")
 # Builtins that Checkov's checks import from its utilities.
 CHECKOV_HELPERS = {"force_list", "force_int", "force_float"}
 TYPES = {list: "list", dict: "dict", str: "str", int: "int", float: "float", bool: "bool",
@@ -95,9 +97,9 @@ def value(v, what="constant"):
     if isinstance(v, range):
         return {"range": [v.start, v.stop, v.step]}
     if isinstance(v, re.Pattern):
-        if v.flags & ~re.UNICODE:
+        if v.flags & ~(re.UNICODE | re.IGNORECASE):
             raise Unsupported(f"regex flags in {what}")
-        return {"pattern": v.pattern}
+        return {"pattern": ("(?i)" if v.flags & re.IGNORECASE else "") + v.pattern}
     if isinstance(v, type) and v in TYPES:
         return {"type": TYPES[v]}
     raise Unsupported(f"{what} of type {type(v).__name__}")
@@ -114,6 +116,10 @@ class Exporter:
         # resource type, run natively (`value_check` builtin).
         self.value_check = value_check
         self.value_check_params = None
+        # Whether the function being exported is a method of the check (its
+        # `self` is the check instance) rather than of another class.
+        self.in_check = True
+        self.exported_classes = {}
         self.classes = []
         self.inherited = []
         for cls in type(check).__mro__:
@@ -138,10 +144,19 @@ class Exporter:
                 return f"{cls.__name__}.{name}", member, static
         return None
 
-    def add_function(self, key, fn, *, is_method, static=False):
+    def add_function(self, key, fn, *, is_method, static=False, check=True):
         if key in self.functions or key in self.pending:
             return
         self.pending.append(key)
+        outer, self.in_check = self.in_check, check
+        try:
+            self._add_function(key, fn, is_method=is_method, static=static, check=check)
+        finally:
+            self.in_check = outer
+            if key in self.pending:
+                self.pending.remove(key)
+
+    def _add_function(self, key, fn, *, is_method, static, check):
         tree = ast.parse(textwrap.dedent(inspect.getsource(fn)))
         node = tree.body[0]
         if not isinstance(node, ast.FunctionDef):
@@ -151,14 +166,51 @@ class Exporter:
         if args.vararg or args.kwarg or args.kwonlyargs or args.posonlyargs:
             raise Unsupported(f"{key}: *args, **kwargs or keyword-only parameters")
         params = [a.arg for a in args.args]
-        if is_method and not static:
+        if is_method and not static and check:
             params = params[1:]
         defaults = [None] * (len(params) - len(args.defaults)) + [
             self.expr(d, module_globals, set()) for d in args.defaults]
         local = set(params) | assigned_names(node)
         body = self.block(node.body, module_globals, local)
         self.functions[key] = {"params": params, "defaults": defaults, "body": body}
-        self.pending.remove(key)
+
+    def add_class(self, cls):
+        """Export `cls` (a class of an inlined module): its methods and
+        properties, through its MRO. A member outside the subset is left out;
+        calling it at run time is outside the subset then."""
+        key = f"{cls.__module__}.{cls.__qualname__}"
+        if key in self.exported_classes:
+            return key
+        entry = {"methods": {}, "properties": {}, "attrs": {}}
+        self.exported_classes[key] = entry
+        for c in cls.__mro__:
+            if c is object:
+                continue
+            for name, member in vars(c).items():
+                if name in entry["methods"] or name in entry["properties"] or name in entry["attrs"]:
+                    continue
+                if name.startswith("__") and name != "__init__":
+                    continue
+                fkey = f"{c.__module__}.{c.__qualname__}.{name}"
+                try:
+                    if isinstance(member, property):
+                        self.add_function(fkey, member.fget, is_method=True, check=False)
+                        entry["properties"][name] = fkey
+                    elif type(member).__name__ == "cached_property" and hasattr(member, "func"):
+                        self.add_function(fkey, member.func, is_method=True, check=False)
+                        entry["properties"][name] = fkey
+                    elif isinstance(member, staticmethod):
+                        self.add_function(fkey, member.__func__, is_method=True, static=True, check=False)
+                        entry["methods"][name] = fkey
+                        entry.setdefault("static", []).append(name)
+                    elif inspect.isfunction(member):
+                        self.add_function(fkey, member, is_method=True, check=False)
+                        entry["methods"][name] = fkey
+                    elif not callable(member) and not isinstance(member, (classmethod,)):
+                        entry["attrs"][name] = value(member, f"{key}.{name}")
+                except Unsupported:
+                    self.functions.pop(fkey, None)
+        return key
 
     # -- statements ------------------------------------------------------
 
@@ -240,8 +292,11 @@ class Exporter:
             return {"t": "tuple", "elts": [self.target(e, g, local) for e in t.elts]}
         if isinstance(t, ast.Subscript):
             return {"t": "sub", "value": self.expr(t.value, g, local), "index": self.expr(t.slice, g, local)}
-        if isinstance(t, ast.Attribute) and isinstance(t.value, ast.Name) and t.value.id == "self":
+        if isinstance(t, ast.Attribute) and isinstance(t.value, ast.Name) and t.value.id == "self" \
+                and self.in_check:
             return {"t": "self", "attr": t.attr}
+        if isinstance(t, ast.Attribute):
+            return {"t": "attr", "value": self.expr(t.value, g, local), "attr": t.attr}
         raise Unsupported(f"assignment to {ast.unparse(t)}")
 
     # -- expressions -----------------------------------------------------
@@ -336,7 +391,7 @@ class Exporter:
             return {"type": TYPE_NAMES[name]}
         else:
             raise Unsupported(f"unknown name {name}")
-        if inspect.isfunction(target) and target.__module__.startswith("checkov."):
+        if inspect.isfunction(target) and target.__module__.startswith(INLINE_MODULES):
             key = f"{target.__module__}.{target.__name__}"
             self.add_function(key, target, is_method=False)
             return {"funcref": key}
@@ -348,7 +403,7 @@ class Exporter:
 
     def attribute(self, e, g, local):
         base = e.value
-        if isinstance(base, ast.Name) and base.id == "self" and "self" in local:
+        if isinstance(base, ast.Name) and base.id == "self" and "self" in local and self.in_check:
             found = self.method(e.attr)
             if found is not None:
                 key, fn, static = found
@@ -362,12 +417,12 @@ class Exporter:
                 name = f"{getattr(holder, '__name__', base.id)}.{e.attr}"
                 if name in BUILTINS:
                     return {"e": "const", "v": {"builtin": name}}
-                if inspect.isfunction(target) and target.__module__.startswith("checkov."):
+                if inspect.isfunction(target) and target.__module__.startswith(INLINE_MODULES):
                     key = f"{target.__module__}.{target.__name__}"
                     self.add_function(key, target, is_method=False)
                     return {"e": "const", "v": {"funcref": key}}
                 return {"e": "const", "v": value(target, name)}
-        raise Unsupported(f"attribute {ast.unparse(e)}")
+        return {"e": "attr", "value": self.expr(base, g, local), "attr": e.attr}
 
     def call(self, e, g, local):
         if any(isinstance(a, ast.Starred) for a in e.args) or any(k.arg is None for k in e.keywords):
@@ -378,7 +433,7 @@ class Exporter:
         call = lambda func: {"e": "call", "func": func, "args": args, "kwargs": kwargs}  # noqa: E731
         # self.method(...)
         if isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name) and f.value.id == "self" \
-                and "self" in local:
+                and "self" in local and self.in_check:
             found = self.method(f.attr)
             if found is not None:
                 key, fn, static = found
@@ -441,12 +496,14 @@ class Exporter:
                 return call({"builtin": f.id})
             if f.id in EXCEPTIONS:
                 return {"e": "exception", "type": f.id}
-            if inspect.isfunction(target) and target.__module__.startswith("checkov."):
+            if inspect.isfunction(target) and target.__module__.startswith(INLINE_MODULES):
                 key = f"{target.__module__}.{target.__name__}"
                 if key in NATIVE:
                     return call({"builtin": NATIVE[key]})
                 self.add_function(key, target, is_method=False)
                 return call({"func": key})
+            if inspect.isclass(target) and target.__module__.startswith(INLINE_MODULES) and target not in TYPES:
+                return call({"class": self.add_class(target)})
             raise Unsupported(f"call {f.id}")
         raise Unsupported(f"call {ast.unparse(f)}")
 
@@ -456,9 +513,11 @@ TYPE_NAMES = {"list": "list", "dict": "dict", "str": "str", "int": "int", "float
 
 
 def is_logging(e, g):
+    """A call on the `logging` module or a Logger: dropped."""
+    import logging
     if isinstance(e, ast.Call) and isinstance(e.func, ast.Attribute) and isinstance(e.func.value, ast.Name):
         holder = g.get(e.func.value.id)
-        return inspect.ismodule(holder) and holder.__name__ == "logging"
+        return (inspect.ismodule(holder) and holder.__name__ == "logging") or isinstance(holder, logging.Logger)
     return False
 
 
@@ -503,6 +562,8 @@ def export(check, generic, value_check=None):
     for name, v in RUN_STATE.items():
         attrs[name] = value(v)
     program = {"version": PROGRAM_VERSION, "entry": key, "functions": ex.functions, "self": attrs}
+    if ex.exported_classes:
+        program["classes"] = ex.exported_classes
     if ex.value_check_params is not None:
         program["value_check"] = ex.value_check_params
     # Where a failing check points: its get_evaluated_keys, when it has one

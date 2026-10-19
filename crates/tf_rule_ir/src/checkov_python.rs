@@ -66,6 +66,23 @@ pub struct Program {
     /// value check): its parameters per resource type.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value_check: Option<BTreeMap<String, crate::checkov::ValueCheck>>,
+    /// Classes of inlined modules the program instantiates (cloudsplaining's
+    /// policy documents, policy_sentry's ARN), by qualified name.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub classes: BTreeMap<String, Class>,
+}
+
+/// A class: its methods and properties (program functions taking the
+/// instance first), through its MRO, and its constant class attributes.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Class {
+    pub methods: BTreeMap<String, String>,
+    pub properties: BTreeMap<String, String>,
+    pub attrs: BTreeMap<String, Json>,
+    /// Methods that are `staticmethod`s (called without the instance).
+    #[serde(default, rename = "static", skip_serializing_if = "Vec::is_empty")]
+    pub statics: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -147,6 +164,11 @@ pub enum Target {
     SelfAttr {
         attr: String,
     },
+    /// An attribute of an object of an inlined class.
+    Attr {
+        value: Expr,
+        attr: String,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -187,10 +209,23 @@ pub struct Generator {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Func {
-    Builtin { builtin: String },
-    Func { func: String },
-    Local { local: String },
-    Method { method: String, obj: Box<Expr> },
+    Builtin {
+        builtin: String,
+    },
+    Func {
+        func: String,
+    },
+    Local {
+        local: String,
+    },
+    Method {
+        method: String,
+        obj: Box<Expr>,
+    },
+    /// Instantiate a class of `Program::classes`.
+    Class {
+        class: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -288,6 +323,11 @@ pub enum Expr {
     Fstr {
         parts: Vec<Expr>,
     },
+    /// An attribute of an object of an inlined class.
+    Attr {
+        value: Box<Expr>,
+        attr: String,
+    },
     /// An exception class used as a value (only to raise it).
     Exception {
         #[serde(rename = "type")]
@@ -334,6 +374,16 @@ impl Program {
         for check in self.value_check.iter().flat_map(BTreeMap::values) {
             check.validate()?;
         }
+        for (name, class) in &self.classes {
+            for key in class.methods.values().chain(class.properties.values()) {
+                if !self.functions.contains_key(key) {
+                    return Err(format!("checkov_python: class {name}: no function {key:?}"));
+                }
+            }
+            for v in class.attrs.values() {
+                Py::from_const(v)?;
+            }
+        }
         Ok(())
     }
 }
@@ -348,6 +398,7 @@ fn calls(stmts: &[Stmt], f: &mut dyn FnMut(&str)) {
                 expr(value, f);
                 expr(index, f);
             }
+            Target::Attr { value, .. } => expr(value, f),
             Target::Name { .. } | Target::SelfAttr { .. } => {}
         }
     }
@@ -372,7 +423,7 @@ fn calls(stmts: &[Stmt], f: &mut dyn FnMut(&str)) {
                 match func {
                     Func::Func { func } => f(func),
                     Func::Method { obj, .. } => expr(obj, f),
-                    Func::Builtin { .. } | Func::Local { .. } => {}
+                    Func::Builtin { .. } | Func::Local { .. } | Func::Class { .. } => {}
                 }
                 exprs(args, f);
                 kwargs.iter().for_each(|(_, e)| expr(e, f));
@@ -432,6 +483,7 @@ fn calls(stmts: &[Stmt], f: &mut dyn FnMut(&str)) {
                 generators(g, f);
             }
             Expr::Lambda { body, .. } => expr(body, f),
+            Expr::Attr { value, .. } => expr(value, f),
             Expr::Fstr { parts } => exprs(parts, f),
             Expr::Name { .. } | Expr::SelfAttr { .. } | Expr::Exception { .. } => {}
         }
@@ -515,6 +567,10 @@ enum Py {
     FuncRef(Rc<str>),
     /// A built-in used as a value (`map(str, xs)`, `key=len`).
     Builtin(Rc<str>),
+    /// An object of an inlined class.
+    Instance(Rc<Instance>),
+    /// A method of an object, not yet called.
+    Bound(Rc<(Py, Rc<str>)>),
     Exception(Rc<str>),
     /// An abstract configured value (Unknown / Tainted).
     Abstract(Rc<Value>, bool),
@@ -616,10 +672,17 @@ impl Py {
             Py::Match(_) => "Match",
             Py::Lambda(_) | Py::FuncRef(_) => "function",
             Py::Builtin(_) => "builtin_function_or_method",
+            Py::Instance(_) => "object",
+            Py::Bound(_) => "method",
             Py::Exception(_) => "type",
             Py::Abstract(..) | Py::OneOf(..) => "abstract",
         }
     }
+}
+
+struct Instance {
+    class: Rc<str>,
+    attrs: RefCell<HashMap<String, Py>>,
 }
 
 // -- control flow ---------------------------------------------------------
@@ -740,6 +803,7 @@ impl<'p> Interp<'p> {
                 true
             }
             (Py::Range(a1, b1, s1), Py::Range(a2, b2, s2)) => (a1, b1, s1) == (a2, b2, s2),
+            (Py::Instance(x), Py::Instance(y)) => Rc::ptr_eq(x, y),
             _ => match (number(&a), number(&b)) {
                 (Some(x), Some(y)) => x == y,
                 _ => false,
@@ -942,6 +1006,10 @@ impl<'p> Interp<'p> {
                 let current = match target {
                     Target::Name { id } => self.lookup(id, env)?,
                     Target::SelfAttr { attr } => self.self_attr(attr)?,
+                    Target::Attr { value, attr } => {
+                        let obj = self.expr(value, env)?;
+                        self.get_attr(&obj, attr)?
+                    }
                     Target::Sub { value, index } => {
                         let (c, i) = (self.expr(value, env)?, self.expr(index, env)?);
                         self.subscript(&c, &i)?
@@ -1010,6 +1078,12 @@ impl<'p> Interp<'p> {
             Target::SelfAttr { attr } => {
                 self.self_attrs.insert(attr.clone(), v);
             }
+            Target::Attr { value, attr } => match self.expr(value, env)? {
+                Py::Instance(i) => {
+                    i.attrs.borrow_mut().insert(attr.clone(), v);
+                }
+                _ => return exc("AttributeError"),
+            },
             Target::Tuple { elts } => {
                 let items = self.iterate(&v)?;
                 if items.len() != elts.len() {
@@ -1282,6 +1356,10 @@ impl<'p> Interp<'p> {
                 Py::str(&s)
             }
             Expr::Exception { ty } => Py::Exception(Rc::from(ty.as_str())),
+            Expr::Attr { value, attr } => {
+                let obj = self.expr(value, env)?;
+                self.get_attr(&obj, attr)?
+            }
         })
     }
 
@@ -1553,7 +1631,81 @@ impl<'p> Interp<'p> {
             Func::Method { method, .. } => {
                 self.method(receiver.expect("receiver"), method, args, kw)
             }
+            Func::Class { class } => self.instantiate(class, args, kw),
         }
+    }
+
+    fn class(&self, name: &str) -> R<&'p Class> {
+        let program = self.program;
+        program
+            .classes
+            .get(name)
+            .ok_or_else(|| Flow::Unsupported(format!("class {name} not exported")))
+    }
+
+    fn instantiate(&mut self, class: &str, args: Vec<Py>, kwargs: Vec<(String, Py)>) -> R<Py> {
+        let def = self.class(class)?;
+        let obj = Py::Instance(Rc::new(Instance {
+            class: Rc::from(class),
+            attrs: RefCell::new(HashMap::new()),
+        }));
+        if let Some(init) = def.methods.get("__init__") {
+            let mut all = vec![obj.clone()];
+            all.extend(args);
+            self.call_function(init, all, kwargs)?;
+        } else if !args.is_empty() || !kwargs.is_empty() {
+            return exc("TypeError");
+        }
+        Ok(obj)
+    }
+
+    /// `obj.attr` for an object of an inlined class: its own attribute, a
+    /// property, a bound method or a class attribute.
+    fn get_attr(&mut self, obj: &Py, attr: &str) -> R<Py> {
+        let Py::Instance(i) = self.concrete(obj)? else {
+            return exc("AttributeError");
+        };
+        if let Some(v) = i.attrs.borrow().get(attr) {
+            return Ok(v.clone());
+        }
+        let def = self.class(&i.class)?;
+        if let Some(getter) = def.properties.get(attr) {
+            return self.call_function(getter, vec![obj.clone()], Vec::new());
+        }
+        if def.methods.contains_key(attr) {
+            return Ok(Py::Bound(Rc::new((obj.clone(), Rc::from(attr)))));
+        }
+        match def.attrs.get(attr) {
+            Some(v) => Py::from_const(v).map_err(Flow::Unsupported),
+            None => exc("AttributeError"),
+        }
+    }
+
+    /// `obj.name(args)` for an object of an inlined class.
+    fn call_method(
+        &mut self,
+        obj: Py,
+        name: &str,
+        args: Vec<Py>,
+        kwargs: Vec<(String, Py)>,
+    ) -> R<Py> {
+        let Py::Instance(i) = &obj else {
+            return exc("AttributeError");
+        };
+        let def = self.class(&i.class)?;
+        if let Some(key) = def.methods.get(name) {
+            let mut all = Vec::new();
+            if !def.statics.iter().any(|s| s == name) {
+                all.push(obj.clone());
+            }
+            all.extend(args);
+            return self.call_function(key, all, kwargs);
+        }
+        let f = self.get_attr(&obj, name)?;
+        if !kwargs.is_empty() {
+            return unsupported("keywords to a callable attribute");
+        }
+        self.call_value(&f, args)
     }
 
     fn call_function(&mut self, key: &str, args: Vec<Py>, kwargs: Vec<(String, Py)>) -> R<Py> {
@@ -1597,6 +1749,10 @@ impl<'p> Interp<'p> {
     fn call_value(&mut self, f: &Py, args: Vec<Py>) -> R<Py> {
         match f {
             Py::FuncRef(key) => self.call_function(key, args, Vec::new()),
+            Py::Bound(b) => {
+                let (obj, name) = (b.0.clone(), b.1.clone());
+                self.call_method(obj, &name, args, Vec::new())
+            }
             Py::Builtin(name) | Py::Type(name) => {
                 let name = name.clone();
                 self.builtin(&name, args, Vec::new())
@@ -2124,6 +2280,9 @@ impl<'p> Interp<'p> {
 
     fn method(&mut self, recv: Py, name: &str, args: Vec<Py>, kwargs: Vec<(String, Py)>) -> R<Py> {
         let recv = self.concrete(&recv)?;
+        if matches!(recv, Py::Instance(_)) {
+            return self.call_method(recv, name, args, kwargs);
+        }
         let a0 = args.first().cloned();
         Ok(match (&recv, name) {
             (Py::Dict(d), "get") => {

@@ -943,31 +943,28 @@
       "id": "CKV_AWS_167",
       "kind": "resource",
       "name": "Ensure Glacier Vault access policy is not public by only allowing specific services or principals to access it",
-      "reason": "custom Python scan_resource_conf: call ResourcePolicyDocument",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/GlacierVaultAnyPrincipal.py",
       "source_sha256": "9243d98149af7201092d0196682e574ee1f2f88bf6c5f2df286f63edd5b3bdb3",
-      "status": "unsupported"
+      "status": "translated"
     },
     {
       "id": "CKV_AWS_168",
       "kind": "resource",
       "name": "Ensure SQS queue policy is not public by only allowing specific services or principals to access it",
-      "reason": "custom Python scan_resource_conf: call ResourcePolicyDocument",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/SQSQueuePolicyAnyPrincipal.py",
       "source_sha256": "0fad171a592a5734feb32d9265f742c20a7196e15be4328abcd2cce5edc4ff2d",
-      "status": "unsupported"
+      "status": "translated"
     },
     {
       "id": "CKV_AWS_169",
       "kind": "resource",
       "name": "Ensure SNS topic policy is not public by only allowing specific services or principals to access it",
-      "reason": "custom Python scan_resource_conf: call ResourcePolicyDocument",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/SNSTopicPolicyAnyPrincipal.py",
       "source_sha256": "68b6062988fada7b16274110b16b7e2ead63f1e15d0a3f371640fdbfb90b0d29",
-      "status": "unsupported"
+      "status": "translated"
     },
     {
       "id": "CKV_AWS_17",
@@ -2074,7 +2071,7 @@
       "id": "CKV_AWS_286",
       "kind": "resource",
       "name": "Ensure IAM policies does not allow privilege escalation",
-      "reason": "custom Python scan_resource_conf: call PolicyDocument",
+      "reason": "custom Python scan_resource_conf: call hasattr",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/IAMPrivilegeEscalation.py",
       "source_sha256": "516bb352c483252abb7c78783cbb1598a8df7f81c833badd8a2e4e58669b035e",
@@ -2084,7 +2081,7 @@
       "id": "CKV_AWS_287",
       "kind": "resource",
       "name": "Ensure IAM policies does not allow credentials exposure",
-      "reason": "custom Python scan_resource_conf: call PolicyDocument",
+      "reason": "custom Python scan_resource_conf: call hasattr",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/IAMCredentialsExposure.py",
       "source_sha256": "ad3a1256d5303268a3079187d64b15bd5c3e07fed89121b8699df9a3de96c338",
@@ -2094,7 +2091,7 @@
       "id": "CKV_AWS_288",
       "kind": "resource",
       "name": "Ensure IAM policies does not allow data exfiltration",
-      "reason": "custom Python scan_resource_conf: call PolicyDocument",
+      "reason": "custom Python scan_resource_conf: call hasattr",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/IAMDataExfiltration.py",
       "source_sha256": "f0a7a4c45b27ad5d520186ef64fc9e4925e2d486c28e80fb02463333dde660e7",
@@ -2104,7 +2101,7 @@
       "id": "CKV_AWS_289",
       "kind": "resource",
       "name": "Ensure IAM policies does not allow permissions management / resource exposure without constraints",
-      "reason": "custom Python scan_resource_conf: call PolicyDocument",
+      "reason": "custom Python scan_resource_conf: call hasattr",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/IAMPermissionsManagement.py",
       "source_sha256": "4bff0b2e94b2eac319436dccd1eca3489c0e87589ad78b54e11948be7a0188cd",
@@ -2123,7 +2120,7 @@
       "id": "CKV_AWS_290",
       "kind": "resource",
       "name": "Ensure IAM policies does not allow write access without constraints",
-      "reason": "custom Python scan_resource_conf: call PolicyDocument",
+      "reason": "custom Python scan_resource_conf: call hasattr",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/IAMWriteAccess.py",
       "source_sha256": "dc263b3786b4b0004c6a3c0c7110b4b6941d9a05df23f40c79cfe30efa76499a",
@@ -2413,11 +2410,10 @@
       "id": "CKV_AWS_32",
       "kind": "resource",
       "name": "Ensure ECR policy is not set to public",
-      "reason": "custom Python scan_resource_conf: call ResourcePolicyDocument",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/ECRPolicy.py",
       "source_sha256": "ba43c05b805c10213c0d223ad566dc7ea84e812b31d7e13b2ce47727de5d20cd",
-      "status": "unsupported"
+      "status": "translated"
     },
     {
       "id": "CKV_AWS_320",
@@ -2768,7 +2764,7 @@
       "id": "CKV_AWS_355",
       "kind": "resource",
       "name": "Ensure no IAM policies documents allow \"*\" as a statement's resource for restrictable actions",
-      "reason": "custom Python scan_resource_conf: call PolicyDocument",
+      "reason": "custom Python scan_resource_conf: call hasattr",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/IAMStarResourcePolicyDocument.py",
       "source_sha256": "4540421b935d9338226223254ecafc1657fb9f2be83966bb42b2850bc23039b3",
@@ -9529,17 +9525,17 @@
     }
   ],
   "ir_version": 4,
-  "rules": 1060,
+  "rules": 1064,
   "schema": 1,
   "semantics": "configured values; Checkov missing-value policy; oxtf abstract-value lattice",
   "source": "checkov",
   "source_version": "3.2.328",
   "translated": {
     "graph": 186,
-    "resource": 875
+    "resource": 879
   },
   "unsupported": {
     "graph": 0,
-    "resource": 35
+    "resource": 31
   }
 }
