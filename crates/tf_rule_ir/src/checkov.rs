@@ -233,7 +233,7 @@ impl AttributeFilter {
     }
 
     pub fn evaluate(&self, r: &Resource) -> Verdict {
-        let value = graph_configuration(&r.body).field_or_null(&self.attribute);
+        let value = resource_graph_configuration(r).field_or_null(&self.attribute);
         truth::map(&value, &|v| {
             let truthy = match v.as_known() {
                 Some(Known::Null) => false,
@@ -331,8 +331,8 @@ impl AttributeCheck {
     }
 
     pub fn evaluate(&self, r: &Resource) -> Verdict {
-        let body = graph_configuration(&r.body);
-        let values = attribute_values(&body, &self.attribute.split('.').collect::<Vec<_>>());
+        let body = resource_graph_configuration(r);
+        let values = attribute_values(body, &self.attribute.split('.').collect::<Vec<_>>());
         let all = self.operator == AttributeOp::NotContains;
         if values.is_empty() {
             return self.evaluate_value(&Value::null());
@@ -1087,7 +1087,13 @@ impl ValueCheck {
     }
 
     pub fn evaluate(&self, resource: &Resource) -> Verdict {
-        let Some(value) = field(&resource.body, &self.path[0]) else {
+        // `field(&resource.body, ..)`, from the configuration every Checkov
+        // rule of this resource shares.
+        let Some(value) = resource_configuration(resource)
+            .as_object()
+            .and_then(|m| m.get(self.path[0].as_str()))
+            .cloned()
+        else {
             return self.missing();
         };
         self.walk(&value, &self.path[1..], &|| {
@@ -1312,6 +1318,25 @@ fn block_values(value: &Value) -> Value {
         }
         _ => value.clone(),
     }
+}
+
+/// Slots of [`tf_semantic::Derived`] this crate fills.
+pub(crate) mod slot {
+    pub const CONFIGURATION: usize = 0;
+    pub const GRAPH_CONFIGURATION: usize = 1;
+    pub const VERTEX: usize = 2;
+}
+
+/// [`configuration`] of `r`, computed once per resource instance.
+pub fn resource_configuration(r: &Resource) -> &Value {
+    r.derived
+        .get_or_init(slot::CONFIGURATION, || configuration(&r.body))
+}
+
+/// The graph view of `r` (see [`graph_configuration`]), computed once.
+fn resource_graph_configuration(r: &Resource) -> &Value {
+    r.derived
+        .get_or_init(slot::GRAPH_CONFIGURATION, || graph_configuration(&r.body))
 }
 
 /// A resource's configuration as Checkov's resource checks see it.

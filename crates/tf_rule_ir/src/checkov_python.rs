@@ -338,25 +338,153 @@ impl Program {
     }
 }
 
-/// Every user function `stmts` call (`{"func": key}`).
+/// Every program function `stmts` call or reference (`{"func": key}`,
+/// a `{"funcref": key}` constant).
 fn calls(stmts: &[Stmt], f: &mut dyn FnMut(&str)) {
-    fn walk(v: &Json, f: &mut dyn FnMut(&str)) {
-        match v {
-            Json::Object(m) => {
-                if let Some(Json::String(name)) = m.get("func")
-                    && m.len() == 1
-                {
-                    f(name);
-                }
-                m.values().for_each(|x| walk(x, f));
+    fn target(t: &Target, f: &mut dyn FnMut(&str)) {
+        match t {
+            Target::Tuple { elts } => elts.iter().for_each(|t| target(t, f)),
+            Target::Sub { value, index } => {
+                expr(value, f);
+                expr(index, f);
             }
-            Json::Array(a) => a.iter().for_each(|x| walk(x, f)),
-            _ => {}
+            Target::Name { .. } | Target::SelfAttr { .. } => {}
+        }
+    }
+    fn exprs(es: &[Expr], f: &mut dyn FnMut(&str)) {
+        es.iter().for_each(|e| expr(e, f));
+    }
+    fn generators(gs: &[Generator], f: &mut dyn FnMut(&str)) {
+        for g in gs {
+            target(&g.target, f);
+            expr(&g.iter, f);
+            exprs(&g.ifs, f);
+        }
+    }
+    fn expr(e: &Expr, f: &mut dyn FnMut(&str)) {
+        match e {
+            Expr::Const { v } => {
+                if let Some(Json::String(key)) = v.get("funcref") {
+                    f(key);
+                }
+            }
+            Expr::Call { func, args, kwargs } => {
+                match func {
+                    Func::Func { func } => f(func),
+                    Func::Method { obj, .. } => expr(obj, f),
+                    Func::Builtin { .. } | Func::Local { .. } => {}
+                }
+                exprs(args, f);
+                kwargs.iter().for_each(|(_, e)| expr(e, f));
+            }
+            Expr::Sub { value, index } => {
+                expr(value, f);
+                expr(index, f);
+            }
+            Expr::Slice {
+                value,
+                lower,
+                upper,
+                step,
+            } => {
+                expr(value, f);
+                for b in [lower, upper, step].into_iter().flatten() {
+                    expr(b, f);
+                }
+            }
+            Expr::Cmp {
+                left, comparators, ..
+            } => {
+                expr(left, f);
+                exprs(comparators, f);
+            }
+            Expr::And { values } | Expr::Or { values } => exprs(values, f),
+            Expr::Not { operand } | Expr::Neg { operand } | Expr::Pos { operand } => {
+                expr(operand, f)
+            }
+            Expr::Bin { left, right, .. } => {
+                expr(left, f);
+                expr(right, f);
+            }
+            Expr::Ifexp { test, body, orelse } => {
+                expr(test, f);
+                expr(body, f);
+                expr(orelse, f);
+            }
+            Expr::List { elts } | Expr::Tuple { elts } | Expr::Set { elts } => exprs(elts, f),
+            Expr::Dict { keys, values } => {
+                exprs(keys, f);
+                exprs(values, f);
+            }
+            Expr::Listcomp { elt, generators: g }
+            | Expr::Genexp { elt, generators: g }
+            | Expr::Setcomp { elt, generators: g } => {
+                expr(elt, f);
+                generators(g, f);
+            }
+            Expr::Dictcomp {
+                key,
+                value,
+                generators: g,
+            } => {
+                expr(key, f);
+                expr(value, f);
+                generators(g, f);
+            }
+            Expr::Lambda { body, .. } => expr(body, f),
+            Expr::Fstr { parts } => exprs(parts, f),
+            Expr::Name { .. } | Expr::SelfAttr { .. } | Expr::Exception { .. } => {}
         }
     }
     for s in stmts {
-        let v = serde_json::to_value(s).unwrap_or(Json::Null);
-        walk(&v, f);
+        match s {
+            Stmt::Expr { value } => expr(value, f),
+            Stmt::Return { value } => {
+                if let Some(v) = value {
+                    expr(v, f);
+                }
+            }
+            Stmt::If { test, body, orelse } => {
+                expr(test, f);
+                calls(body, f);
+                calls(orelse, f);
+            }
+            Stmt::For {
+                target: t,
+                iter,
+                body,
+                orelse,
+            } => {
+                target(t, f);
+                expr(iter, f);
+                calls(body, f);
+                calls(orelse, f);
+            }
+            Stmt::Assign { targets, value } => {
+                targets.iter().for_each(|t| target(t, f));
+                expr(value, f);
+            }
+            Stmt::Aug {
+                target: t, value, ..
+            } => {
+                target(t, f);
+                expr(value, f);
+            }
+            Stmt::Try {
+                body,
+                handlers,
+                orelse,
+                finalbody,
+            } => {
+                calls(body, f);
+                for h in handlers {
+                    calls(&h.body, f);
+                }
+                calls(orelse, f);
+                calls(finalbody, f);
+            }
+            Stmt::Pass | Stmt::Break | Stmt::Continue | Stmt::Raise { .. } => {}
+        }
     }
 }
 
@@ -2788,9 +2916,9 @@ impl Converter {
 
 /// Run `program` on `resource`.
 pub fn evaluate(program: &Program, resource: &Resource) -> Verdict {
-    let conf = crate::checkov::configuration(&resource.body);
+    let conf = crate::checkov::resource_configuration(resource);
     let mut runs = 0;
-    run(program, resource, &conf, &mut HashMap::new(), &mut runs)
+    run(program, resource, conf, &mut HashMap::new(), &mut runs)
 }
 
 fn run(

@@ -102,6 +102,27 @@ pub struct Resource {
     pub dependencies: Vec<tf_eval::prov::ResourceDependency>,
     /// False when a plan lacks configuration/source needed to recover edges.
     pub dependencies_complete: bool,
+    /// Views of `body` that rule engines derive, computed once on first use
+    /// and shared by every rule that judges this instance.
+    pub derived: Derived,
+}
+
+/// Lazily computed views of a resource's body, by slot. A slot is owned
+/// by one rule engine (`tf_rule_ir` uses them for the Checkov-shaped
+/// configurations); `body` never changes after construction, so a view
+/// never goes stale.
+#[derive(Clone, Debug, Default)]
+pub struct Derived {
+    slots: [std::sync::OnceLock<Value>; Derived::SLOTS],
+}
+
+impl Derived {
+    pub const SLOTS: usize = 4;
+
+    /// The view in `slot`, computed by `f` the first time.
+    pub fn get_or_init(&self, slot: usize, f: impl FnOnce() -> Value) -> &Value {
+        self.slots[slot].get_or_init(f)
+    }
 }
 
 impl Resource {
@@ -131,6 +152,7 @@ impl Resource {
             provider,
             dependencies: Vec::new(),
             dependencies_complete: true,
+            derived: Derived::default(),
         }
     }
 
