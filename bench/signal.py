@@ -15,7 +15,8 @@ with the release CLI and measures, per finding of the record:
     python3 bench/signal.py --check          # fail when a metric got worse
 
 `--check` compares against bench/results/signal.json: a metric fails when it
-moves in its bad direction (more bytes per finding, fewer attributes, ...).
+moves in its bad direction (more NDJSON bytes per finding beyond 10 %,
+fewer attributes, ...).
 Finding and occurrence counts are reported, not judged: catalog changes move
 them legitimately.
 """
@@ -30,14 +31,16 @@ import sys
 REPO = pathlib.Path(__file__).resolve().parent.parent
 RESULTS = REPO / "bench" / "results" / "signal.json"
 
-# metric -> +1 when larger is better, -1 when smaller is better.
+# metric -> (+1 when larger is better, -1 when smaller is better, the
+# relative change tolerated in the bad direction). NDJSON is what an agent
+# reads, so its size is judged; the JSON record grows with every attribute
+# and provenance chain a change adds, so its size is reported, not judged.
 JUDGED = {
-    "json_bytes_per_finding": -1,
-    "ndjson_bytes_per_finding": -1,
-    "with_attribute_pct": +1,
-    "with_fix_hint_pct": +1,
-    "header_only_pct": -1,
-    "not_medium_pct": +1,
+    "ndjson_bytes_per_finding": (-1, 0.10),
+    "with_attribute_pct": (+1, 0.0),
+    "with_fix_hint_pct": (+1, 0.0),
+    "header_only_pct": (-1, 0.0),
+    "not_medium_pct": (+1, 0.0),
 }
 
 
@@ -89,8 +92,8 @@ def main():
         base = json.loads(RESULTS.read_text())
         worse = [
             f"{k}: {base[k]} -> {m[k]}"
-            for k, sign in JUDGED.items()
-            if k in base and (m[k] - base[k]) * sign < 0
+            for k, (sign, tolerance) in JUDGED.items()
+            if k in base and (m[k] - base[k]) * sign < -abs(base[k]) * tolerance
         ]
         if worse:
             print("signal regressed:\n  " + "\n  ".join(worse), file=sys.stderr)

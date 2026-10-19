@@ -185,11 +185,11 @@ them all.
 | `certainty` | The most certain occurrence's. `definite`: insecure as written. `conditional`: insecure for some value of an unconstrained variable. `indeterminate`: a foreign policy fired on the Known values, but an input it may depend on is provider-computed; needs a human. Native rules never produce `indeterminate`. |
 | `subject` | What the representative occurrence is about: `{"kind": "resource", "address", "base_address", "module", "mode", "type", "name", "key"}` (`address` full, `base_address` without key, `module` `""` for the root, `mode` `managed` or `data`, `key` a number for `count`, a string for `for_each`, or `null`), or `{"kind": "file", "file", "module"}` for a whole-file policy result that no single resource reproduces. |
 | `root` | Root module directory of the representative occurrence. |
-| `attribute` | Path of the deciding value within the resource (`storage_encrypted`, `ingress.cidr_blocks`), or `null` when the deciding value is on another resource (the S3 join) or the rule points at the header. |
+| `attribute` | Path of the deciding value within the resource (`storage_encrypted`, `ingress.cidr_blocks`), also when it is not set (the provenance then ends in an `absent` step at the resource header), or `null` when the deciding value is on another resource (the S3 join, graph connection checks) or the rule points at the header. |
 | `configured` | The deciding top-level attribute as written, or `null` when it is not set. |
 | `effective` | The same after the defaults overlay. |
 | `location` | Where to point: the deciding attribute, else the resource header (the file's start for a file subject). |
-| `provenance` | Origin-first explanation of the representative's deciding value: each step has `kind`, `label`, `resource` (base address of the resource whose attribute the step reads, if any), `attribute` (path within it, if any) and `location`. |
+| `provenance` | Origin-first explanation of the representative's deciding value: each step has `kind` (`tfvars`, `variable`, `variable_default`, `module_argument`, `local`, `output`, `attribute`, `iteration`, `default`, `absent`, `other`), `label`, `resource` (base address of the resource whose attribute the step reads, if any), `attribute` (path within it, if any) and `location`. |
 | `message` | Human wording, with a certainty suffix for conditional findings. |
 | `hidden` | For foreign policies: configured values the policy did not see, each with `path` and `kind` (`tainted` or `unknown`). Empty for native rules. |
 | `fix_hint` | A mechanical fix when the rule knows one, else `null`. |

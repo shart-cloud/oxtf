@@ -45,6 +45,9 @@ pub enum StepKind {
     Iteration,
     /// A provider default from the defaults overlay (`defaults/*.toml`).
     Default,
+    /// An attribute a rule required that the resource does not set (and
+    /// no default supplies): located at the resource header.
+    Absent,
     /// Anything else.
     Other,
 }
@@ -61,6 +64,7 @@ impl StepKind {
             StepKind::Attribute => "attribute",
             StepKind::Iteration => "iteration",
             StepKind::Default => "default",
+            StepKind::Absent => "absent",
             StepKind::Other => "other",
         }
     }

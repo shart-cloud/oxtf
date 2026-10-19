@@ -91,20 +91,55 @@ add per-occurrence origin locations when provenance diverges.
   `partialFingerprints["oxtf/v1"]`, provenance as related locations).
 - `--fail-on` and the exit codes above.
 
-## C. Name the deciding attribute in every evaluator — next
+## C. Name the deciding attribute in every evaluator — done (connection checks excepted)
 
-- **Value checks**: on a missing attribute, emit an "absent at `path`"
-  witness so `attribute` is set. Derive a fix hint when the check expects a
-  single literal (`private_cluster_enabled = true`): 62 of the 155 value
-  findings, with no curation.
-- **Python and graph checks**: trace the configuration keys the
-  interpreter reads (subscripts, `.get`, `in`). On FAILED, the attribute is
-  the last read that decided a branch, absence tests first; the witness is
-  that sub-value or an absent marker. This reaches the 292 + 86 findings
-  that metadata cannot.
-- **Engine contract**: a judgement without an attribute path becomes an
-  explicit header-only case, counted in stats, so the gap cannot regrow
-  silently.
+The engine was already right: `Finding::build` takes the attribute and the
+location from the witness's provenance. What was missing was witnesses.
+
+- **Absence is a witness.** `Resource::absent(path)` is a null with one
+  `absent` provenance step at the resource header naming the attribute.
+  Checkov value checks (`ValueCheck::missing`) and graph attribute checks
+  return it when the attribute is not set, so the finding names it and its
+  fix hint inserts it.
+- **Value-check fixes.** A positive value check of a top-level attribute
+  against one literal implies `set attribute = literal`
+  (`ValueCheck::fix`, through `derive_fix`): 198 bundled rules.
+  Nested paths (119 rules) wait for block-aware fix actions.
+- **Python checks: `evaluated_keys` resolved properly.** A reported path
+  that is not set used to fall back to the whole configuration (no
+  attribute); it is now an absent witness, and a set value without
+  provenance of its own (a rendered view) gets a step naming the attribute
+  (`Resource::mentioned`). Bare `0` indices are dropped like `[0]`.
+- **Python checks: read tracing.** For checks that report no
+  `evaluated_keys`, the interpreter records every lookup (subscript,
+  `.get`, `in`) on the configuration's dicts, identified by pointer with
+  their paths recorded at conversion. The witness is what a delegated
+  native value check located, else the last key read, found or absent.
+  Measured against the checks that do report `evaluated_keys`
+  (`OXTF_DEBUG_PYTHON=trace`): 330 of 433 failing judgements agree exactly,
+  75 name the parent or child of the same attribute (a missing block vs its
+  leaf), 28 differ (no reads traced, falling back to the header, or a
+  conjunction where either attribute is a fair answer).
+- Verdicts are untouched: the corpus has the same 1,535 occurrences with
+  the same certainties. One pair of findings merged (CKV_AWS_34 had pointed
+  at the header in one root and the attribute in another).
+
+Still header-only, rightly: graph **connection** checks ("network has no
+firewall", "security group is attached to nothing"), about 70 findings.
+Their fix is a new resource, not an attribute. They could later name the
+missing connection (`connected_resource_types`) in the record.
+
+Found along the way, for later:
+
+- `tf_scan::apply_fix` has no CLI or Python surface, so an agent cannot use
+  the deterministic apply. An `oxtf fix FINGERPRINT` (print the edit, or
+  write it) would close the scan → fix → verify loop from the shell.
+- A fix hint's `site` replaces `x = var.x` with a literal. In a library
+  module the better edit is usually the variable's default, the origin of
+  the value's provenance; the hint should offer that site.
+- `configured` / `effective` hold the whole top-level attribute, so an IAM
+  finding embeds its full policy (15 KB). For nested attribute paths the
+  deciding sub-value would be enough.
 
 ## D. Curate the catalog — after C
 
@@ -128,14 +163,16 @@ guard on every change to the output or the catalog.
 
 ## Results so far
 
-| | main | after A + B |
-| --- | --- | --- |
-| Findings | 1,535 | 553 (1,535 occurrences) |
-| Distinct fingerprints | 959 for 554 distinct problems (one backlog issue per module path) | 553, one per finding |
-| JSON | 2.6 MB | 1.15 MB (2,078 B per finding) |
-| NDJSON | — | 231 KB (418 B per finding) |
-| Exit code with definite findings | 0 | 1 |
-| Corpus wall time, JSON, min of 5 | 0.21 s | 0.22 s |
+| | main | after A + B | after C |
+| --- | --- | --- | --- |
+| Findings | 1,535 | 553 (1,535 occurrences) | 552 (1,535 occurrences) |
+| Distinct fingerprints | 959 for 554 distinct problems (one backlog issue per module path) | 553, one per finding | 552 |
+| With the deciding attribute | 12 % | 10 % | 79 % |
+| With a fix hint | 0.1 % | 0.2 % | 8.3 % |
+| JSON | 2.6 MB | 1.15 MB (2,078 B per finding) | 1.6 MB (2,888 B; the added bytes are provenance) |
+| NDJSON | — | 231 KB (418 B per finding) | 247 KB (448 B) |
+| Exit code with definite findings | 0 | 1 | 1 |
+| Corpus wall time, JSON, min of 5 | 0.21 s | 0.22 s | 0.21 s |
 
 `fixtures/baseline/native.json` was regenerated for the new shape; every
 case expands back to exactly the old judgements, with the representative's

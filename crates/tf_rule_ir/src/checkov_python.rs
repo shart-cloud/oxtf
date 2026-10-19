@@ -620,6 +620,24 @@ fn walk(stmts: &[Stmt], f: &mut dyn FnMut(Node<'_>)) {
 
 type List = Rc<RefCell<Vec<Py>>>;
 
+/// A path into a resource's configuration: keys, and `[i]` for list
+/// elements (Checkov's `evaluated_keys` spelling, split at `/`).
+type ConfPath = Rc<[Rc<str>]>;
+
+/// Where each dict of a resource's configuration sits in it, by the
+/// dict's address, so a lookup on it can be traced back to an attribute.
+type Paths = HashMap<usize, ConfPath>;
+
+/// A key a check looked up in a dict of the resource's configuration,
+/// and whether it was there. The reads of a failing run say which
+/// attribute decided it when the check reports no `evaluated_keys`.
+#[derive(Clone, Debug)]
+struct Read {
+    dict: ConfPath,
+    key: Rc<str>,
+    present: bool,
+}
+
 #[derive(Clone)]
 enum Py {
     None,
@@ -938,6 +956,13 @@ struct Interp<'p> {
     statics: HashMap<String, Py>,
     /// Statements, expressions and copied data nodes so far this run.
     steps: std::cell::Cell<u32>,
+    /// Where the configuration's dicts sit in it.
+    paths: Rc<Paths>,
+    /// Configuration lookups so far this run, in order.
+    reads: RefCell<Vec<Read>>,
+    /// The witness of the last native check the program delegated to
+    /// (Checkov's generic value check): it located what it judged.
+    delegated: RefCell<Option<Value>>,
 }
 
 type Env = HashMap<String, Py>;
@@ -952,6 +977,19 @@ impl<'p> Interp<'p> {
     }
 
     /// `v` with abstractions resolved, or the flow they demand.
+    /// Trace a lookup of `key` in `dict` when the dict is part of the
+    /// resource's configuration.
+    fn note(&self, dict: &Rc<RefCell<Vec<(Py, Py)>>>, key: &Py, present: bool) {
+        let addr = Rc::as_ptr(dict) as *const () as usize;
+        if let (Some(path), Py::Str(k)) = (self.paths.get(&addr), key) {
+            self.reads.borrow_mut().push(Read {
+                dict: path.clone(),
+                key: k.clone(),
+                present,
+            });
+        }
+    }
+
     fn concrete(&self, v: &Py) -> R<Py> {
         match v {
             Py::Abstract(w, tainted) => Err(Flow::Abstract(w.clone(), *tainted)),
@@ -1118,7 +1156,9 @@ impl<'p> Interp<'p> {
             Py::Tuple(t) => self.contains_seq(&t, needle),
             Py::Dict(d) => {
                 let keys: Vec<Py> = d.borrow().iter().map(|(k, _)| k.clone()).collect();
-                self.contains_seq(&keys, needle)
+                let found = self.contains_seq(&keys, needle)?;
+                self.note(&d, &self.concrete(needle)?, found);
+                Ok(found)
             }
             Py::Range(a, b, s) => match self.concrete(needle)? {
                 Py::Int(i) => Ok(range_items(a, b, s).contains(&i)),
@@ -1455,10 +1495,11 @@ impl<'p> Interp<'p> {
                 let i = self.index_of(index, chars.len())?;
                 Ok(Py::str(chars[i].encode_utf8(&mut [0; 4])))
             }
-            Py::Dict(d) => match self.dict_get(&d.borrow(), index)? {
-                Some(v) => Ok(v),
-                None => exc("KeyError"),
-            },
+            Py::Dict(d) => {
+                let found = self.dict_get(&d.borrow(), index)?;
+                self.note(&d, &self.concrete(index)?, found.is_some());
+                found.map_or_else(|| exc("KeyError"), Ok)
+            }
             Py::Match(groups) => {
                 let i = self.index_of(index, groups.len())?;
                 Ok(groups[i].as_deref().map_or(Py::None, Py::str))
@@ -2586,6 +2627,7 @@ impl<'p> Interp<'p> {
                     .and_then(|m| m.get(&*self.resource.ty))
                     .ok_or_else(|| Flow::Unsupported("no value check for this type".into()))?;
                 let v = check.evaluate(self.resource);
+                *self.delegated.borrow_mut() = v.witness.clone();
                 match v.truth {
                     Truth::True => Py::Result(Rc::from("FAILED")),
                     Truth::False => Py::Result(Rc::from("PASSED")),
@@ -2812,7 +2854,9 @@ impl<'p> Interp<'p> {
         Ok(match (&recv, name) {
             (Py::Dict(d), "get") => {
                 let key = a0.ok_or_else(type_error)?;
-                match self.dict_get(&d.borrow(), &key)? {
+                let found = self.dict_get(&d.borrow(), &key)?;
+                self.note(d, &self.concrete(&key)?, found.is_some());
+                match found {
                     Some(v) => v,
                     None => Self::arg(&args, &kwargs, 1, "default").unwrap_or(Py::None),
                 }
@@ -4304,11 +4348,15 @@ fn json_to_py(j: &Json) -> Py {
 
 struct Converter {
     next_id: usize,
+    /// The path of the value being converted.
+    path: Vec<Rc<str>>,
+    paths: Paths,
 }
 
 impl Converter {
     /// The configured value as Python sees it. Numbers that are integral
-    /// are `int`, as Checkov's HCL parser reads them.
+    /// are `int`, as Checkov's HCL parser reads them. Every dict's path is
+    /// recorded in `paths`.
     fn py(&mut self, v: &Value) -> Py {
         match &v.kind {
             Kind::Known(k) => match k {
@@ -4322,10 +4370,25 @@ impl Converter {
                     }
                 }
                 Known::String(s) => Py::str(s),
-                Known::List(items) => Py::list(items.iter().map(|x| self.py(x)).collect()),
-                Known::Object(m) => Py::Dict(Rc::new(RefCell::new(
-                    m.iter().map(|(k, x)| (Py::str(k), self.py(x))).collect(),
-                ))),
+                Known::List(items) => Py::list(
+                    items
+                        .iter()
+                        .enumerate()
+                        .map(|(i, x)| self.child(Rc::from(format!("[{i}]")), x))
+                        .collect(),
+                ),
+                Known::Object(m) => {
+                    let items = m
+                        .iter()
+                        .map(|(k, x)| (Py::str(k), self.child(Rc::from(&**k), x)))
+                        .collect();
+                    let dict = Rc::new(RefCell::new(items));
+                    self.paths.insert(
+                        Rc::as_ptr(&dict) as *const () as usize,
+                        Rc::from(self.path.as_slice()),
+                    );
+                    Py::Dict(dict)
+                }
                 Known::Json(inner) => self.py(inner),
             },
             Kind::Unknown(_) => Py::Abstract(Rc::new(v.clone()), false),
@@ -4337,6 +4400,13 @@ impl Converter {
                 Py::OneOf(id, Rc::new(alts))
             }
         }
+    }
+
+    fn child(&mut self, segment: Rc<str>, v: &Value) -> Py {
+        self.path.push(segment);
+        let py = self.py(v);
+        self.path.pop();
+        py
     }
 }
 
@@ -4379,7 +4449,7 @@ impl Check {
 /// rules on one thread, one after the other, so one entry is enough.
 struct ResourceCache {
     uid: u64,
-    input: Option<Py>,
+    input: Option<(Py, Rc<Paths>)>,
     statics: HashMap<String, Py>,
 }
 
@@ -4396,13 +4466,18 @@ thread_local! {
 /// same `OneOf` under the same id, whether or not the conversion is
 /// shared. Checkov's runner adds the resource's address (and its lines,
 /// which no exported check reads).
-fn input(resource: &Resource, conf: &Value) -> Py {
-    let py_conf = Converter { next_id: 0 }.py(conf);
+fn input(resource: &Resource, conf: &Value) -> (Py, Rc<Paths>) {
+    let mut converter = Converter {
+        next_id: 0,
+        path: Vec::new(),
+        paths: Paths::default(),
+    };
+    let py_conf = converter.py(conf);
     if let Py::Dict(d) = &py_conf {
         d.borrow_mut()
             .push((Py::str("__address__"), Py::str(&resource.address)));
     }
-    py_conf
+    (py_conf, Rc::new(converter.paths))
 }
 
 fn run(check: &Check, resource: &Resource, conf: &Value) -> Verdict {
@@ -4446,7 +4521,7 @@ fn run_with(
     if *runs > RUN_BUDGET {
         return Verdict::new(Truth::Unknown, None);
     }
-    let py_conf = if check.shares_input {
+    let (py_conf, paths) = if check.shares_input {
         CACHE.with(|c| {
             c.borrow_mut()
                 .input
@@ -4477,6 +4552,9 @@ fn run_with(
         choices: choices.clone(),
         statics,
         steps: std::cell::Cell::new(0),
+        paths,
+        reads: RefCell::new(Vec::new()),
+        delegated: RefCell::new(None),
     };
     let outcome = interp.call_function(&program.entry, vec![py_conf], Vec::new());
     if shared && !matches!(outcome, Err(Flow::Fork(..))) {
@@ -4567,7 +4645,8 @@ fn oneof_tainted(conf: &Value, id: usize) -> bool {
 }
 
 /// The configured value a failing check reported in `evaluated_keys`
-/// (paths like `a/[0]/b`), or the whole configuration.
+/// (paths like `a/[0]/b`); for a check that reports none, what its
+/// lookups imply ([`traced`]); else the whole configuration.
 fn witness(interp: &mut Interp, program: &Program, conf: &Value) -> Value {
     let mut keys = interp.self_attrs.get("evaluated_keys").cloned();
     let empty = |k: &Option<Py>| match k {
@@ -4590,32 +4669,99 @@ fn witness(interp: &mut Interp, program: &Program, conf: &Value) -> Value {
         _ => None,
     };
     let Some(path) = first.filter(|p| !p.is_empty()) else {
-        return conf.clone();
+        return traced(interp, conf).unwrap_or_else(|| conf.clone());
     };
-    let mut cur = conf.clone();
-    for seg in path.split('/').filter(|s| !s.is_empty()) {
-        let next = if let Some(i) = seg.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
-            match (&cur.kind, i.parse::<usize>()) {
-                (Kind::Known(Known::List(items)), Ok(i)) => items.get(i).cloned(),
-                _ => None,
-            }
-        } else {
-            match &cur.kind {
-                Kind::Known(Known::Object(m)) => m.get(seg).cloned(),
-                // Attributes are wrapped in a one-element list.
-                Kind::Known(Known::List(items)) if items.len() == 1 => match &items[0].kind {
-                    Kind::Known(Known::Object(m)) => m.get(seg).cloned(),
-                    _ => None,
-                },
-                _ => None,
-            }
+    let path: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    let reported = located(interp, conf, &path, true);
+    if debug() == "trace" {
+        // How the read trace would have located it, for comparing the
+        // heuristic against checks that say.
+        let attribute = |v: &Value| {
+            v.prov
+                .last()
+                .and_then(|s| s.attribute.as_deref().map(str::to_string))
         };
-        match next {
-            Some(v) => cur = v,
-            None => break,
-        }
+        eprintln!(
+            "checkov_python trace {}: reported={:?} traced={:?}",
+            program.entry,
+            attribute(&reported),
+            traced(interp, conf).as_ref().and_then(attribute)
+        );
     }
-    cur
+    reported
+}
+
+/// The witness a failing run's lookups imply: what the native check it
+/// delegated to located, else the last configuration key it read, found
+/// or not ([`located`]).
+fn traced(interp: &Interp, conf: &Value) -> Option<Value> {
+    if let Some(w) = interp.delegated.borrow().clone() {
+        return Some(w);
+    }
+    let reads = interp.reads.borrow();
+    // `__address__` and the like are the runner's, not configuration.
+    let read = reads.iter().rev().find(|r| !r.key.starts_with("__"))?;
+    let mut path: Vec<&str> = read.dict.iter().map(|s| &**s).collect();
+    path.push(&read.key);
+    Some(located(interp, conf, &path, read.present))
+}
+
+/// The witness for the configuration at `path`, so the finding names the
+/// attribute: its configured value where that carries the attribute's
+/// provenance; the value with a step naming the attribute at the resource
+/// header where it does not (a rendered view); its absence when it is not
+/// set (or `present` says the check did not find it).
+fn located(interp: &Interp, conf: &Value, path: &[&str], present: bool) -> Value {
+    let resource = interp.resource;
+    // Indices are not part of an attribute path; Checkov spells them
+    // `[0]` or `0`.
+    let dotted: Vec<&str> = path
+        .iter()
+        .copied()
+        .filter(|s| !s.starts_with('[') && s.parse::<usize>().is_err())
+        .collect();
+    let dotted = dotted.join(".");
+    let owned = |v: &Value| {
+        v.prov
+            .any(|s| s.resource.as_deref() == Some(&*resource.base_address))
+    };
+    match value_at(conf, path).filter(|_| present) {
+        Some(v) if owned(&v) => v,
+        Some(v) => match &v.kind {
+            // Attributes are wrapped in a one-element list.
+            Kind::Known(Known::List(items)) if items.len() == 1 && owned(&items[0]) => {
+                items[0].clone()
+            }
+            _ => resource.mentioned(&dotted, v),
+        },
+        None => resource.absent(&dotted),
+    }
+}
+
+/// The value at a configuration path (keys and `[i]` elements). A key
+/// read through an attribute's one-element list reads its element, as
+/// Checkov's `evaluated_keys` sometimes omit the `[0]`.
+fn value_at(conf: &Value, path: &[&str]) -> Option<Value> {
+    let mut cur = conf.clone();
+    for seg in path {
+        let index = seg
+            .strip_prefix('[')
+            .and_then(|s| s.strip_suffix(']'))
+            .or_else(|| seg.parse::<usize>().is_ok().then_some(*seg));
+        let next = match (&cur.kind, index) {
+            (Kind::Known(Known::List(items)), Some(i)) => {
+                items.get(i.parse::<usize>().ok()?).cloned()
+            }
+            (Kind::Known(Known::Object(m)), None) => m.get(*seg).cloned(),
+            (Kind::Known(Known::List(items)), None) if items.len() == 1 => match &items[0].kind {
+                Kind::Known(Known::Object(m)) => m.get(*seg).cloned(),
+                _ => None,
+            },
+            _ => None,
+        }?;
+        cur = next;
+    }
+    Some(cur)
 }
 
 #[allow(dead_code)]

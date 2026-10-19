@@ -201,6 +201,36 @@ impl Resource {
             )),
         )
     }
+    /// `value`, set at `path` but without provenance of its own (a
+    /// rendered view of the configuration), with a step naming the
+    /// attribute at the resource header.
+    pub fn mentioned(&self, path: &str, value: Value) -> Value {
+        value.push(
+            Step::new(
+                StepKind::Attribute,
+                self.span,
+                format!("{} {path}", self.address),
+            )
+            .with_resource(self.base_address.clone())
+            .with_attribute(path),
+        )
+    }
+
+    /// A null witnessing that the attribute at `path` (dotted, no indices)
+    /// is not set: one [`StepKind::Absent`] step at the resource header,
+    /// so a finding it decides names the attribute and points at the
+    /// block it would be added to.
+    pub fn absent(&self, path: &str) -> Value {
+        Value::null().with_prov(Prov::single(
+            Step::new(
+                StepKind::Absent,
+                self.span,
+                format!("{} {path} not set", self.address),
+            )
+            .with_resource(self.base_address.clone())
+            .with_attribute(path),
+        ))
+    }
 }
 
 /// `tf_schema` typed views work over the evaluated model:
