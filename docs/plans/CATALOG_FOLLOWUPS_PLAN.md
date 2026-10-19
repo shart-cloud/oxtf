@@ -668,6 +668,40 @@ Medians from interleaved runs; same machine and session.
   rendered configuration (and its conversion) per resource is the same
   follow-up as caching the graph rules' configuration per root (step 1).
 
+## 5. Speed and domain helpers (2026-10-19)
+
+**Caching (b619b4d).** Each resource now computes its Checkov views once
+and shares them across rules (`tf_semantic::Resource::derived`): the
+rendered configuration, the graph configuration and the JSONPath vertex.
+- Corpus output is unchanged.
+- Single-thread corpus CPU: 581 → 538 ms, against 439 ms with the
+  693-rule catalog. Wall time: 189 → 183 ms.
+- What remains is interpretation itself: about 7.5% of single-thread
+  CPU.
+
+**Domain helpers.**
+- **Classes (5337971).** The interpreter now supports objects of
+  inlined classes (cloudsplaining, policy_sentry, Checkov). That
+  translates the four `ResourcePolicyDocument` checks.
+- **Native helpers (5343e15):** `yaml.safe_load`, `dpath`, `ipaddress`,
+  `itertools.chain`, `hasattr`, `*args`, compiled-pattern methods,
+  `re.DOTALL`/`re.MULTILINE`, and a boundary lookaround form. Together
+  they translate nine more checks.
+- **Result:** 380 of 388 Python checks; 1,073 bundled rules.
+- **Gates:** fixtures, 0 unexplained disagreements; value harness, 0.
+- **Licences (f3e55f4):** cloudsplaining (BSD-3-Clause) and
+  policy_sentry (MIT) now ship next to Checkov's.
+
+**Left: 8 Python checks.**
+- The six cloudsplaining IAM checks (`CKV_AWS_286`–`290`, `355`) need
+  policy_sentry's IAM database. It has 17,752 actions across 409
+  services: about 1.1 MB as compact JSON, 150 KB gzipped. They also need
+  native versions of its queries: wildcard expansion, actions matching an
+  ARN, access-level filters. **Open decision:** whether to bundle that
+  data.
+- `CKV_AWS_380` depends on the current date.
+- `CKV_GCP_36` uses a custom exclusion predicate.
+
 ## Branching
 
 These commits stack on `feat/checkov-native-policies` (638afcb, not
