@@ -2,7 +2,7 @@
 //! compiled at export time; runtime traversal retains abstract values.
 use std::cell::Cell;
 
-use crate::checkov::{AttributeCheck, AttributeOp, configuration};
+use crate::checkov::{AttributeCheck, AttributeOp, parsed_configuration};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 use tf_eval::{Kind, Known, Step, StepKind, Truth, Value, Verdict, truth};
@@ -135,7 +135,9 @@ impl JsonPathCheck {
     }
 
     pub fn evaluate(&self, resource: &Resource) -> Verdict {
-        let configured = configuration(&resource.body);
+        // Graph policies see vertex attributes, not the resource checks'
+        // rendered configuration.
+        let configured = parsed_configuration(&resource.body);
         let vertex = Value::object(
             configured
                 .as_object()

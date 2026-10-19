@@ -53,16 +53,18 @@ use tf_semantic::{Module, Resource};
 
 pub mod bundled;
 pub mod checkov;
+pub mod checkov_python;
 pub mod checkov_policy;
 pub mod goyaml;
 pub mod graph;
 pub mod jsonpath;
 pub mod py;
+pub mod pyliteral;
 pub mod pyre;
 pub mod pyyaml;
 
 /// Current IR version. Versions 1 and 2 remain readable; graph policies need 3.
-pub const IR_VERSION: u32 = 3;
+pub const IR_VERSION: u32 = 4;
 
 fn ir_version() -> u32 {
     IR_VERSION
@@ -149,6 +151,11 @@ pub enum Expr {
     CheckovAttribute {
         #[serde(flatten)]
         check: checkov::AttributeCheck,
+    },
+    /// A Checkov check's own Python (`scan_resource_conf`), interpreted
+    /// natively over the Checkov-shaped configuration (IR version 4).
+    CheckovPython {
+        program: Box<checkov_python::Program>,
     },
     /// Checkov's declarative value-check semantics, over configured values.
     /// Imported checks carry their own missing-value policy; provider defaults
@@ -469,6 +476,7 @@ enum Node {
     CheckovGraph(graph::GraphExpr),
     CheckovAttribute(checkov::AttributeCheck),
     CheckovValue(checkov::ValueCheck),
+    CheckovPython(Arc<checkov_python::Program>),
     Col { path: Vec<Seg>, default: bool },
     Element,
     Lit(Value),
@@ -582,6 +590,13 @@ fn compile_expr(e: &Expr, version: u32) -> Result<Node, String> {
         Expr::CheckovValue { check } => {
             check.validate()?;
             Node::CheckovValue(check.clone())
+        }
+        Expr::CheckovPython { program } => {
+            if version < 4 {
+                return Err("checkov_python requires IR version 4".into());
+            }
+            program.validate()?;
+            Node::CheckovPython(Arc::new((**program).clone()))
         }
         Expr::Col { path, default } => {
             if path.is_empty() {
@@ -922,6 +937,10 @@ fn eval_pred(n: &Node, s: Scope<'_>) -> Verdict {
         },
         Node::CheckovValue(check) => match s {
             Scope::Resource(r) => check.evaluate(r),
+            Scope::Value(_) => Verdict::new(Truth::Unknown, None),
+        },
+        Node::CheckovPython(program) => match s {
+            Scope::Resource(r) => checkov_python::evaluate(program, r),
             Scope::Value(_) => Verdict::new(Truth::Unknown, None),
         },
         Node::Col { .. } | Node::Element | Node::Lit(_) => is_true(&eval_value(n, s)),

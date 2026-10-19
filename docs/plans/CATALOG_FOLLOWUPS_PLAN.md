@@ -493,6 +493,172 @@ expressions. Rejected: the IR has no statements, early return or loops
 with exits, so most of the 278 would not fit without growing it into
 the same interpreter.
 
+## 4. The `checkov_python` interpreter (implemented 2026-10-19)
+
+Built after the step 3 review, which chose the interpreter.
+
+### What was built
+
+**Export** (`tfscan/checkov_python.py`, called by the importer for every
+check that is not a plain value check). The exported program holds:
+- `scan_resource_conf`;
+- every method and helper function it calls: the check's own classes,
+  the helper methods of Checkov's generic bases, and Checkov's utility
+  functions, all inlined as their own Python;
+- every constant it reads, folded in: module globals, instance
+  attributes, enum members, compiled patterns;
+- the result as a normalized JSON AST in a `checkov_python` clause (IR
+  version 4).
+
+Some calls are not inlined:
+- `super().scan_resource_conf` becomes the native `checkov_value` node;
+- `is_terraform_variable_dependent` runs natively;
+- whatever falls outside the subset makes the check unsupported, with
+  the reason.
+
+**Interpreter** (`tf_rule_ir::checkov_python`). It runs Python semantics
+over the Checkov-shaped configuration:
+- values: None, bool, int, float, str, list, tuple, set, dict, range,
+  `CheckResult`, types, patterns, matches, lambdas, function references;
+- operations: truthiness, `==`/`in`/ordering across types, `is`,
+  indexing and slicing, arithmetic, f-strings;
+- the `dict`/`list`/`str`/`set` methods the checks use;
+- builtins (`len`, `isinstance`, `any`/`all` lazily over generators,
+  `sorted`, `map`, `enumerate`, `int`, `str`, `json.loads`/`dumps`, ...);
+- Checkov helpers (`force_list`, `force_int`, ...);
+- `re` (through `pyre`), `fnmatch`, `try`/`except` with the exception
+  hierarchy, in-place mutation of the check's own copy.
+
+How a run ends:
+- An `Unknown`/`Tainted` leaf decides the run only when the code inspects
+  it.
+- A `OneOf` forks the run per alternative, and the results are joined as
+  `truth::combine_one_of`.
+- `FAILED` is a finding, located by the check's own `evaluated_keys`.
+- An escaping exception, an operation outside the subset, or the step
+  budget (200,000) means no result, as Checkov reports none for a check
+  that raises.
+- `OXTF_DEBUG_PYTHON=1|2` logs failures or every outcome.
+
+**Coverage.** 367 of the 388 Python checks. The catalog grows from 693 to
+1,060 rules (875 resource checks + 186 graph policies, after merging
+shared IDs). `rules.json` is written one compact rule per line, 1.8 MB.
+
+Unsupported, with reasons in the manifest:
+- policy_sentry policy documents: 10;
+- secrets regexes: 3;
+- `yaml`: 2;
+- `dpath`: 2;
+- `itertools`, `ipaddress`, a date-dependent check and a custom
+  exclusion predicate: 1 each;
+- plus the 14 value checks the importer already rejected.
+
+### Runner rendering: a Checkov behaviour the harnesses had missed
+
+Comparing against Checkov's runner, not its check code alone, showed
+that resource checks see a configuration the runner has *rendered*.
+`checkov::configuration` (and so the value checks) now reproduces it:
+- **List order.** Lists put their strings, sorted, after their other
+  elements (`clean_parser_types`).
+- **Top-level strings.** A top-level string that evaluates (as a Python
+  literal, else strict JSON) to a list or dict becomes it. This is what
+  turns a heredoc JSON policy into a dict, so policy checks can read it.
+- **List elements.** The elements of a list attribute, and the values of
+  objects inside it, are evaluated: `["22", "-1"]` becomes `[-1, 22]`,
+  `[{protocol = "-1"}]` becomes `[{protocol: -1}]`.
+- **Left as written.** Block attributes, map values and top-level
+  scalars.
+
+`tf_rule_ir::pyliteral` reads exactly the Python literal syntax that
+`eval` accepts. It does not read arithmetic or calls, and those strings
+stay strings.
+
+Graph policies see Checkov's *vertex* attributes, which are rendered
+differently (every string is evaluated). That view is not modelled yet:
+`jsonpath` and the graph attribute checks use the parsed configuration,
+and the graph harness builds its vertices the same way.
+
+### Gates
+
+The value harness (`compare.py`) now uses Checkov's runner as its
+reference: it writes the corpus and runs `Runner` over it, instead of
+calling each check on `hcl2` output. Before that change it could not see
+runner rendering at all.
+
+| Harness | Cases | Disagreements |
+|---|---:|---:|
+| `compare.py` (value checks, against Checkov's runner) | 8,869 | 0 |
+| `graph_compare.py` | 41,208 | 0 |
+| `python_compare.py` (Checkov's 747 fixture files, 367 checks) | 17,918 results | 0 |
+
+The Python harness classifies everything else it finds; nothing
+unexplained is counted:
+- **Unresolved inputs: 96.** Checkov fails on a reference oxtf leaves
+  abstract, almost all an undeclared `var.test_var`. oxtf reports no
+  finding by design.
+- **Documented divergences: 20.** Each one is either invalid Terraform
+  that Checkov's lenient parser accepts, or a case where Checkov reads
+  unevaluated expression text:
+  - a heredoc closing marker followed by spaces;
+  - a list assigned to a string attribute;
+  - an attribute that is also a block;
+  - `base64encode(...)` matched as text;
+  - a `jsonencode()` that Checkov failed to render.
+
+Other gates:
+- **Rust tests:** 245 passed.
+- **New tests:** `tests/checkov_python.rs` covers list wrapping,
+  truthiness and `in`, abstract values, OneOf forking, exceptions, runner
+  rendering and the step budget. `pyliteral` has unit tests against
+  CPython's `eval` behaviour.
+- **pytest:** 51 passed, 1 skipped.
+- **Known failure:** `checkov_policy`'s ignored
+  `pinned_catalog_matches_python_importer` fails. It did so before this
+  change and against the old pack too: it expects a pack with graph
+  rules.
+
+### Real-world comparison: the 17-repo corpus
+
+`python_compare.py --fixtures corpus/repos` runs Checkov's runner over the
+corpus once (27 minutes) and compares it with oxtf.
+
+- **Agree:** 4,099 of 4,282 results (95.7%).
+- **Not created, 131:** resources Terraform does not create
+  (`count = var.create ? 1 : 0` with `create = false`, wrappers whose
+  `for_each` defaults to `{}`). Checkov evaluates these anyway; oxtf has
+  no such instance.
+- **Remaining: 52 disagreements and 10 findings Checkov does not report,
+  in 20 checks.** Every group spot-checked traces to Checkov rendering
+  module inputs only partially:
+  - **`CKV_AWS_173`** (23): `kms_key_arn` stays the text `var.kms_key_arn`,
+    and a `dynamic "environment"` block is kept although its `for_each`
+    is empty.
+  - **`CKV_GCP_66`** (7): unrendered dynamic content becomes Checkov's
+    `[True]` placeholder, which the check accepts.
+  - **`CKV_AWS_79`:** Checkov does not render the variable the example
+    module passes in.
+
+  oxtf evaluates these as Terraform would. This set is the input to
+  deciding whether to emulate more of Checkov's module rendering or
+  leave oxtf Terraform-faithful.
+
+Unlike the fixtures, this comparison is not a gate.
+
+### Cost and effect
+
+Medians from interleaved runs; same machine and session.
+
+| Build | Corpus | One `aws_s3_bucket` file | One `null_resource` file |
+|---|---:|---:|---:|
+| Lazy catalog, 693 rules (e2d4c7f) | 144 ms | 7.7 ms | 6.1 ms |
+| With the interpreter, 1,060 rules | 184 ms | 9.9 ms | 6.6 ms |
+
+- **Findings.** Corpus findings go from 974 to 1,495, with 0 rule errors.
+- **Where the time goes.** Each Python check converts the resource's
+  Checkov-shaped configuration to Python values on every run. Caching the
+  rendered configuration (and its conversion) per resource is the same
+  follow-up as caching the graph rules' configuration per root (step 1).
+
 ## Branching
 
 These commits stack on `feat/checkov-native-policies` (638afcb, not

@@ -302,9 +302,32 @@ pub fn generate(
         rules,
     };
     Ok(Generated {
-        rules_json: pretty(&bundle)?,
+        rules_json: rules_document(&bundle)?,
         manifest_json: pretty(&manifest)?,
     })
+}
+
+/// The bundle with one compact rule per line: rule programs are deep
+/// trees that pretty-printing would multiply several times over.
+fn rules_document(bundle: &Bundle) -> Result<String, String> {
+    let string = |s: &str| serde_json::to_string(s).map_err(|e| e.to_string());
+    let mut out = format!(
+        "{{\n  \"schema\": {},\n  \"source\": {},\n  \"source_version\": {},\n  \"rules\": [\n",
+        bundle.schema,
+        string(&bundle.source)?,
+        string(&bundle.source_version)?
+    );
+    for (i, rule) in bundle.rules.iter().enumerate() {
+        out.push_str("    ");
+        out.push_str(&serde_json::to_string(rule).map_err(|e| e.to_string())?);
+        out.push_str(if i + 1 < bundle.rules.len() {
+            ",\n"
+        } else {
+            "\n"
+        });
+    }
+    out.push_str("  ]\n}\n");
+    Ok(out)
 }
 
 fn pretty<T: Serialize>(value: &T) -> Result<String, String> {

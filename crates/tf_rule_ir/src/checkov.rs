@@ -11,7 +11,7 @@ use tf_eval::{Kind, Known, Map, Truth, Value, Verdict, truth};
 use tf_semantic::{Body, Resource};
 
 use crate::py::{self, Network};
-use crate::pyre;
+use crate::{pyliteral, pyre};
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -776,12 +776,19 @@ fn parser_types_changed(value: &Value) -> Option<Value> {
         },
         Kind::Known(Known::List(items)) => {
             let new: Vec<Option<Value>> = items.iter().map(parser_types_changed).collect();
-            new.iter().any(Option::is_some).then(|| {
+            let any_new = new.iter().any(Option::is_some);
+            let items: Vec<Value> = new
+                .into_iter()
+                .zip(items.iter())
+                .map(|(n, old)| n.unwrap_or_else(|| old.clone()))
+                .collect();
+            // `clean_parser_types_lst` then moves the strings, sorted, after
+            // the other elements. An abstract element might be a string or
+            // not, so such a list keeps its order.
+            let sorted = sort_strings_last(&items);
+            (any_new || sorted.is_some()).then(|| {
                 changed(Kind::Known(Known::List(std::sync::Arc::new(
-                    new.into_iter()
-                        .zip(items.iter())
-                        .map(|(n, old)| n.unwrap_or_else(|| old.clone()))
-                        .collect(),
+                    sorted.unwrap_or(items),
                 ))))
             })
         }
@@ -819,6 +826,70 @@ fn parser_types_changed(value: &Value) -> Option<Value> {
             })
         }
         _ => None,
+    }
+}
+
+/// The list with its strings moved, sorted, after its other elements, or
+/// `None` when that is already its order (or an element is abstract).
+fn sort_strings_last(items: &[Value]) -> Option<Vec<Value>> {
+    if items.iter().any(|v| !matches!(v.kind, Kind::Known(_))) {
+        return None;
+    }
+    let text = |i: usize| match &items[i].kind {
+        Kind::Known(Known::String(s)) => Some(s.clone()),
+        _ => None,
+    };
+    let mut strings: Vec<usize> = (0..items.len()).filter(|&i| text(i).is_some()).collect();
+    // A stable sort, as Python's.
+    strings.sort_by_key(|&i| text(i));
+    let order: Vec<usize> = (0..items.len())
+        .filter(|&i| text(i).is_none())
+        .chain(strings)
+        .collect();
+    let moved = order.iter().enumerate().any(|(at, &i)| at != i);
+    moved.then(|| order.into_iter().map(|i| items[i].clone()).collect())
+}
+
+/// A resource attribute as Checkov's runner leaves it for resource checks
+/// (`evaluate_vertices_attributes` writes evaluated values back into the
+/// configuration only through the containers it shares with it):
+///
+/// - a string whose evaluation is a list or dict becomes it (a JSON policy
+///   in a heredoc, `"[1, 2]"`);
+/// - the elements of a list attribute, and the values of objects inside
+///   it, are evaluated: `["-1"]` → `[-1]`, `[{p = "22"}]` → `[{p: 22}]`.
+///
+/// Other strings (top-level scalars, map values, block attributes) stay as
+/// written. Evaluation reads Python literals only ([`pyliteral`]).
+fn runner_rendered(value: &Value) -> Value {
+    match &value.kind {
+        Kind::Known(Known::String(s)) => match pyliteral::container(s) {
+            Some(json) => tf_eval::value::from_json(&json, &value.prov),
+            None => value.clone(),
+        },
+        Kind::Known(Known::List(items)) => {
+            Value::list(items.iter().map(rendered_element).collect()).child_of(value)
+        }
+        _ => value.clone(),
+    }
+}
+
+fn rendered_element(value: &Value) -> Value {
+    match &value.kind {
+        Kind::Known(Known::String(s)) if s.len() <= 10_000 => match pyliteral::eval(s) {
+            Some(json) => tf_eval::value::from_json(&json, &value.prov),
+            None => value.clone(),
+        },
+        Kind::Known(Known::List(items)) => {
+            Value::list(items.iter().map(rendered_element).collect()).child_of(value)
+        }
+        Kind::Known(Known::Object(m)) => Value::object(
+            m.iter()
+                .map(|(k, v)| (k.clone(), rendered_element(v)))
+                .collect(),
+        )
+        .child_of(value),
+        _ => value.clone(),
     }
 }
 
@@ -1175,6 +1246,12 @@ pub(crate) fn equal(value: &Value, expected: &Json) -> Verdict {
 
 /// Checkov-shaped configured field, keeping source evidence and unknowns.
 pub fn field(body: &Body, name: &str) -> Option<Value> {
+    field_in(body, name, true)
+}
+
+/// [`field`] of a resource (`rendered`: as Checkov's runner leaves it,
+/// see [`runner_rendered`]) or of a nested block (as parsed).
+fn field_in(body: &Body, name: &str, rendered: bool) -> Option<Value> {
     if let Some(a) = body.attr(name) {
         let value = if name == "alias" {
             a.value.clone()
@@ -1184,7 +1261,11 @@ pub fn field(body: &Body, name: &str) -> Option<Value> {
         return Some(if a.from_blocks {
             block_values(&value)
         } else {
-            Value::list(vec![value])
+            Value::list(vec![if rendered {
+                runner_rendered(&value)
+            } else {
+                value
+            }])
         });
     }
     let blocks: Vec<_> = body
@@ -1197,7 +1278,7 @@ pub fn field(body: &Body, name: &str) -> Option<Value> {
     let mut values = Vec::new();
     let mut uncertainty = None;
     for b in blocks {
-        values.push(configuration(&b.body));
+        values.push(configuration_in(&b.body, false));
         if b.existence != Truth::True {
             uncertainty = Some(uncertainty.map_or(b.existence, |t: Truth| t.or(b.existence)));
         }
@@ -1233,7 +1314,17 @@ fn block_values(value: &Value) -> Value {
     }
 }
 
+/// A resource's configuration as Checkov's resource checks see it.
 pub fn configuration(body: &Body) -> Value {
+    configuration_in(body, true)
+}
+
+/// A resource's configuration as parsed, before the runner's rendering.
+pub fn parsed_configuration(body: &Body) -> Value {
+    configuration_in(body, false)
+}
+
+fn configuration_in(body: &Body, rendered: bool) -> Value {
     let mut out = Map::new();
     for name in body
         .attrs
@@ -1241,7 +1332,7 @@ pub fn configuration(body: &Body) -> Value {
         .map(|a| &a.name)
         .chain(body.blocks.iter().map(|b| &b.ty))
     {
-        if let Some(v) = field(body, name) {
+        if let Some(v) = field_in(body, name, rendered) {
             out.insert(name.clone(), v);
         }
     }

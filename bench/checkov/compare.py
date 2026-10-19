@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Differential conformance of an exported value-check pack against Checkov.
 
-Run with the pinned Checkov interpreter. Generates real HCL configurations,
-uses Checkov's HCL parser and original check implementations as the reference,
-then scans the entire generated corpus once with oxtf. Artifacts are retained.
+Run with the pinned Checkov interpreter. Generates real HCL configurations
+and uses Checkov's runner (its parser, variable rendering and the original
+check implementations) over the generated corpus as the reference, then
+scans the same corpus once with oxtf. Artifacts are retained.
 """
 import argparse
 import copy
@@ -126,16 +127,24 @@ def main():
             for i, value in enumerate(values):
                 contents = "" if value == "__missing__" else body(condition["path"], value)
                 text = f'resource "{ty}" "case_{i}" {{\n{contents}\n}}\n'
-                conf = clean_parser_types(hcl2.loads(text)["resource"][0][ty][f"case_{i}"])
-                check = copy.deepcopy(checks[rule["name"]])
-                try:
-                    outcome = check.scan_entity_conf(conf, ty).value
-                except Exception as exc:
-                    outcome = f"ERROR: {type(exc).__name__}: {exc}"
                 rows.append({"root": str(root), "rule": rule["name"], "address": f"{ty}.case_{i}",
-                             "case": value, "checkov": outcome})
+                             "case": value, "checkov": None})
                 blocks.append(text)
             (root / "main.tf").write_text("\n".join(blocks))
+    # The reference: Checkov's runner over the value-check corpus. A case it
+    # does not report (UNKNOWN, or a check that raised) is unresolved.
+    from checkov.runner_filter import RunnerFilter
+    from checkov.terraform.runner import Runner
+    value_ids = sorted({r["rule"] for r in rows if r["checkov"] is None})
+    report = Runner().run(root_folder=str(corpus.resolve()),
+                          runner_filter=RunnerFilter(checks=value_ids, framework=["terraform"]))
+    outcomes = {}
+    for label, records in (("PASSED", report.passed_checks), ("FAILED", report.failed_checks)):
+        for r in records:
+            outcomes[(str((corpus.resolve() / r.file_path.lstrip("/")).parent), r.check_id, r.resource)] = label
+    for row in rows:
+        if row["checkov"] is None:
+            row["checkov"] = outcomes.get((str(Path(row["root"]).resolve()), row["rule"], row["address"]), "UNKNOWN")
     command = [str(args.native.resolve()), "scan", str(corpus), "--recursive", "--format", "json", "--no-bundled", "--rule-file", str(rules_file)]
     start = time.perf_counter()
     native = subprocess.run(command, capture_output=True, text=True, timeout=120)
