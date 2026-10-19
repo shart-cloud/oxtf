@@ -156,11 +156,12 @@ def test_foreign_policy_and_rule_errors():
     assert {f.rule for f in r.findings} == {"rego:conftest_hcl2_deny"}
     assert sorted(f.severity for f in r.findings) == ["conditional", "definite", "definite", "indeterminate"]
     assert r.rule_errors == []
-    r = tfscan.scan(rego / "foreign_sprintf", builtin=False, policies=[policy], policy_shape="hcl")
+    broken = rego / "runtime_error" / "protocol_number.rego"
+    r = tfscan.scan(rego / "foreign_runtime_error", builtin=False, policies=[broken], policy_shape="hcl")
     (e,) = r.rule_errors
     # Conftest evaluates the whole file, so the error names the file.
-    assert e["rule"] == "rego:conftest_hcl2_deny" and e["resource"] is None
-    assert "%q" in e["message"] and "foreign_sprintf/main.tf" in e["message"]
+    assert e["rule"] == "rego:protocol_number" and e["resource"] is None
+    assert "to_number" in e["message"] and "foreign_runtime_error/main.tf" in e["message"]
     with pytest.raises(ValueError, match="missing.rego"):
         tfscan.scan(rego / "foreign", policies=[rego / "missing.rego"])
 

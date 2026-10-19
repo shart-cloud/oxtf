@@ -206,7 +206,7 @@ operators. `AttributeOp` had 24 and now covers all 45, plain and as
 - Regenerating `checkov_frontend.json` with PyYAML 6.0.3 changes only the
   version stamp. The committed file stays pinned to 6.0.2.
 
-### F3. Rego / OPA as a first-class format (implemented 2026-10-16; gate open on regorus)
+### F3. Rego / OPA as a first-class format (implemented 2026-10-16; gate met on the regorus fork)
 
 The reference is `opa eval -d PATH...` with OPA 1.17.0. The code is in
 `tf_rego` (`foreign.rs`) and `tf_rule_ir::goyaml`.
@@ -289,43 +289,54 @@ The reference is `opa eval -d PATH...` with OPA 1.17.0. The code is in
 
 **Gate results** (`bench/rego/opa_compare.py`, corpus `corpus/repos`, OPA
 1.17.0 with `--strict-builtin-errors`). Both engines evaluate the same
-inputs (oxtf's projections), and results are compared per (entry, input):
+inputs (oxtf's projections), and results are compared per (entry, input).
+First on regorus 0.12.0, then on the fork (below):
 
-| Set | Evaluations | Agree | oxtf error, OPA result | Differ |
+| Set | Evaluations | Agree, 0.12.0 | Agree, fork | Differ |
 | --- | ---: | ---: | ---: | ---: |
-| seed ports (5 entries) | 276 | 241 | 35 (`some .. in null`) | 0 |
-| Conftest hcl2 example (`--policy-shape hcl`) | 2,145 | 949 | 1,196 (`sprintf("%q")`) | 0 |
-| v0 fixture (`--rego-v0`) | 2,850 | 2,850 | 0 | 0 |
-| Azure AVM security, 26 entries, commit `c840dd7`, 1 workaround | 74,100 | 74,100 | 0 | 0 |
+| seed ports (5 entries) | 276 | 241 (35 `some .. in null` errors) | 276 | 0 |
+| Conftest hcl2 example (`--policy-shape hcl`) | 2,145 | 949 (1,196 `sprintf("%q")` errors) | 2,145 | 0 |
+| v0 fixture (`--rego-v0`) | 2,850 | 2,850 | 2,850 | 0 |
+| Azure AVM security, 26 entries, commit `c840dd7` | 74,100 | 74,100 (1 workaround) | 74,100 (unmodified) | 0 |
 
-There are **no silent differences**. Every disagreement is a rule error
-oxtf reports, caused by a regorus gap. The AVM run renames one
-comprehension variable (gap 3 below) in the staged copy of both engines'
-input. Without that rename, regorus cannot load the set. The gate is
-therefore not met yet: it needs the regorus gaps closed.
+There were never silent differences: on 0.12.0 every disagreement was a
+rule error caused by a regorus gap, and AVM loaded only with one
+comprehension variable renamed. On the fork every evaluation agrees and
+the workaround is gone, so **the gate is met**.
 
-**regorus 0.12.0 vs OPA 1.17.0.** Each gap is reproduced in
-`known_regorus_divergences_fail_loudly` (`foreign.rs`). Compile checks with
-`examples/rego_check.rs` against `opa check` covered Trivy checks (1,127
-files, v1), Regula (700, v0), Azure AVM (133), Scalr samples (62) and
-Conftest examples (56). Errors that OPA also reports (Trivy's and
-Conftest's own builtins, Scalr's conflicting rules) are excluded.
+**The regorus fork.** oxtf depends on `jlgore/regorus`, branch `oxtf`:
+regorus 0.13.0 plus one branch per gap, each a self-contained
+upstreamable fix with interpreter and RVM YAML regressions checked against
+OPA 1.17.0 (`fix/some-in-scalar`, `fix/comprehension-shadow`,
+`fix/import-after-rules`, `fix/v0-multi-body`). regorus's own suite passes,
+and its OPA v1.2.0 conformance suite fails the same 320 cases before and
+after (features regorus lacks, such as `strings.render_template`). The
+gaps, with what changed:
 
-1. `some x in <scalar or null>` is a runtime error; OPA treats it as
-   undefined. It is common in real policies, and it is the 35 above.
-2. `sprintf` `%q` is unsupported; OPA formats any value. regorus 0.13.0
-   adds `%q` for strings.
-3. A comprehension variable named like its enclosing function, or bound
-   later in the comprehension, fails with "used before definition".
-   1 AVM file and 1 Conftest example. Possibly fixed by 0.13.0
-   ("schedule comprehensions in rule outputs").
-4. An `import` after rules is a parse error. 1 Trivy file.
-5. v0 rules with several bodies (`p[x] { … } { … }`) are rejected as
-   `else`. 119 of Regula's 700 files.
+1. `some x in <scalar or null>` was a runtime error; OPA treats it as
+   undefined. Fixed (a literal scalar stays a compile error, as in OPA).
+2. `sprintf` `%q` was unsupported. regorus 0.13.0 formats strings exactly
+   as OPA does. `%q` of a non-string is still an error where OPA formats
+   it; `known_regorus_divergences_fail_loudly` (`foreign.rs`) pins that.
+3. A comprehension variable named like its enclosing function, or a
+   reference that precedes a shadowing `:=` in a comprehension, failed
+   with "used before definition" (1 AVM file, 1 Conftest example). Fixed;
+   references with no enclosing binding are still rejected, as in OPA.
+4. An `import` after rules was a parse error (1 Trivy file). Fixed.
+5. v0 rules with several bodies (`p[x] { … } { … }`) were rejected as
+   `else` for sets and, for complete rules, silently evaluated as an else
+   chain. Fixed: each body is a rule with the shared head, and differing
+   complete outputs are a conflict error (119 of Regula's 700 files).
 
-regorus 0.13.0 (2026-10-14) passes the two-week rule on 2026-10-28. The
-next step is to upgrade, rerun the harness, and report 1, 4 and 5
-upstream.
+`former_regorus_divergences_match_opa` (`foreign.rs`) checks each fix.
+Compile checks with `examples/rego_check.rs` now load every file of
+Trivy checks (1,103, v1), Regula (700, v0), Azure AVM (133) and the
+Conftest examples (56); the one Scalr error is one OPA reports too.
+Corpus timing is unchanged (gate set 0.36 s median on both; AVM 6.5 s).
+
+Upstream PRs for the four branches are the next step. When a regorus
+release contains them and passes the two-week rule, oxtf goes back to the
+crates.io release.
 
 **Not runnable unchanged** (input shape, not engine): Scalr's samples read
 `input.tfplan`, Trivy checks read Trivy's adapted `cloud` state, and Regula
@@ -452,8 +463,9 @@ Rendered documents, engines and exception results are cached per root
 - A file finding points at the file's start: the result does not say
   which block it is about.
 - Conftest's `--combine` and its non-Terraform parsers are out of scope.
-- The regorus gaps of F3 apply. Conftest's own hcl2 example uses
-  `sprintf("%q")`, so two of its five tests are rule errors.
+- On regorus 0.12.0, Conftest's own hcl2 example hit the `sprintf("%q")`
+  gap of F3, so two of its five tests were rule errors. On the fork all
+  five pass.
 
 ### F5. Unified loading, metadata and UX (implemented 2026-10-16)
 

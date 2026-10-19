@@ -65,11 +65,6 @@ def sets(ext):
             'entries': avm_entries(ext),
             'shape': 'plan',
             'commit': git_head(ext / 'policy-library-avm'),
-            # regorus 0.12 rejects a comprehension variable named like its
-            # enclosing function ("used before definition"); OPA accepts it.
-            # Renaming it is meaning-preserving. Applied to both engines.
-            'workarounds': [('common.utils.rego', '[\nresource |\n\tsome resource in _resource(_input)\n\tresource.mode == "managed"\n\tresource.type == resource_type\n]',
-                             '[\nr |\n\tsome r in _resource(_input)\n\tr.mode == "managed"\n\tr.type == resource_type\n]')],
         })
     return out
 

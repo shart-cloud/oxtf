@@ -158,12 +158,36 @@ fn unmodified_conftest_policy_yields_each_certainty_class() {
     );
 }
 
-/// regorus does not implement Go's `%q` format verb, which the public
-/// policy's required-tags rule uses. That is an engine gap, and it must
-/// surface as a rule error naming the file (Conftest's unit), never as a
-/// missing violation; the rest of the scan still completes.
+/// A builtin that fails at runtime (`to_number("tcp")`, an error in OPA
+/// with --strict-builtin-errors too) must surface as a rule error naming
+/// the file (Conftest's unit), never as a missing violation; the rest of
+/// the scan still completes.
 #[test]
-fn unsupported_builtin_in_a_foreign_policy_is_a_rule_error() {
+fn runtime_error_in_a_foreign_policy_is_a_rule_error() {
+    let policy = repo().join("fixtures/rego/runtime_error/protocol_number.rego");
+    let out = scan(foreign(
+        "fixtures/rego/foreign_runtime_error",
+        &policy,
+        Shape::Hcl,
+    ))
+    .unwrap();
+    let errors = &out.result.rule_errors;
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert_eq!(errors[0].rule, "rego:protocol_number");
+    assert_eq!(errors[0].resource, None);
+    assert!(
+        errors[0].message.contains("foreign_runtime_error/main.tf"),
+        "{}",
+        errors[0].message
+    );
+    assert!(errors[0].message.contains("to_number"), "{}", errors[0].message);
+    assert_eq!(out.record().rule_errors.len(), 1);
+}
+
+/// The public policy's required-tags rule formats with Go's `%q` verb,
+/// which regorus 0.12 lacked. Its violation is reported as OPA words it.
+#[test]
+fn go_quoted_strings_in_a_foreign_policy_match_opa() {
     let policy = repo().join("fixtures/rego/foreign/conftest_hcl2_deny.rego");
     let out = scan(foreign(
         "fixtures/rego/foreign_sprintf",
@@ -171,17 +195,14 @@ fn unsupported_builtin_in_a_foreign_policy_is_a_rule_error() {
         Shape::Hcl,
     ))
     .unwrap();
-    let errors = &out.result.rule_errors;
-    assert_eq!(errors.len(), 1, "{errors:?}");
-    assert_eq!(errors[0].rule, "rego:conftest_hcl2_deny");
-    assert_eq!(errors[0].resource, None);
+    assert!(out.result.rule_errors.is_empty(), "{:?}", out.result.rule_errors);
+    let messages: Vec<_> = out.result.findings.iter().map(|f| f.message.as_str()).collect();
     assert!(
-        errors[0].message.contains("foreign_sprintf/main.tf"),
-        "{}",
-        errors[0].message
+        messages.contains(
+            &r#"AWS resource: "aws_security_group_rule" named "open" is missing required tags: {"environment", "owner"}"#
+        ),
+        "{messages:?}"
     );
-    assert!(errors[0].message.contains("%q"), "{}", errors[0].message);
-    assert_eq!(out.record().rule_errors.len(), 1);
 }
 
 #[test]

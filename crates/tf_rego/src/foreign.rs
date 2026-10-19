@@ -2402,59 +2402,11 @@ mod tests {
         assert_eq!(parse_path("a[x]"), None);
     }
 
-    /// regorus 0.12.0 differs from OPA 1.17.0 on these, always loudly: a
-    /// load error or a rule error, never a different answer. Each is
-    /// listed in FIRST_CLASS_RULES_PLAN.md (F3); when a regorus upgrade
-    /// fixes one, its assertion here fails and the list needs updating.
-    #[test]
-    fn known_regorus_divergences_fail_loudly() {
-        let eval_one = |src: &str, input: Json| -> Result<Vec<Violation>, String> {
-            let d = dir(&[("p.rego", src)]);
-            let paths = [d.path().to_path_buf()];
-            let bundle = Bundle::load(&Options {
-                paths: &paths,
-                data: &[],
-                namespaces: &[],
-                all_namespaces: false,
-                exclude: &[],
-                entries: &[],
-                shape: Shape::Plan,
-                rego_v0: false,
-            })?;
-            violations(&eval(&bundle.engine, input, DEFAULT_ENTRY)?)
-        };
-        // OPA: `some x in null` is undefined.
-        let err = eval_one(
-            "package main\nimport rego.v1\ndeny contains x if { some x in input.xs }\n",
-            json!({"xs": null}),
-        )
-        .unwrap_err();
-        assert!(err.contains("expects array/set/object"), "{err}");
-        // OPA formats `%q` of any value (fixed for strings in regorus 0.13.0).
-        let err = eval_one(
-            "package main\nimport rego.v1\ndeny contains sprintf(\"%q\", [input.x]) if true\n",
-            json!({"x": "s"}),
-        )
-        .unwrap_err();
-        assert!(err.contains("%q"), "{err}");
-        // OPA accepts an import after rules.
-        let err = eval_one(
-            "package main\nimport rego.v1\ndeny contains 1 if false\nimport data.lib\n",
-            json!({}),
-        )
-        .unwrap_err();
-        assert!(err.contains("import"), "{err}");
-        // OPA accepts a comprehension variable named like the function.
-        let err = eval_one(
-            "package main\nimport rego.v1\nf(xs) := [f | some f in xs]\ndeny contains 1 if f([1])\n",
-            json!({}),
-        )
-        .unwrap_err();
-        assert!(err.contains("before definition"), "{err}");
-        // OPA v0 accepts a rule with several bodies.
-        let d = dir(&[("p.rego", "package main\ndeny[x] { x := 1 } { x := 2 }\n")]);
+    /// Evaluates one policy file with `data.main.deny` as the entry.
+    fn eval_one(src: &str, input: Json, rego_v0: bool) -> Result<Vec<String>, String> {
+        let d = dir(&[("p.rego", src)]);
         let paths = [d.path().to_path_buf()];
-        let err = Bundle::load(&Options {
+        let bundle = Bundle::load(&Options {
             paths: &paths,
             data: &[],
             namespaces: &[],
@@ -2462,10 +2414,69 @@ mod tests {
             exclude: &[],
             entries: &[],
             shape: Shape::Plan,
-            rego_v0: true,
-        })
-        .err()
-        .unwrap();
-        assert!(err.contains("else cannot be used"), "{err}");
+            rego_v0,
+        })?;
+        let mut msgs: Vec<String> = violations(&eval(&bundle.engine, input, DEFAULT_ENTRY)?)?
+            .into_iter()
+            .map(|v| v.msg)
+            .collect();
+        msgs.sort();
+        Ok(msgs)
+    }
+
+    /// regorus 0.12.0 differed from OPA 1.17.0 on these (loudly). The
+    /// regorus fork (FIRST_CLASS_RULES_PLAN.md, F3) fixes them; each
+    /// expected value is OPA's answer.
+    #[test]
+    fn former_regorus_divergences_match_opa() {
+        // `some x in null` is undefined, not an error.
+        let got = eval_one(
+            "package main\nimport rego.v1\ndeny contains x if { some x in input.xs }\n",
+            json!({"xs": null}),
+            false,
+        );
+        assert_eq!(got, Ok(vec![]));
+        // `%q` of a string is Go-quoted.
+        let got = eval_one(
+            "package main\nimport rego.v1\ndeny contains sprintf(\"%q\", [input.x]) if true\n",
+            json!({"x": "a\"b"}),
+            false,
+        );
+        assert_eq!(got, Ok(vec![r#""a\"b""#.to_string()]));
+        // An import after rules applies to the whole module.
+        let got = eval_one(
+            "package main\nimport rego.v1\ndeny contains l.v if true\nimport input as l\n",
+            json!({"v": "late"}),
+            false,
+        );
+        assert_eq!(got, Ok(vec!["late".to_string()]));
+        // A comprehension variable may be named like its function.
+        let got = eval_one(
+            "package main\nimport rego.v1\nf(xs) := [f | some f in xs]\ndeny contains \"hit\" if f([1]) == [1]\n",
+            json!({}),
+            false,
+        );
+        assert_eq!(got, Ok(vec!["hit".to_string()]));
+        // A v0 rule with several bodies is several rules with one head.
+        let got = eval_one(
+            "package main\ndeny[x] { x := \"a\" } { x := \"b\" }\n",
+            json!({}),
+            true,
+        );
+        assert_eq!(got, Ok(vec!["a".to_string(), "b".to_string()]));
+    }
+
+    /// The fork still differs from OPA here, loudly: OPA formats `%q` of
+    /// any value, regorus only strings. When an upgrade fixes it, this
+    /// fails and the plan's gap list needs updating.
+    #[test]
+    fn known_regorus_divergences_fail_loudly() {
+        let err = eval_one(
+            "package main\nimport rego.v1\ndeny contains sprintf(\"%q\", [input.x]) if true\n",
+            json!({"x": 1}),
+            false,
+        )
+        .unwrap_err();
+        assert!(err.contains("format verb q"), "{err}");
     }
 }

@@ -1,6 +1,6 @@
 # The policy's required-tags rule formats its message with Go's %q verb,
-# which regorus does not implement. The scan must fail loudly on this
-# resource rather than silently drop the violation.
+# which regorus 0.12 did not implement. The violation must read as OPA
+# words it.
 resource "aws_security_group_rule" "open" {
   type              = "ingress"
   from_port         = 22
