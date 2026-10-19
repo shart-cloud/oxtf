@@ -611,3 +611,38 @@ fn fix_prints_writes_and_refuses() {
         "{out:?}"
     );
 }
+
+/// A default scan runs the security profile of the shipped rules; hygiene
+/// rules run with `--profile hygiene` or `all`, or when selected.
+#[test]
+fn profiles_pick_the_shipped_rules() {
+    let dir = std::env::temp_dir().join(format!("oxtf-cli-profile-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("main.tf"),
+        "resource \"aws_instance\" \"web\" {\n  ami = \"ami-123\"\n}\n",
+    )
+    .unwrap();
+    let rules = |extra: &[&str]| -> std::collections::BTreeSet<String> {
+        let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+            .args(["scan", "-f", "json", "--fail-on", "never"])
+            .arg(&dir)
+            .args(extra)
+            .output()
+            .unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        v["rules"].as_object().unwrap().keys().cloned().collect()
+    };
+    let default = rules(&[]);
+    assert!(!default.contains("CKV_AWS_126"), "{default:?}");
+    assert!(rules(&["--profile", "hygiene"]).contains("CKV_AWS_126"));
+    let all = rules(&["--profile", "all"]);
+    assert!(all.contains("CKV_AWS_126") && default.is_subset(&all));
+    assert_eq!(
+        rules(&["--rule", "CKV_AWS_126"])
+            .into_iter()
+            .collect::<Vec<_>>(),
+        ["CKV_AWS_126"]
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}

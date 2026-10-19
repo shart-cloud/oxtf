@@ -83,6 +83,7 @@ fn schema_3_field_set_is_pinned() {
             "description",
             "guideline",
             "level",
+            "profile",
             "source"
         ]
     );

@@ -51,6 +51,7 @@
           "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -130,6 +131,7 @@
           "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -239,6 +241,7 @@
           "description": "IAM policy allows Action \"*\" on Resource \"*\"",
           "guideline": null,
           "level": "critical",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -335,6 +338,7 @@
           "description": "IAM policy allows Action \"*\" on Resource \"*\"",
           "guideline": null,
           "level": "critical",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -431,6 +435,7 @@
           "description": "IAM policy allows Action \"*\" on Resource \"*\"",
           "guideline": null,
           "level": "critical",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -540,6 +545,7 @@
           "description": "IAM policy allows Action \"*\" on Resource \"*\"",
           "guideline": null,
           "level": "critical",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -649,6 +655,7 @@
           "description": "IAM policy allows Action \"*\" on Resource \"*\"",
           "guideline": null,
           "level": "critical",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -818,6 +825,7 @@
           "description": "RDS instance storage is not encrypted",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -954,6 +962,7 @@
           "description": "RDS instance storage is not encrypted",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -1070,6 +1079,7 @@
           "description": "RDS instance storage is not encrypted",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -1199,6 +1209,7 @@
           "description": "RDS instance storage is not encrypted",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -1340,6 +1351,7 @@
           "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -1468,6 +1480,7 @@
           "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -1542,6 +1555,7 @@
           "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -1616,6 +1630,7 @@
           "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -1724,6 +1739,7 @@
           "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -1901,6 +1917,7 @@
           "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -2071,6 +2088,7 @@
           "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -2197,6 +2215,7 @@
           "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -2409,6 +2428,7 @@
           "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -2546,6 +2566,7 @@
           "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -2642,6 +2663,7 @@
           "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -2810,6 +2832,7 @@
           "description": "Cloud Storage bucket does not enforce uniform bucket-level access",
           "guideline": null,
           "level": "medium",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -2941,6 +2964,7 @@
           "description": "Cloud Storage bucket does not enforce uniform bucket-level access",
           "guideline": null,
           "level": "medium",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -3035,6 +3059,7 @@
           "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -3109,6 +3134,7 @@
           "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -3183,6 +3209,7 @@
           "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -3262,6 +3289,7 @@
           "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -3415,6 +3443,7 @@
           "description": "IAM policy allows Action \"*\" on Resource \"*\"",
           "guideline": null,
           "level": "critical",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -3511,6 +3540,7 @@
           "description": "IAM policy allows Action \"*\" on Resource \"*\"",
           "guideline": null,
           "level": "critical",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -3625,6 +3655,7 @@
           "description": "IAM policy allows Action \"*\" on Resource \"*\"",
           "guideline": null,
           "level": "critical",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -3762,6 +3793,7 @@
           "description": "IAM policy allows Action \"*\" on Resource \"*\"",
           "guideline": null,
           "level": "critical",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -3930,6 +3962,7 @@
           "description": "IAM policy allows Action \"*\" on Resource \"*\"",
           "guideline": null,
           "level": "critical",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -4122,6 +4155,7 @@
           "description": "IAM policy allows Action \"*\" on Resource \"*\"",
           "guideline": null,
           "level": "critical",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -4278,6 +4312,7 @@
           "description": "RDS instance storage is not encrypted",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -4407,6 +4442,7 @@
           "description": "RDS instance storage is not encrypted",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -4513,6 +4549,7 @@
           "description": "RDS instance storage is not encrypted",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -4629,6 +4666,7 @@
           "description": "RDS instance storage is not encrypted",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -4758,6 +4796,7 @@
           "description": "RDS instance storage is not encrypted",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -4899,6 +4938,7 @@
           "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -5001,6 +5041,7 @@
           "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -5075,6 +5116,7 @@
           "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -5149,6 +5191,7 @@
           "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -5257,6 +5300,7 @@
           "description": "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -5426,6 +5470,7 @@
           "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -5582,6 +5627,7 @@
           "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -5698,6 +5744,7 @@
           "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -5890,6 +5937,7 @@
           "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -6043,6 +6091,7 @@
           "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -6139,6 +6188,7 @@
           "description": "Security group ingress allows SSH (port 22) from 0.0.0.0/0 or ::/0",
           "guideline": null,
           "level": "high",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -6330,6 +6380,7 @@
           "description": "Cloud Storage bucket does not enforce uniform bucket-level access",
           "guideline": null,
           "level": "medium",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -6438,6 +6489,7 @@
           "description": "Cloud Storage bucket does not enforce uniform bucket-level access",
           "guideline": null,
           "level": "medium",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -6569,6 +6621,7 @@
           "description": "Cloud Storage bucket does not enforce uniform bucket-level access",
           "guideline": null,
           "level": "medium",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,
@@ -6713,6 +6766,7 @@
           "description": "Cloud Storage bucket does not enforce uniform bucket-level access",
           "guideline": null,
           "level": "medium",
+          "profile": "security",
           "source": {
             "engine": "builtin",
             "file": null,

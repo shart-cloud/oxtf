@@ -278,6 +278,52 @@ impl FixAction {
     }
 }
 
+/// What kind of problem a rule finds, which decides whether a default scan
+/// runs it ([`Profile::in_default`]).
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum Profile {
+    /// A misconfiguration that exposes, weakens or over-grants: public
+    /// access, missing encryption, broad IAM, credential paths.
+    #[default]
+    Security,
+    /// Visibility rather than exposure: logging, flow logs, retention.
+    Audit,
+    /// Operations, cost, tags, style and reliability.
+    Hygiene,
+    /// Not curated yet (bundled rules not in `curation.toml`): runs with
+    /// the security rules until reviewed.
+    Unreviewed,
+}
+
+impl Profile {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Profile::Security => "security",
+            Profile::Audit => "audit",
+            Profile::Hygiene => "hygiene",
+            Profile::Unreviewed => "unreviewed",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Profile> {
+        Some(match s {
+            "security" => Profile::Security,
+            "audit" => Profile::Audit,
+            "hygiene" => Profile::Hygiene,
+            "unreviewed" => Profile::Unreviewed,
+            _ => return None,
+        })
+    }
+
+    /// Whether a scan that names no profile runs rules of this one.
+    pub fn in_default(self) -> bool {
+        matches!(self, Profile::Security | Profile::Unreviewed)
+    }
+}
+
 /// Owned metadata, for object-safe dispatch and for listing rules.
 #[derive(Clone, Debug)]
 pub struct RuleInfo {
@@ -294,6 +340,7 @@ pub struct RuleInfo {
     pub source: RuleSource,
     /// Other IDs of this rule ([`RuleMeta::ALIASES`]).
     pub aliases: Vec<Arc<str>>,
+    pub profile: Profile,
 }
 
 /// Where a rule comes from.
@@ -395,6 +442,7 @@ impl<T: Rule> DynRule for T {
             guideline: None,
             source: RuleSource::default(),
             aliases: T::ALIASES.iter().map(|s| Arc::from(*s)).collect(),
+            profile: Profile::Security,
         }
     }
     fn judge_resource(&self, resource: &Resource) -> Result<Vec<Judgement>, RuleFailure> {
@@ -453,6 +501,7 @@ pub struct Finding {
     pub source: RuleSource,
     /// The rule's other IDs ([`RuleInfo::aliases`]).
     pub aliases: Vec<Arc<str>>,
+    pub profile: Profile,
     /// What the finding is about.
     pub subject: FindingSubject,
     /// Resource address, module path included (`module.m.aws_s3_bucket.b`);
@@ -585,6 +634,7 @@ impl Finding {
             guideline: info.guideline.clone(),
             source: info.source.clone(),
             aliases: info.aliases.clone(),
+            profile: info.profile,
             subject: FindingSubject::Resource(resource.id.clone()),
             address: resource.address.clone(),
             resource_type: Some(resource.ty.clone()),
@@ -638,6 +688,7 @@ impl Finding {
             guideline: info.guideline.clone(),
             source: info.source.clone(),
             aliases: info.aliases.clone(),
+            profile: info.profile,
             subject: FindingSubject::File {
                 path: file.path.clone(),
             },

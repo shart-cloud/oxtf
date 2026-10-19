@@ -277,6 +277,7 @@ def _run(
     rego_v0: bool = False,
     overlay: Mapping[PathLike, str] = {},
     threads: Optional[int] = None,
+    profiles: Optional[Sequence[str]] = None,
 ) -> ScanResult:
     ir, callbacks = _split_rules(rules)
     inner, calls = _tfscan.scan(
@@ -301,6 +302,7 @@ def _run(
         all_namespaces=all_namespaces,
         policy_entries=list(policy_entries),
         rego_v0=rego_v0,
+        profiles=None if profiles is None else list(profiles),
     )
     return ScanResult(inner, calls)
 
@@ -325,6 +327,7 @@ def scan(
     rego_v0: bool = False,
     overlay: Mapping[PathLike, str] = {},
     threads: Optional[int] = None,
+    profiles: Optional[Sequence[str]] = None,
 ) -> ScanResult:
     """Scan Terraform root module directories.
 
@@ -348,7 +351,11 @@ def scan(
     never dropped. ``overlay`` maps paths to text that shadows the disk for
     this scan (an unsaved buffer, a proposed patch); a path need not exist,
     nor its directory. Overlay paths are matched as written, so spell them
-    the way ``path`` is spelled."""
+    the way ``path`` is spelled. ``profiles`` picks which profiles of the
+    shipped rules run: ``security`` (the default, with bundled rules not
+    yet curated), ``audit``, ``hygiene``, or ``all``; rules passed in
+    ``rules`` or ``rule_files`` always run, and ``select`` chooses from
+    every profile."""
     return _run(
         paths=_paths(path),
         recursive=recursive,
@@ -368,6 +375,7 @@ def scan(
         rego_v0=rego_v0,
         overlay=overlay,
         threads=threads,
+        profiles=profiles,
     )
 
 
@@ -392,6 +400,7 @@ def fix(
     rego_v0: bool = False,
     overlay: Mapping[PathLike, str] = {},
     threads: Optional[int] = None,
+    profiles: Optional[Sequence[str]] = None,
 ) -> dict[str, Any]:
     """Fix the finding with ``fingerprint`` in the scan the other arguments
     describe (as :func:`scan`'s; callback rules cannot be re-run, so they
@@ -428,6 +437,7 @@ def fix(
         all_namespaces=all_namespaces,
         policy_entries=list(policy_entries),
         rego_v0=rego_v0,
+        profiles=None if profiles is None else list(profiles),
     )
 
 
@@ -450,6 +460,7 @@ def scan_plan(
     rego_v0: bool = False,
     overlay: Mapping[PathLike, str] = {},
     threads: Optional[int] = None,
+    profiles: Optional[Sequence[str]] = None,
 ) -> ScanResult:
     """Scan ``terraform show -json`` output. Findings are mapped back to
     ``.tf`` spans in ``source`` (default: the plan's directory when it has
@@ -473,6 +484,7 @@ def scan_plan(
         rego_v0=rego_v0,
         overlay=overlay,
         threads=threads,
+        profiles=profiles,
     )
 
 

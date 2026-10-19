@@ -17,6 +17,7 @@ use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use tf_linter::Profile;
 use tf_linter::rule::DynRule;
 use tf_linter::{Linter, RuleSelectionError, ScanOptions, ScanRecord, ScanResult, discover_roots};
 use tf_plan::{PlanError, PlanOptions};
@@ -95,7 +96,29 @@ pub struct Catalog {
     pub runtime: Vec<Box<dyn DynRule>>,
     /// Rego policies.
     pub policies: Policies,
+    /// Which profiles of the shipped rules (bundled and seed) run; `None`
+    /// is the default, `security`. Unreviewed bundled rules run with
+    /// `security`. Rules from files, documents, callbacks and policies
+    /// always run: the caller chose them. A scan with an explicit
+    /// selection ignores this and selects from every shipped rule.
+    pub profiles: Option<Vec<Profile>>,
 }
+
+/// Whether a shipped rule of `profile` runs under `selected` (`None`: the
+/// default).
+pub fn profile_runs(profile: Profile, selected: Option<&[Profile]>) -> bool {
+    let selected = selected.unwrap_or(&[Profile::Security]);
+    selected.contains(&profile)
+        || (profile == Profile::Unreviewed && selected.contains(&Profile::Security))
+}
+
+/// Every profile, for `--profile all`.
+pub const ALL_PROFILES: &[Profile] = &[
+    Profile::Security,
+    Profile::Audit,
+    Profile::Hygiene,
+    Profile::Unreviewed,
+];
 
 impl Catalog {
     /// The seed rules and nothing else.
@@ -126,6 +149,7 @@ impl Catalog {
             rule_json: self.rule_json.clone(),
             runtime: Vec::new(),
             policies: self.policies.clone(),
+            profiles: self.profiles.clone(),
         })
     }
 
@@ -154,11 +178,22 @@ impl Catalog {
                 rules.push(Some(rule));
             }
         };
+        // Shipped rules outside the selected profiles are not in the
+        // catalog at all, so they shadow nothing.
+        let profiles = self.profiles.clone();
+        let shipped = |rules: Vec<Box<dyn DynRule>>| -> Vec<Box<dyn DynRule>> {
+            rules
+                .into_iter()
+                .filter(|r| profile_runs(r.info().profile, profiles.as_deref()))
+                .collect()
+        };
         if self.bundled {
-            add(tf_rule_ir::bundled::rules().map_err(ScanError::Rules)?);
+            add(shipped(
+                tf_rule_ir::bundled::rules().map_err(ScanError::Rules)?,
+            ));
         }
         if self.builtin {
-            add(tf_linter::rules::all());
+            add(shipped(tf_linter::rules::all()));
         }
         for path in &self.rule_files {
             let loaded = tf_rule_ir::load_rules_file(path).map_err(ScanError::Rules)?;
@@ -350,6 +385,10 @@ pub fn scan(mut req: ScanRequest) -> Result<ScanOutput, ScanError> {
             ScanInput::Dirs { .. } => Shape::Hcl,
             ScanInput::Plan { .. } => Shape::Plan,
         });
+    }
+    // A selection names its rules: every shipped rule is a candidate.
+    if req.selection.is_some() {
+        req.catalog.profiles = Some(ALL_PROFILES.to_vec());
     }
     let resolved = req.catalog.resolve()?;
     let skipped: Vec<Diagnostic> = resolved.diagnostics().collect();

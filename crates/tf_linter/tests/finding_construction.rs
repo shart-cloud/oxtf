@@ -21,6 +21,7 @@ fn info() -> RuleInfo {
         guideline: None,
         source: Default::default(),
         aliases: Vec::new(),
+        profile: tf_linter::Profile::Security,
     }
 }
 

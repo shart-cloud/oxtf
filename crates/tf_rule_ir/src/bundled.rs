@@ -51,20 +51,29 @@ pub struct BundledRule {
     pub rule: RuleSpec,
 }
 
-/// The bundled Checkov rules, with their upstream files as origins.
+/// The bundled Checkov rules, with their upstream files as origins and
+/// the curated level, category and guideline (`data/checkov/curation.toml`).
 pub fn checkov() -> Result<Vec<RuleSpec>, String> {
     let bundle: Bundle = serde_json::from_str(CHECKOV_RULES_JSON)
         .map_err(|e| format!("bundled Checkov catalog: {e}"))?;
+    let headers: std::collections::HashMap<&str, &Header> =
+        TABLE.iter().map(|h| (h.name, h)).collect();
     Ok(bundle
         .rules
         .into_iter()
-        .map(|b| RuleSpec {
-            origin: Origin(tf_linter::RuleSource {
-                engine: tf_linter::Engine::Checkov,
-                file: Some(b.file.into()),
-                line: b.line,
-            }),
-            ..b.rule
+        .map(|b| {
+            let h = headers[b.rule.name.as_str()];
+            RuleSpec {
+                origin: Origin(tf_linter::RuleSource {
+                    engine: tf_linter::Engine::Checkov,
+                    file: Some(b.file.into()),
+                    line: b.line,
+                }),
+                level: h.level.to_string(),
+                category: h.category.to_string(),
+                guideline: h.guideline.map(str::to_string),
+                ..b.rule
+            }
         })
         .collect())
 }
@@ -76,6 +85,7 @@ struct Header {
     description: &'static str,
     level: &'static str,
     category: &'static str,
+    profile: &'static str,
     guideline: Option<&'static str>,
     file: &'static str,
     line: Option<u32>,
@@ -112,6 +122,8 @@ pub fn rules() -> Result<Vec<Box<dyn DynRule>>, String> {
                         line: h.line,
                     },
                     aliases: Vec::new(),
+                    profile: tf_linter::Profile::parse(h.profile)
+                        .ok_or_else(|| ctx(format!("unknown profile {:?}", h.profile)))?,
                 },
                 compiled: OnceLock::new(),
             }) as Box<dyn DynRule>)

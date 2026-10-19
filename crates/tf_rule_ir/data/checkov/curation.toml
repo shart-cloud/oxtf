@@ -1,0 +1,415 @@
+# Curated metadata for the bundled Checkov catalog.
+#
+# Hand-maintained. Regenerating rules.json never touches this file;
+# build.rs applies it to the bundled rules and fails the build on an ID
+# that is not in rules.json or a value it does not know.
+#
+# Checkov's open-source checks carry no severity, so every bundled rule is
+# `medium` until it is listed here.
+#
+# profile   security  a misconfiguration that exposes, weakens or
+#                     over-grants (runs by default)
+#           audit     visibility, not exposure: logging, flow logs,
+#                     retention (--profile audit or all)
+#           hygiene   operations, cost, tags, style, reliability
+#                     (--profile hygiene or all)
+#           Rules not listed are `unreviewed` and run by default.
+# level     critical  direct public exposure or full administrative access
+#           high      a likely exposure or a credential path
+#           medium    defence in depth
+#           low       hardening, or a finding that rarely matters alone
+# category  network | storage | iam | encryption | other (optional: keeps
+#           the translated category when absent)
+# why       one line: the reason for the call, for review
+#
+# Order: the most frequent rules on the 17-repository corpus first
+# (docs/plans/SIGNAL_PLAN.md, workstream D), then well-known critical
+# checks the corpus of library modules rarely exercises.
+
+# -- most frequent on the corpus ----------------------------------------
+
+[CKV2_GCP_18]
+level = "medium"
+profile = "security"
+category = "network"
+why = "a network with no firewall rules of its own falls back to permissive defaults"
+
+[CKV_GCP_26]
+level = "low"
+profile = "audit"
+why = "subnet flow logs are visibility, not exposure; enabling them costs money"
+
+[CKV_GCP_74]
+level = "low"
+profile = "hygiene"
+category = "network"
+why = "Private Google Access lets IP-less VMs reach Google APIs: connectivity, not exposure"
+
+[CKV_AWS_355]
+level = "high"
+profile = "security"
+category = "iam"
+why = "a restrictable action on Resource \"*\" grants it on every resource of the account"
+
+[CKV2_AZURE_31]
+level = "medium"
+profile = "security"
+category = "network"
+why = "a subnet without an NSG has no network filtering"
+
+[CKV_GCP_20]
+level = "high"
+profile = "security"
+category = "network"
+why = "without master authorized networks the GKE API server is reachable from anywhere"
+
+[CKV_GCP_65]
+level = "low"
+profile = "hygiene"
+category = "iam"
+why = "Google Groups for RBAC is an access-management convenience"
+
+[CKV_GCP_66]
+level = "medium"
+profile = "security"
+why = "Binary Authorization blocks unsigned images: supply-chain defence in depth"
+
+[CKV_GCP_69]
+level = "high"
+profile = "security"
+category = "iam"
+why = "without the GKE metadata server, pods can read node credentials from instance metadata"
+
+[CKV_GCP_21]
+level = "low"
+profile = "hygiene"
+why = "labels"
+
+[CKV_GCP_12]
+level = "medium"
+profile = "security"
+category = "network"
+why = "without network policy every pod can reach every pod"
+
+[CKV_GCP_61]
+level = "low"
+profile = "audit"
+why = "flow logs and intranode visibility are visibility, not exposure"
+
+[CKV_GCP_32]
+level = "medium"
+profile = "security"
+category = "iam"
+why = "project-wide SSH keys grant access to every VM of the project"
+
+[CKV_AWS_27]
+level = "medium"
+profile = "security"
+category = "encryption"
+why = "SQS messages unencrypted at rest"
+
+[CKV_GCP_68]
+level = "low"
+profile = "security"
+why = "Secure Boot is node hardening against boot-level rootkits"
+
+[CKV_GCP_38]
+level = "low"
+profile = "hygiene"
+category = "encryption"
+why = "customer-supplied keys are a compliance choice; disks are encrypted at rest by default"
+
+[CKV_GCP_39]
+level = "low"
+profile = "security"
+why = "Shielded VM is instance hardening"
+
+[CKV2_AWS_41]
+level = "low"
+profile = "hygiene"
+category = "iam"
+why = "an instance without a role is not exposed; a role is the better way to grant access"
+
+[CKV_AWS_126]
+level = "low"
+profile = "hygiene"
+why = "detailed monitoring is one-minute metrics at a cost"
+
+[CKV_AWS_135]
+level = "low"
+profile = "hygiene"
+why = "EBS optimisation is performance"
+
+[CKV_AWS_8]
+level = "medium"
+profile = "security"
+category = "encryption"
+why = "EBS volumes of launch configurations and instances unencrypted at rest"
+
+[CKV_AWS_338]
+level = "low"
+profile = "audit"
+why = "log retention of a year is a compliance choice"
+
+[CKV_AWS_158]
+level = "low"
+profile = "security"
+category = "encryption"
+why = "log groups are encrypted by default; a customer key adds key control"
+
+[CKV_GCP_123]
+level = "low"
+profile = "hygiene"
+why = "inline node pools are a configuration style"
+
+[CKV_GCP_22]
+level = "low"
+profile = "security"
+why = "Container-Optimized OS is node hardening"
+
+[CKV_AWS_290]
+level = "high"
+profile = "security"
+category = "iam"
+why = "unconstrained write access in an IAM policy"
+
+[CKV_AWS_79]
+level = "high"
+profile = "security"
+category = "iam"
+why = "IMDSv1 lets an SSRF in the instance read its role credentials"
+
+[CKV2_AWS_5]
+level = "low"
+profile = "hygiene"
+category = "network"
+why = "an unattached security group exposes nothing"
+
+[CKV_GCP_76]
+level = "low"
+profile = "hygiene"
+category = "network"
+why = "Private Google Access for IPv6: connectivity, not exposure"
+
+[CKV_AWS_23]
+level = "low"
+profile = "hygiene"
+category = "network"
+why = "rule descriptions are documentation"
+
+[CKV_GCP_25]
+level = "high"
+profile = "security"
+category = "network"
+why = "a public GKE cluster puts nodes and the control plane on the internet"
+
+[CKV_GCP_64]
+level = "medium"
+profile = "security"
+category = "network"
+why = "nodes with public IPs"
+
+[CKV_K8S_21]
+level = "low"
+profile = "hygiene"
+why = "the default namespace is an organisation choice"
+
+[CKV_GCP_40]
+level = "medium"
+profile = "security"
+category = "network"
+why = "an instance with a public IP is reachable from the internet subject to firewall rules"
+
+[CKV2_AZURE_32]
+level = "medium"
+profile = "security"
+category = "network"
+why = "a key vault without a private endpoint is reached over its public endpoint"
+
+[CKV_AZURE_227]
+level = "low"
+profile = "security"
+category = "encryption"
+why = "host encryption covers temp disks and caches beyond default disk encryption"
+
+[CKV_AZURE_168]
+level = "low"
+profile = "hygiene"
+why = "pods per node is capacity planning"
+
+[CKV_AZURE_114]
+level = "low"
+profile = "hygiene"
+why = "a secret's content type is metadata"
+
+[CKV_AZURE_41]
+level = "low"
+profile = "security"
+why = "secrets without expiry are never forced to rotate"
+
+[CKV_AWS_7]
+level = "medium"
+profile = "security"
+category = "encryption"
+why = "a customer key without rotation stays in use indefinitely"
+
+[CKV_AWS_274]
+level = "critical"
+profile = "security"
+category = "iam"
+why = "AdministratorAccess attached to a role, user or group"
+
+[CKV_AWS_26]
+level = "medium"
+profile = "security"
+category = "encryption"
+why = "SNS messages unencrypted at rest"
+
+[CKV_AZURE_112]
+level = "low"
+profile = "hygiene"
+category = "encryption"
+why = "HSM-backed keys are a compliance choice"
+
+[CKV_AWS_315]
+level = "low"
+profile = "hygiene"
+why = "launch templates over launch configurations is maintenance"
+
+[CKV_AWS_341]
+level = "medium"
+profile = "security"
+category = "iam"
+why = "a hop limit above 1 lets containers on the instance reach its metadata credentials"
+
+# -- well-known critical checks ------------------------------------------
+
+[CKV_AWS_20]
+level = "critical"
+profile = "security"
+category = "storage"
+why = "an S3 ACL granting public read"
+
+[CKV_AWS_57]
+level = "critical"
+profile = "security"
+category = "storage"
+why = "an S3 ACL granting public write"
+
+[CKV_AWS_24]
+level = "high"
+profile = "security"
+category = "network"
+why = "SSH open to 0.0.0.0/0"
+
+[CKV_AWS_25]
+level = "high"
+profile = "security"
+category = "network"
+why = "RDP open to 0.0.0.0/0"
+
+[CKV_AWS_277]
+level = "critical"
+profile = "security"
+category = "network"
+why = "every port open to 0.0.0.0/0"
+
+[CKV_AWS_17]
+level = "critical"
+profile = "security"
+category = "network"
+why = "an RDS instance publicly accessible"
+
+[CKV_AWS_45]
+level = "high"
+profile = "security"
+why = "a hard-coded secret in Lambda environment variables"
+
+[CKV_AWS_46]
+level = "high"
+profile = "security"
+why = "a hard-coded secret in EC2 user data"
+
+[CKV_AWS_62]
+level = "critical"
+profile = "security"
+category = "iam"
+why = "an IAM policy granting \"*\" on \"*\""
+
+[CKV_AWS_63]
+level = "high"
+profile = "security"
+category = "iam"
+why = "an IAM policy allowing every action"
+
+[CKV_AWS_286]
+level = "high"
+profile = "security"
+category = "iam"
+why = "an IAM policy allowing privilege escalation"
+
+[CKV_AWS_287]
+level = "high"
+profile = "security"
+category = "iam"
+why = "an IAM policy allowing credentials exposure"
+
+[CKV_AWS_288]
+level = "high"
+profile = "security"
+category = "iam"
+why = "an IAM policy allowing data exfiltration"
+
+[CKV_AWS_70]
+level = "critical"
+profile = "security"
+category = "iam"
+why = "an S3 bucket policy allowing any principal"
+
+[CKV_GCP_2]
+level = "high"
+profile = "security"
+category = "network"
+why = "SSH open to the internet"
+
+[CKV_GCP_3]
+level = "high"
+profile = "security"
+category = "network"
+why = "RDP open to the internet"
+
+[CKV_GCP_28]
+level = "critical"
+profile = "security"
+category = "storage"
+why = "a Cloud Storage bucket readable by allUsers or allAuthenticatedUsers"
+
+[CKV_GCP_60]
+level = "high"
+profile = "security"
+category = "network"
+why = "a Cloud SQL instance with a public IP"
+
+[CKV_GCP_7]
+level = "high"
+profile = "security"
+category = "iam"
+why = "GKE legacy ABAC grants broad access to every service account"
+
+[CKV_AZURE_9]
+level = "high"
+profile = "security"
+category = "network"
+why = "RDP open to the internet"
+
+[CKV_AZURE_10]
+level = "high"
+profile = "security"
+category = "network"
+why = "SSH open to the internet"
+
+[CKV_AZURE_190]
+level = "critical"
+profile = "security"
+category = "storage"
+why = "storage blobs allowing public access"

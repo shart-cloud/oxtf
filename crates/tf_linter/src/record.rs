@@ -221,6 +221,10 @@ pub struct RuleRecord {
     /// The rule's other IDs.
     #[serde(default)]
     pub aliases: Vec<String>,
+    /// `security`, `audit`, `hygiene` or `unreviewed` (a bundled rule not
+    /// curated yet).
+    #[serde(default)]
+    pub profile: crate::rule::Profile,
 }
 
 impl RuleRecord {
@@ -232,6 +236,7 @@ impl RuleRecord {
             guideline: f.guideline.as_deref().map(str::to_string),
             source: SourceRef::from(&f.source),
             aliases: f.aliases.iter().map(|a| a.to_string()).collect(),
+            profile: f.profile,
         }
     }
 }

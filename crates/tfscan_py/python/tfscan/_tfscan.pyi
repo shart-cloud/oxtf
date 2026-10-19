@@ -198,6 +198,7 @@ def scan(
     policy_entries: Sequence[str] = ...,
     rego_v0: bool = False,
     bundled: bool = True,
+    profiles: Optional[Sequence[str]] = None,
 ) -> tuple[ScanResult, int]: ...
 def fix_finding(
     fingerprint: str,
@@ -221,6 +222,7 @@ def fix_finding(
     policy_entries: Sequence[str] = ...,
     rego_v0: bool = False,
     bundled: bool = True,
+    profiles: Optional[Sequence[str]] = None,
 ) -> dict[str, Any]: ...
 def compile_rules(json: str) -> list[CompiledRule]: ...
 def builtin_rules() -> list[dict[str, Any]]: ...

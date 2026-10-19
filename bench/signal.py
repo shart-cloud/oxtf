@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Signal metrics: how much of a corpus scan an agent can act on.
 
+Measured over every shipped rule (`--profile all`), and again for the
+default profile (`default_profile`, reported, not judged).
+
 The perf budget guards speed; this guards the output. It scans the corpus
 with the release CLI and measures, per finding of the record:
 
@@ -44,19 +47,20 @@ JUDGED = {
 }
 
 
-def scan(fmt, corpus):
+def scan(fmt, corpus, profile):
     out = subprocess.run(
         [str(REPO / "target/release/oxtf"), "scan", "-r", str(corpus),
-         "--format", fmt, "--fail-on", "never", "--threads", "1"],
+         "--format", fmt, "--fail-on", "never", "--threads", "1",
+         "--profile", profile],
         check=True, capture_output=True, cwd=REPO,
     )
     return out.stdout
 
 
-def metrics(corpus):
-    raw = scan("json", corpus)
+def metrics(corpus, profile="all"):
+    raw = scan("json", corpus, profile)
     record = json.loads(raw)
-    ndjson = scan("ndjson", corpus)
+    ndjson = scan("ndjson", corpus, profile)
     findings = record["findings"]
     n = len(findings) or 1
     pct = lambda k: round(100.0 * k / n, 1)
@@ -86,7 +90,11 @@ def main():
     ap.add_argument("--write", action="store_true")
     ap.add_argument("--check", action="store_true")
     args = ap.parse_args()
+    # Per-finding quality over every shipped rule, so moving a rule between
+    # profiles does not read as a regression; the default profile's numbers
+    # are what an agent sees by default.
     m = metrics(REPO / args.corpus)
+    m["default_profile"] = metrics(REPO / args.corpus, "security")
     print(json.dumps(m, indent=2))
     if args.check:
         base = json.loads(RESULTS.read_text())

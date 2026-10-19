@@ -744,6 +744,7 @@ pub fn compile(spec: RuleSpec) -> Result<CompiledRule, String> {
         guideline: spec.guideline.as_deref().map(Arc::from),
         source: spec.origin.0.clone(),
         aliases: Vec::new(),
+        profile: tf_linter::Profile::Security,
     };
     let fix = derive_fix(&spec);
     Ok(CompiledRule {

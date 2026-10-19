@@ -66,6 +66,10 @@ scan options:
       --rule ID           only run this rule (repeatable); ids come from the whole
                           catalog: bundled Checkov rules, seed rules, --rule-file rules
                           and Rego policies
+      --profile P[,P]     which profiles of the shipped rules run: security (default;
+                          includes bundled rules not yet curated), audit (logging,
+                          retention), hygiene (cost, tags, style), or all. Repeatable.
+                          Rule files always run; --rule selects from every profile
       --no-bundled        do not run the bundled Checkov catalog
       --no-builtin        run neither the bundled catalog nor the seed rules, only
                           --rule-file / --policy rules
@@ -163,6 +167,19 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
             "--rule-file" => catalog
                 .rule_files
                 .push(it.next().ok_or("--rule-file needs a value")?.into()),
+            "--profile" => {
+                let spec = it.next().ok_or("--profile needs a value")?;
+                let profiles = catalog.profiles.get_or_insert_with(Vec::new);
+                for name in spec.split(',') {
+                    match name {
+                        "all" => profiles.extend_from_slice(tf_scan::ALL_PROFILES),
+                        "security" | "audit" | "hygiene" => {
+                            profiles.push(tf_linter::Profile::parse(name).expect("a profile name"))
+                        }
+                        other => return Err(format!("unknown profile {other:?}")),
+                    }
+                }
+            }
             "--no-bundled" => catalog.bundled = false,
             "--no-builtin" => {
                 catalog.bundled = false;
@@ -271,8 +288,13 @@ fn main() -> ExitCode {
                 args.next();
                 return rules_test(args);
             }
-            let (rules, json) = match parse_args(args).and_then(|a| {
+            let (rules, json) = match parse_args(args).and_then(|mut a| {
                 let json = a.format == Format::Json;
+                // The listing shows every profile unless asked for some.
+                a.request
+                    .catalog
+                    .profiles
+                    .get_or_insert_with(|| tf_scan::ALL_PROFILES.to_vec());
                 a.request
                     .catalog
                     .resolve()
@@ -306,6 +328,7 @@ fn main() -> ExitCode {
                             "guideline": r.guideline.as_deref(),
                             "source": tf_linter::record::SourceRef::from(&r.source),
                             "aliases": r.aliases.iter().map(|a| &**a).collect::<Vec<_>>(),
+                            "profile": r.profile.as_str(),
                         })
                     })
                     .collect();
@@ -327,10 +350,11 @@ fn main() -> ExitCode {
                     source = format!("  (also {}){source}", r.aliases.join(", "));
                 }
                 println!(
-                    "{:<28} {:<9} {:<11} {:<9} {}  [{}]{source}",
+                    "{:<28} {:<9} {:<11} {:<11} {:<9} {}  [{}]{source}",
                     r.name,
                     r.level.as_str(),
                     r.category.as_str(),
+                    r.profile.as_str(),
                     r.source.engine.as_str(),
                     r.description,
                     types

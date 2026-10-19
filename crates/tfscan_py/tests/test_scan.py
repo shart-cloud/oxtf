@@ -263,3 +263,19 @@ def test_fix_applies_the_hint_and_verifies_it(tmp_path):
     assert tfscan.scan(tmp_path, select=["CKV_AWS_126"]).findings == []
     with pytest.raises(ValueError, match="no finding has fingerprint"):
         tfscan.fix("0000000000000000", tmp_path)
+
+
+def test_profiles_pick_the_shipped_rules(tmp_path):
+    (tmp_path / "main.tf").write_text(
+        'resource "aws_instance" "web" {\n  ami = "ami-123"\n}\n')
+    default = {f.rule for f in tfscan.scan(tmp_path).findings}
+    everything = {f.rule for f in tfscan.scan(tmp_path, profiles=["all"]).findings}
+    # Detailed monitoring is hygiene: only with the hygiene profile.
+    assert "CKV_AWS_126" not in default and "CKV_AWS_126" in everything
+    assert default < everything
+    assert "CKV_AWS_126" in {f.rule for f in tfscan.scan(tmp_path, select=["CKV_AWS_126"]).findings}
+    info = {r["name"]: r for r in tfscan.rules()}
+    assert info["CKV_AWS_126"]["profile"] == "hygiene"
+    assert info["CKV_AWS_274"]["level"] == "critical"
+    with pytest.raises(ValueError, match="unknown profile"):
+        tfscan.scan(tmp_path, profiles=["bogus"])

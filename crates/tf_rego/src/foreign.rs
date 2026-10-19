@@ -196,6 +196,7 @@ pub fn rules(opts: &Options) -> Result<Vec<Box<dyn DynRule>>, String> {
                     line: Some(u.line),
                 },
                 aliases: Vec::new(),
+                profile: tf_linter::Profile::Security,
             },
             types: u.meta.resource_types.clone(),
             input,

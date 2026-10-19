@@ -143,21 +143,42 @@ Found along the way, for later:
   finding embeds its full policy (15 KB). For nested attribute paths the
   deciding sub-value would be enough.
 
-## D. Curate the catalog — after C
+## D. Curate the catalog — mechanism done, first curation in review
 
 - `crates/tf_rule_ir/data/checkov/curation.toml`, hand-maintained and never
-  touched by regeneration: per Checkov ID, `level`, `category`, `profile`
-  (`security` / `hygiene` / `reliability`) and an optional fix template
-  (attribute, value, block shape).
-- Curate by corpus frequency: the top 40 rules cover 68 % of findings.
-  The tail stays `medium` and unreviewed.
-- Guideline: the Checkov source at the pinned tag, from `source`, for
-  every bundled rule.
-- `--profile security|all`; `security` is the default.
+  regenerated: per Checkov ID a `level`, optional `category`, a `profile`
+  (`security` / `audit` / `hygiene`) and a one-line `why`. `build.rs`
+  applies it to the static header table and to `bundled::checkov()`'s
+  specs, and fails on an unknown ID, field or value.
+- `audit` is a third profile beside the two agreed: logging, flow logs and
+  retention are neither exposure nor noise, and an agent "fixing" them
+  creates log sinks and cost. It is off by default with `hygiene`.
+- `tf_linter::Profile` on `RuleInfo` and in the record's `rules` table;
+  `Catalog::profiles` (`--profile security,audit,hygiene,all`; Python
+  `profiles=`). The default is `security`, which includes `unreviewed`. Only
+  shipped rules are filtered; an explicit selection reaches every profile;
+  `oxtf rules` lists every profile with a column for it.
+- Every bundled rule's guideline is its Checkov source at the pinned tag.
+- First curation: the 45 most frequent rules on the corpus plus 22
+  well-known critical checks the module corpus rarely exercises (public S3
+  ACLs and policies, world-open SSH/RDP/all ports, public RDS and Cloud
+  SQL, hard-coded secrets, admin IAM). 67 rules: 10 critical, 23 high, 9
+  medium-or-other security calls, 16 hygiene, 3 audit. **Needs the
+  user's review** — every entry has its reason inline.
 
-## E. Signal gate — started
+Effect on the corpus: a default scan reports 374 findings instead of 552
+(the 178 audit and hygiene findings move behind `--profile`), and 26.7 %
+of them have a level other than medium (from 0.2 %): 4 critical, 60 high.
 
-`bench/signal.py` measures the corpus scan: findings, occurrences, JSON and
+Next: fix templates for nested attributes (block-aware fix actions), and
+curating down the 154 default findings still from unreviewed rules, in
+frequency order.
+
+## E. Signal gate — in place
+
+`bench/signal.py` measures the corpus scan over every shipped rule
+(`--profile all`, so moving a rule between profiles is not a regression)
+and reports the default profile's numbers beside it: findings, occurrences, JSON and
 NDJSON bytes per finding, % with attribute, % with fix hint, % header-only,
 level distribution. `--write` stores `bench/results/signal.json`; `--check`
 fails when a judged metric moves the wrong way. Run it beside the perf

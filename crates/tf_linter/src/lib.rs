@@ -34,6 +34,6 @@ pub use engine::{ANY_TYPE, Linter, RuleSelectionError, RunOutput, Sources, selec
 pub use record::{FindingRecord, RuleError, ScanRecord};
 pub use rule::{
     Category, Certainty, ConfigFile, DynRule, Engine, Finding, FindingSubject, FixAction, FixHint,
-    Hidden, Judgement, Level, Rule, RuleFailure, RuleInfo, RuleMeta, RuleSource, Subject,
+    Hidden, Judgement, Level, Profile, Rule, RuleFailure, RuleInfo, RuleMeta, RuleSource, Subject,
 };
 pub use scan::{ScanOptions, ScanResult, ScanStats, discover_roots, scan_dir, scan_with};

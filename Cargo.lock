@@ -1688,6 +1688,7 @@ dependencies = [
  "tf_linter",
  "tf_semantic",
  "tf_yaml",
+ "toml",
 ]
 
 [[package]]
