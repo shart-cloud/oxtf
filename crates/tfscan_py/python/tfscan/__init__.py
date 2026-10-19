@@ -38,6 +38,7 @@ __version__ = "0.0.1"
 __all__ = [
     "scan",
     "scan_plan",
+    "fix",
     "rules",
     "test_policies",
     "analyze",
@@ -367,6 +368,66 @@ def scan(
         rego_v0=rego_v0,
         overlay=overlay,
         threads=threads,
+    )
+
+
+def fix(
+    fingerprint: str,
+    path: Union[PathLike, Iterable[PathLike]],
+    *,
+    recursive: bool = False,
+    var_files: Sequence[PathLike] = (),
+    rules: Sequence[Union[Rule, CompiledRule]] = (),
+    builtin: bool = True,
+    bundled: bool = True,
+    select: Optional[Sequence[str]] = None,
+    rule_files: Sequence[PathLike] = (),
+    policies: Sequence[PathLike] = (),
+    data: Sequence[PathLike] = (),
+    namespaces: Sequence[str] = (),
+    all_namespaces: bool = False,
+    policy_entries: Sequence[str] = (),
+    policy_shape: Optional[str] = None,
+    policy_entry: Optional[str] = None,
+    rego_v0: bool = False,
+    overlay: Mapping[PathLike, str] = {},
+    threads: Optional[int] = None,
+) -> dict[str, Any]:
+    """Fix the finding with ``fingerprint`` in the scan the other arguments
+    describe (as :func:`scan`'s; callback rules cannot be re-run, so they
+    are refused): its fix hint is applied in memory and the source is
+    rescanned with the edit as an overlay, as ``oxtf fix`` does.
+
+    Returns a dict: ``fingerprint``, ``rule``, ``file``, ``resource``,
+    ``attribute``, ``action``, ``value``, ``original`` and ``text`` (the
+    file before and after the edit), ``diff`` (unified) and ``verified``
+    (the finding is gone from the rescan). Nothing is written: write
+    ``text`` to ``file`` when ``verified`` is what you need. Raises
+    ``ValueError`` when no finding has the fingerprint, the finding has no
+    fix hint, or the scan fails."""
+    ir, callbacks = _split_rules(rules)
+    if callbacks:
+        raise ValueError("fix cannot re-run callback rules to verify an edit")
+    return _tfscan.fix_finding(
+        fingerprint,
+        _paths(path),
+        recursive=recursive,
+        var_files=[os.fspath(v) for v in var_files],
+        builtin=builtin,
+        bundled=bundled,
+        select=None if select is None else list(select),
+        ir_rules=ir,
+        policies=[os.fspath(p) for p in policies],
+        policy_shape=policy_shape,
+        policy_entry=policy_entry,
+        overlay=[(os.fspath(p), t) for p, t in overlay.items()],
+        threads=threads,
+        rule_files=[os.fspath(p) for p in rule_files],
+        data=[os.fspath(p) for p in data],
+        namespaces=list(namespaces),
+        all_namespaces=all_namespaces,
+        policy_entries=list(policy_entries),
+        rego_v0=rego_v0,
     )
 
 

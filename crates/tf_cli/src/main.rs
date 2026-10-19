@@ -4,6 +4,7 @@
 //! oxtf scan [PATH...] [-r|--recursive] [--format text|json|ndjson|sarif] [--var-file FILE]...
 //!           [--rule ID]... [--rule-file PATH]... [--threads N] [--color] [--no-diagnostics] [--quiet]
 //! oxtf scan --plan PLAN.json [--source DIR] [options]
+//! oxtf fix FINGERPRINT [PATH...] [scan options] [--write] [-f diff|json]
 //! oxtf rules
 //! ```
 //!
@@ -40,6 +41,12 @@ const USAGE: &str = "usage:
                                   scan `terraform show -json` output; findings are mapped
                                   back to .tf spans in DIR (default: the plan's directory
                                   if it has .tf files, else locations point into the JSON)
+  oxtf fix FINGERPRINT [PATH...] [scan options] [--write] [-f diff|json]
+                                  apply the fix hint of the finding with FINGERPRINT in
+                                  memory, rescan to check the finding is gone, and print
+                                  the edit as a diff (or JSON); --write writes it, only
+                                  when verified. Exit 0 verified, 1 the finding remains,
+                                  2 no such finding, no fix hint, or the scan failed
   oxtf rules [--rule-file PATH]... [-f json]
                                   list built-in and loaded rules: level, category, engine,
                                   description, resource types and source file:line
@@ -257,6 +264,7 @@ fn main() -> ExitCode {
                 ExitCode::from(2)
             }
         },
+        Some("fix") => fix(args),
         Some("rules") => {
             let mut args = args.peekable();
             if args.peek().map(String::as_str) == Some("test") {
@@ -386,6 +394,87 @@ fn rules_test(args: impl Iterator<Item = String>) -> ExitCode {
         ExitCode::from(1)
     } else {
         ExitCode::SUCCESS
+    }
+}
+
+/// `oxtf fix`: the finding's fix, verified by a rescan. Exit codes: 0 the
+/// edit removes the finding (and was written with `--write`), 1 the
+/// finding remains after the edit (nothing written), 2 no such finding, no
+/// fix hint, or the scan could not run.
+fn fix(mut args: impl Iterator<Item = String>) -> ExitCode {
+    let fail = |e: String| {
+        eprintln!("error: {e}");
+        ExitCode::from(2)
+    };
+    let Some(fingerprint) = args.next().filter(|a| !a.starts_with('-')) else {
+        return fail(format!("oxtf fix needs a FINGERPRINT first\n\n{USAGE}"));
+    };
+    // `--write` and the fix's own format are not scan options.
+    let (mut write, mut json, mut rest) = (false, false, Vec::new());
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--write" => write = true,
+            "-f" | "--format" => match args.next().as_deref() {
+                Some("diff") => json = false,
+                Some("json") => json = true,
+                other => return fail(format!("unknown fix format {other:?}")),
+            },
+            _ => rest.push(arg),
+        }
+    }
+    let request = match parse_args(rest.into_iter()) {
+        Ok(a) => a.request,
+        Err(e) => return fail(format!("{e}\n\n{USAGE}")),
+    };
+    let outcome = match tf_scan::fix(request, &fingerprint) {
+        Ok(o) => o,
+        Err(e) => return fail(e.to_string()),
+    };
+    let diff = tf_scan::unified_diff(&outcome.edit.file, &outcome.original, &outcome.edit.text);
+    let written = write && outcome.verified;
+    if written && let Err(e) = std::fs::write(&outcome.edit.file, &outcome.edit.text) {
+        return fail(format!("{}: {e}", outcome.edit.file.display()));
+    }
+    if json {
+        let hint = &outcome.hint;
+        println!(
+            "{}",
+            serde_json::json!({
+                "fingerprint": outcome.fingerprint,
+                "rule": outcome.rule,
+                "file": outcome.edit.file.display().to_string(),
+                "resource": hint.resource.to_string(),
+                "attribute": hint.attribute,
+                "action": hint.action.as_str(),
+                "value": hint.value,
+                "verified": outcome.verified,
+                "written": written,
+                "diff": diff,
+            })
+        );
+    } else {
+        print!("{diff}");
+        eprintln!(
+            "{}: {} {}",
+            outcome.fingerprint,
+            if outcome.verified {
+                "the edit removes the finding"
+            } else {
+                "the finding remains after the edit"
+            },
+            if written {
+                "(written)"
+            } else if write {
+                "(not written)"
+            } else {
+                "(not written; --write to apply)"
+            }
+        );
+    }
+    if outcome.verified {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
     }
 }
 

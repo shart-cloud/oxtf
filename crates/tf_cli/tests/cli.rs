@@ -529,3 +529,85 @@ fn ndjson_and_sarif_formats() {
         assert_eq!(r["partialFingerprints"]["oxtf/v1"], f["fingerprint"]);
     }
 }
+
+/// `oxtf fix`: the diff of a verified fix (exit 0), written only with
+/// `--write`; exit 2 for an unknown fingerprint or a finding with no fix
+/// hint.
+#[test]
+fn fix_prints_writes_and_refuses() {
+    let dir = std::env::temp_dir().join(format!("oxtf-cli-fix-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let main = dir.join("main.tf");
+    let original = "resource \"aws_instance\" \"web\" {\n  ami = \"ami-123\"\n}\n";
+    std::fs::write(&main, original).unwrap();
+    let oxtf = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_oxtf"))
+            .args(args)
+            .arg(&dir)
+            .args(["--rule", "CKV_AWS_126"])
+            .output()
+            .unwrap()
+    };
+    let scan = oxtf(&["scan", "-f", "ndjson"]);
+    let first: serde_json::Value = serde_json::from_str(
+        String::from_utf8_lossy(&scan.stdout)
+            .lines()
+            .next()
+            .unwrap(),
+    )
+    .unwrap();
+    let fp = first["fingerprint"].as_str().unwrap().to_string();
+
+    let out = oxtf(&["fix", &fp]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    let diff = String::from_utf8(out.stdout).unwrap();
+    assert!(diff.contains("+  monitoring = true\n"), "{diff}");
+    assert_eq!(std::fs::read_to_string(&main).unwrap(), original);
+
+    let out = oxtf(&["fix", &fp, "-f", "json", "--write"]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(
+        (v["verified"].clone(), v["written"].clone()),
+        (true.into(), true.into())
+    );
+    assert!(
+        std::fs::read_to_string(&main)
+            .unwrap()
+            .contains("monitoring = true")
+    );
+    assert_eq!(oxtf(&["scan", "-q"]).status.code(), Some(0));
+
+    let out = oxtf(&["fix", "0000000000000000"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("no finding has fingerprint"));
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    // A finding no edit is known for.
+    let case = fixture("aws-s3-public-access-block/fail_missing_block");
+    let scan = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .args(["scan", "--no-bundled", "-f", "ndjson", &case])
+        .output()
+        .unwrap();
+    let first: serde_json::Value = serde_json::from_str(
+        String::from_utf8_lossy(&scan.stdout)
+            .lines()
+            .next()
+            .unwrap(),
+    )
+    .unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .args([
+            "fix",
+            first["fingerprint"].as_str().unwrap(),
+            "--no-bundled",
+            &case,
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("has no fix hint"),
+        "{out:?}"
+    );
+}

@@ -248,3 +248,18 @@ def test_a_seed_rule_answers_to_its_checkov_alias():
     assert "gcp-storage-uniform-access" in ids and "CKV_GCP_29" not in ids
     selected = tfscan.scan(case, select=["CKV_GCP_29"]).findings
     assert [f.rule for f in selected] == ["gcp-storage-uniform-access"]
+
+
+def test_fix_applies_the_hint_and_verifies_it(tmp_path):
+    (tmp_path / "main.tf").write_text(
+        'resource "aws_instance" "web" {\n  ami = "ami-123"\n}\n')
+    r = tfscan.scan(tmp_path, select=["CKV_AWS_126"])
+    [f] = r.findings
+    out = tfscan.fix(f.fingerprint, tmp_path, select=["CKV_AWS_126"])
+    assert out["verified"] and out["attribute"] == "monitoring" and out["value"] is True
+    assert "+  monitoring = true" in out["diff"]
+    assert (tmp_path / "main.tf").read_text() == out["original"]
+    (tmp_path / "main.tf").write_text(out["text"])
+    assert tfscan.scan(tmp_path, select=["CKV_AWS_126"]).findings == []
+    with pytest.raises(ValueError, match="no finding has fingerprint"):
+        tfscan.fix("0000000000000000", tmp_path)

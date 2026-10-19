@@ -131,9 +131,11 @@ missing connection (`connected_resource_types`) in the record.
 
 Found along the way, for later:
 
-- `tf_scan::apply_fix` has no CLI or Python surface, so an agent cannot use
-  the deterministic apply. An `oxtf fix FINGERPRINT` (print the edit, or
-  write it) would close the scan → fix → verify loop from the shell.
+- ~~`tf_scan::apply_fix` has no CLI or Python surface.~~ Done: `oxtf fix
+  FINGERPRINT [scan options] [--write] [-f diff|json]` and
+  `tfscan.fix(fingerprint, path, ...)` (`tf_scan::fix`) apply the hint in
+  memory, rescan with the edit as an overlay, and report the diff and
+  whether the finding is gone; `--write` writes only a verified edit.
 - A fix hint's `site` replaces `x = var.x` with a literal. In a library
   module the better edit is usually the variable's default, the origin of
   the value's provenance; the hint should offer that site.
