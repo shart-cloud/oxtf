@@ -702,6 +702,59 @@ rendered configuration, the graph configuration and the JSONPath vertex.
 - `CKV_AWS_380` depends on the current date.
 - `CKV_GCP_36` uses a custom exclusion predicate.
 
+## 6. The IAM checks and policy_sentry's database (2026-10-19)
+
+Decided: bundle the database.
+
+**What was built**
+- **The data.** `data/checkov/iam.ndjson` holds policy_sentry 0.13.2's IAM
+  database reduced to what the queries read: per service, each action's
+  access level and resource types (with their dependent actions), and
+  each resource type's ARN.
+  - 17,752 actions across 409 services; 1.28 MB, one service per line.
+  - The importer writes it; the drift test checks it.
+  - Services are parsed on first use and rebuilt into policy_sentry's
+    shape. The full `iam_definition` is assembled only if inlined Python
+    reads it directly (the `NotAction` path).
+- **The interpreter** gains:
+  - a read-only view of bundled data;
+  - per-run statics for mutable class and module attributes, shared
+    across the checks of one resource, which is how Checkov's
+    class-level `policy_document_cache` behaves;
+  - object constants (`DEFAULT_EXCLUSIONS`), `cached_property` caching,
+    set operators, `typing.cast`, and `lru_cache` unwrapping.
+- **Native ports.** The hot queries (`get_all_actions`,
+  `get_actions_for_service`, `get_action_data`, access-level filtering,
+  `expand`, `determine_actions_to_expand`, `remove_wildcard_only_actions`,
+  `remove_read_level_actions`) are exact ports run natively over the
+  data. A policy allowing `"*"` walks every action, which costs about a
+  million interpreted steps. Wildcard expansion is memoized per thread.
+- **Collections.** The interpreter's sets and dict construction now hash
+  hashable members, so they are linear as in Python, and `sort` is a
+  standard stable sort.
+
+**Coverage.** All six IAM checks translate (`CKV_AWS_286`–`290`, `355`):
+386 of 388 Python checks, 1,079 bundled rules. Left: `CKV_AWS_380`
+(date-dependent) and `CKV_GCP_36` (custom exclusion predicate).
+
+**Gates**
+
+| Check | Result |
+|---|---|
+| Fixture conformance | 18,367 results, 0 unexplained disagreements |
+| IAM fixtures alone | 198/198 |
+| Value harness | 0 disagreements |
+| Rust tests | 248 passed |
+| pytest | 51 passed, 1 skipped |
+
+**Cost**
+- **Corpus:** 150 → 198 ms with 8 threads; single thread 513 → 657 ms.
+  The corpus has 119 IAM policies.
+- **Heavy policies:** the two heaviest (a read-only policy and an EKS
+  policy, both full of service wildcards) take about 21 ms for the first
+  check and well under 1 ms for the five after it.
+- **Ordinary policies:** about 2 ms for the first check.
+
 ## Branching
 
 These commits stack on `feat/checkov-native-policies` (638afcb, not

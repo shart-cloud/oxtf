@@ -283,3 +283,18 @@ fn objects_of_inlined_classes() {
     let v = compiled[0].verdict(&a.modules[0].resources[0]).unwrap();
     assert_eq!(v.truth, Truth::True);
 }
+
+/// policy_sentry's IAM database, as bundled: services are read lazily and
+/// in policy_sentry's shape.
+#[test]
+fn bundled_iam_database() {
+    use tf_rule_ir::checkov_python::iam;
+    let s3 = iam::service("s3").expect("s3");
+    assert_eq!(s3["privileges"]["GetObject"]["access_level"], "Read");
+    assert_eq!(s3["privileges_lower_name"]["getobject"], "GetObject");
+    assert!(iam::actions_for_service("s3", false).contains(&"s3:GetObject".to_string()));
+    // The `catalog` ARNs of Service Catalog resources.
+    assert!(iam::service("catalog").is_some());
+    assert!(iam::service("no-such-service").is_none());
+    assert!(iam::prefixes().count() > 400);
+}

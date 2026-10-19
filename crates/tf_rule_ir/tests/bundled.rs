@@ -101,4 +101,9 @@ fn bundled_catalog_is_current() {
         generated.manifest_json == bundled::CHECKOV_MANIFEST_JSON,
         "data/checkov/manifest.json is stale: run examples/bundle_checkov.rs"
     );
+    let iam = std::fs::read_to_string(Path::new(&pack).join("iam.ndjson")).unwrap();
+    assert!(
+        iam == tf_rule_ir::checkov_python::iam::COMPACT,
+        "data/checkov/iam.ndjson is stale: run examples/bundle_checkov.rs"
+    );
 }

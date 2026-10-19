@@ -17,8 +17,15 @@ programs carry translations of that code too:
 - [policy_sentry](https://github.com/salesforce/policy_sentry) 0.13.2
   (the `ARN` parser), MIT, `LICENSE.policy_sentry`.
 
-These two files are kept by hand: the generator writes only `rules.json`,
-`manifest.json` and `LICENSE.checkov`.
+- `iam.ndjson`: policy_sentry 0.13.2's IAM database (the AWS Service
+  Authorization Reference, as policy_sentry ships it), reduced to what the
+  cloudsplaining checks query: per service, each action's access level and
+  resource types (with their dependent actions) and each resource type's
+  ARN. One service per line, after a header line, so a scan parses only
+  the services its policies name. MIT, `LICENSE.policy_sentry`.
+
+The two licence files are kept by hand: the generator writes `rules.json`,
+`manifest.json`, `iam.ndjson` and `LICENSE.checkov`.
 
 - `rules.json`: the rules compiled into oxtf (`tf_rule_ir::bundled`).
   `build.rs` turns it into a static table at build time, so a scan reads

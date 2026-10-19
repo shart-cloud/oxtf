@@ -210,6 +210,16 @@ def export_rules(directory, *, expected_version=SUPPORTED_VERSION):
     out = Path(directory)
     out.mkdir(parents=True, exist_ok=False)
     (out / "rules.json").write_text(payload)
+    # The IAM database programs that use cloudsplaining read (policy_sentry).
+    if '"iam": "definition"' in payload or '"iam":"definition"' in payload:
+        iam = _sibling("checkov_python").iam_data()
+        # One service per line, after a header line: a scan parses only the
+        # services its policies name.
+        services = iam.pop("services")
+        lines = [json.dumps({"header": iam}, separators=(",", ":"), sort_keys=True)]
+        lines += [json.dumps({"prefix": p, "service": services[p]}, separators=(",", ":"), sort_keys=True)
+                  for p in sorted(services)]
+        (out / "iam.ndjson").write_text("\n".join(lines) + "\n")
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     shutil.copyfile(license_file, out / "LICENSE.checkov")
     return manifest

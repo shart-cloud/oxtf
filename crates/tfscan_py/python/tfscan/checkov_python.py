@@ -36,16 +36,36 @@ BUILTINS = {
     "re.match", "re.search", "re.fullmatch", "re.findall", "re.compile", "re.sub", "re.split",
     "fnmatch.fnmatch", "json.loads", "json.dumps", "type", "map", "filter",
     "yaml.safe_load", "itertools.chain", "dpath.search", "dpath.get",
-    "ipaddress.ip_network", "ipaddress.ip_address", "hasattr",
+    "ipaddress.ip_network", "ipaddress.ip_address", "hasattr", "typing.cast", "fnmatch.fnmatchcase",
 }
 # Checkov helpers run natively, by qualified name: their Python reads
 # parser internals, and their meaning over evaluated values is simple.
 NATIVE = {
     "checkov.common.util.var_utils.is_terraform_variable_dependent": "is_terraform_variable_dependent",
     "BaseResourceCheck._is_variable_dependant": "is_terraform_variable_dependent",
+    # policy_sentry's and cloudsplaining's IAM-database queries, over the
+    # bundled database (tf_rule_ir::checkov_python::iam): exact ports, run
+    # natively because a policy allowing "*" walks every IAM action.
+    "policy_sentry.querying.all.get_all_actions": "iam.get_all_actions",
+    "policy_sentry.querying.all.get_all_service_prefixes": "iam.get_all_service_prefixes",
+    "policy_sentry.querying.actions.get_actions_for_service": "iam.get_actions_for_service",
+    "policy_sentry.querying.actions.get_action_data": "iam.get_action_data",
+    "policy_sentry.querying.actions.remove_actions_not_matching_access_level":
+        "iam.remove_actions_not_matching_access_level",
+    "policy_sentry.analysis.expand.expand": "iam.expand",
+    "policy_sentry.analysis.expand.determine_actions_to_expand": "iam.determine_actions_to_expand",
+    "cloudsplaining.shared.utils.remove_wildcard_only_actions": "iam.remove_wildcard_only_actions",
+    "cloudsplaining.shared.utils.remove_read_level_actions": "iam.remove_read_level_actions",
 }
 # Modules whose functions and classes are inlined as their Python.
 INLINE_MODULES = ("checkov.", "cloudsplaining.", "policy_sentry.")
+# Module globals computed at import from policy_sentry's IAM database:
+# exported as calls of the function that computes them, not as data.
+DERIVED_GLOBALS = {
+    ("cloudsplaining.scan.statement_detail", "ALL_ACTIONS"): ("policy_sentry.querying.all", "get_all_actions"),
+    ("cloudsplaining.shared.utils", "all_service_prefixes"): ("policy_sentry.querying.all", "get_all_service_prefixes"),
+    ("policy_sentry.querying.actions", "all_service_prefixes"): ("policy_sentry.querying.all", "get_all_service_prefixes"),
+}
 # Builtins that Checkov's checks import from its utilities.
 CHECKOV_HELPERS = {"force_list", "force_int", "force_float"}
 TYPES = {list: "list", dict: "dict", str: "str", int: "int", float: "float", bool: "bool",
@@ -61,7 +81,7 @@ FOLDABLE = {"get_inspected_key", "get_expected_value", "get_expected_values", "g
 COMPARE = {ast.Eq: "eq", ast.NotEq: "ne", ast.Lt: "lt", ast.LtE: "le", ast.Gt: "gt", ast.GtE: "ge",
            ast.In: "in", ast.NotIn: "not_in", ast.Is: "is", ast.IsNot: "is_not"}
 BINARY = {ast.Add: "add", ast.Sub: "sub", ast.Mult: "mul", ast.Div: "div", ast.FloorDiv: "floordiv",
-          ast.Mod: "mod", ast.Pow: "pow"}
+          ast.Mod: "mod", ast.Pow: "pow", ast.BitOr: "bitor", ast.BitAnd: "bitand", ast.BitXor: "bitxor"}
 
 
 class Unsupported(ValueError):
@@ -205,6 +225,7 @@ class Exporter:
                     elif type(member).__name__ == "cached_property" and hasattr(member, "func"):
                         self.add_function(fkey, member.func, is_method=True, check=False)
                         entry["properties"][name] = fkey
+                        entry.setdefault("cached", []).append(name)
                     elif isinstance(member, staticmethod):
                         self.add_function(fkey, member.__func__, is_method=True, static=True, check=False)
                         entry["methods"][name] = fkey
@@ -233,6 +254,8 @@ class Exporter:
             if isinstance(s.value, ast.Constant):
                 return None  # docstring
             if is_logging(s.value, g):
+                return None
+            if isinstance(s.value, ast.Call) and isinstance(s.value.func, ast.Name) and s.value.func.id == "print":
                 return None
             return {"s": "expr", "value": self.expr(s.value, g, local)}
         if isinstance(s, ast.Return):
@@ -313,6 +336,16 @@ class Exporter:
         if isinstance(e, ast.Name):
             if e.id in local:
                 return {"e": "name", "id": e.id}
+            module = g.get("__name__", "")
+            if (module, e.id) in DERIVED_GLOBALS:
+                mod, fn = DERIVED_GLOBALS[(module, e.id)]
+                key = f"{mod}.{fn}"
+                if key in NATIVE:
+                    return {"e": "call", "func": {"builtin": NATIVE[key]}, "args": [], "kwargs": []}
+                import importlib
+                target = inspect.unwrap(getattr(importlib.import_module(mod), fn))
+                self.add_function(key, target, is_method=False)
+                return {"e": "call", "func": {"func": key}, "args": [], "kwargs": []}
             return {"e": "const", "v": self.global_value(e.id, g)}
         if isinstance(e, ast.Attribute):
             return self.attribute(e, g, local)
@@ -393,6 +426,16 @@ class Exporter:
             return value({"True": True, "False": False, "None": None}[name])
         if name in g:
             target = g[name]
+            if is_iam_definition(target):
+                return {"iam": "definition"}
+            # functools.lru_cache / cache: the wrapped function (pure).
+            if callable(target) and inspect.isfunction(getattr(target, "__wrapped__", None)):
+                target = inspect.unwrap(target)
+            if type(target).__module__.startswith(INLINE_MODULES) and not inspect.isclass(target) \
+                    and not inspect.isfunction(target) and not inspect.ismodule(target) \
+                    and hasattr(target, "__dict__"):
+                key = self.add_class(type(target))
+                return {"object": {"class": key, "attrs": {k: value(v, f"{name}.{k}") for k, v in vars(target).items()}}}
         elif name in TYPE_NAMES:
             return {"type": TYPE_NAMES[name]}
         else:
@@ -403,6 +446,8 @@ class Exporter:
             return {"funcref": key}
         if name in BUILTINS and getattr(target, "__module__", "") in ("builtins", "checkov.common.util.type_forcers"):
             return {"builtin": name}
+        if inspect.isclass(target) and target.__module__.startswith(INLINE_MODULES):
+            return {"classtype": self.add_class(target)}
         if inspect.isfunction(target) or inspect.ismodule(target) or inspect.isclass(target) and target not in TYPES:
             raise Unsupported(f"{name} used as a value")
         return value(target, f"global {name}")
@@ -410,6 +455,15 @@ class Exporter:
     def attribute(self, e, g, local):
         base = e.value
         if isinstance(base, ast.Name) and base.id == "self" and "self" in local and self.in_check:
+            # A property of the check's own class: its getter, called.
+            for cls in self.classes + self.inherited:
+                member = vars(cls).get(e.attr)
+                if isinstance(member, property):
+                    key = f"{cls.__name__}.{e.attr}"
+                    self.add_function(key, member.fget, is_method=True)
+                    return {"e": "call", "func": {"func": key}, "args": [], "kwargs": []}
+                if member is not None:
+                    break
             found = self.method(e.attr)
             if found is not None:
                 key, fn, static = found
@@ -427,6 +481,9 @@ class Exporter:
                     key = f"{target.__module__}.{target.__name__}"
                     self.add_function(key, target, is_method=False)
                     return {"e": "const", "v": {"funcref": key}}
+                if isinstance(target, (dict, list, set)):
+                    # Mutable: one object per run, shared by every use.
+                    return {"e": "static", "key": name, "v": value(target, name)}
                 return {"e": "const", "v": value(target, name)}
         return {"e": "attr", "value": self.expr(base, g, local), "attr": e.attr}
 
@@ -473,6 +530,16 @@ class Exporter:
             name = f"{getattr(holder, '__name__', f.value.id)}.{f.attr}"
             if inspect.ismodule(holder) and name in BUILTINS:
                 return call({"builtin": name})
+            if inspect.ismodule(holder) and holder.__name__.startswith(INLINE_MODULES):
+                fn = getattr(holder, f.attr, None)
+                if callable(fn) and inspect.isfunction(getattr(fn, "__wrapped__", None)):
+                    fn = inspect.unwrap(fn)
+                if inspect.isfunction(fn):
+                    key = f"{fn.__module__}.{fn.__name__}"
+                    if key in NATIVE:
+                        return call({"builtin": NATIVE[key]})
+                    self.add_function(key, fn, is_method=False)
+                    return call({"func": key})
             if inspect.ismodule(holder) and holder.__name__ == "logging":
                 return {"e": "const", "v": None}
             if isinstance(holder, re.Pattern) and f.attr in {"match", "search", "fullmatch", "findall", "sub", "split"}:
@@ -500,9 +567,14 @@ class Exporter:
                     and isinstance(e.args[0], ast.Name) and e.args[0].id == "self" \
                     and isinstance(e.args[1], ast.Constant):
                 return {"e": "const", "v": hasattr(self.check, e.args[1].value)}
+            if callable(target) and inspect.isfunction(getattr(target, "__wrapped__", None)) \
+                    and getattr(target, "__module__", "").startswith(INLINE_MODULES):
+                target = inspect.unwrap(target)
             qualified = f"{getattr(target, '__module__', '')}.{getattr(target, '__name__', '')}"
             if callable(target) and qualified in BUILTINS:
                 return call({"builtin": qualified})
+            if callable(target) and qualified in NATIVE:
+                return call({"builtin": NATIVE[qualified]})
             if f.id in BUILTINS and (target is None or getattr(target, "__module__", "").startswith(
                     ("builtins", "checkov.common.util.type_forcers"))):
                 return call({"builtin": f.id})
@@ -524,6 +596,39 @@ class Exporter:
 
 TYPE_NAMES = {"list": "list", "dict": "dict", "str": "str", "int": "int", "float": "float", "bool": "bool",
               "tuple": "tuple", "set": "set"}
+
+
+def is_iam_definition(v):
+    """policy_sentry's IAM database (`policy_sentry.shared.iam_data`)."""
+    try:
+        from policy_sentry.shared.iam_data import iam_definition
+    except ImportError:  # pragma: no cover
+        return False
+    return v is iam_definition
+
+
+def iam_data():
+    """policy_sentry's IAM database in the compact form oxtf bundles: per
+    service its prefix, each action's access level and resource types
+    (with their dependent actions), and each resource type's ARN. The
+    interpreter rebuilds the fields policy_sentry's queries read
+    (`tf_rule_ir::checkov_python::iam`)."""
+    import importlib.metadata
+    from policy_sentry.shared.iam_data import iam_definition
+    from policy_sentry.shared.constants import POLICY_SENTRY_SCHEMA_VERSION_NAME
+    services = {}
+    for prefix, d in sorted(iam_definition.items()):
+        if prefix == POLICY_SENTRY_SCHEMA_VERSION_NAME:
+            continue
+        services[prefix] = {
+            "prefix": d["prefix"],
+            "actions": {a: [p["access_level"], {rt: e.get("dependent_actions") or [] for rt, e in p["resource_types"].items()}]
+                        for a, p in d["privileges"].items()},
+            "resources": {r: v["arn"] for r, v in d["resources"].items()},
+        }
+    return {"source": "policy_sentry", "version": importlib.metadata.version("policy_sentry"),
+            "schema_key": POLICY_SENTRY_SCHEMA_VERSION_NAME,
+            "schema": iam_definition[POLICY_SENTRY_SCHEMA_VERSION_NAME], "services": services}
 
 
 def is_logging(e, g):

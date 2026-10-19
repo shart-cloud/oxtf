@@ -43,7 +43,7 @@ const USAGE: &str = "usage:
                                   run the policies' test_* rules (as `conftest verify`)
 
 Built in are the seed rules and the bundled Checkov catalog: Checkov 3.2.328's Terraform
-value checks, graph policies and Python resource checks (1073 rules), run natively.
+value checks, graph policies and Python resource checks (1079 rules), run natively.
 
 scan options:
   -r, --recursive         every directory under PATH containing .tf files is a root module

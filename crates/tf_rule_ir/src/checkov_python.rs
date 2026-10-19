@@ -80,6 +80,9 @@ pub struct Class {
     pub methods: BTreeMap<String, String>,
     pub properties: BTreeMap<String, String>,
     pub attrs: BTreeMap<String, Json>,
+    /// Properties that are `cached_property`s: computed once per object.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cached: Vec<String>,
     /// Methods that are `staticmethod`s (called without the instance).
     #[serde(default, rename = "static", skip_serializing_if = "Vec::is_empty")]
     pub statics: Vec<String>,
@@ -184,6 +187,9 @@ pub enum BinOp {
     Floordiv,
     Mod,
     Pow,
+    Bitor,
+    Bitand,
+    Bitxor,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -330,6 +336,12 @@ pub enum Expr {
     Attr {
         value: Box<Expr>,
         attr: String,
+    },
+    /// A mutable module or class attribute: built from `v` on first use
+    /// in a run, then the same object (a cache dict the code fills).
+    Static {
+        key: String,
+        v: Json,
     },
     /// An exception class used as a value (only to raise it).
     Exception {
@@ -487,6 +499,7 @@ fn calls(stmts: &[Stmt], f: &mut dyn FnMut(&str)) {
             }
             Expr::Lambda { body, .. } => expr(body, f),
             Expr::Attr { value, .. } => expr(value, f),
+            Expr::Static { .. } => {}
             Expr::Fstr { parts } => exprs(parts, f),
             Expr::Name { .. } | Expr::SelfAttr { .. } | Expr::Exception { .. } => {}
         }
@@ -572,6 +585,9 @@ enum Py {
     Builtin(Rc<str>),
     /// An object of an inlined class.
     Instance(Rc<Instance>),
+    /// A read-only dict or list of bundled data (policy_sentry's IAM
+    /// database), read in place.
+    Data(&'static Json),
     /// `ipaddress.ip_network` / `ip_address` (an address is a network of
     /// one; `in` tests containment).
     Net(py::Network, bool),
@@ -634,6 +650,23 @@ impl Py {
                     // result-like constant under its qualified name.
                     "enum" => Py::Result(Rc::from(inner.as_str().ok_or("enum")?)),
                     "funcref" => Py::FuncRef(Rc::from(inner.as_str().ok_or("funcref")?)),
+                    // An inlined class, as `isinstance`'s second argument.
+                    "classtype" => Py::Type(Rc::from(format!(
+                        "class:{}",
+                        inner.as_str().ok_or("classtype")?
+                    ))),
+                    "iam" => Py::Data(iam::definition()?),
+                    "object" => {
+                        let class = inner["class"].as_str().ok_or("object class")?;
+                        let mut attrs = HashMap::new();
+                        for (k, v) in inner["attrs"].as_object().ok_or("object attrs")? {
+                            attrs.insert(k.clone(), Py::from_const(v)?);
+                        }
+                        Py::Instance(Rc::new(Instance {
+                            class: Rc::from(class),
+                            attrs: RefCell::new(attrs),
+                        }))
+                    }
                     "builtin" => Py::Builtin(Rc::from(inner.as_str().ok_or("builtin")?)),
                     "type" => Py::Type(Rc::from(inner.as_str().ok_or("type")?)),
                     "pattern" => {
@@ -679,6 +712,8 @@ impl Py {
             Py::Lambda(_) | Py::FuncRef(_) => "function",
             Py::Builtin(_) => "builtin_function_or_method",
             Py::Instance(_) => "object",
+            Py::Data(Json::Object(_)) => "dict",
+            Py::Data(_) => "list",
             Py::Net(_, true) => "IPv4Address",
             Py::Net(..) => "IPv4Network",
             Py::Bound(_) => "method",
@@ -691,6 +726,96 @@ impl Py {
 struct Instance {
     class: Rc<str>,
     attrs: RefCell<HashMap<String, Py>>,
+}
+
+/// A hashable value's identity under Python's `==`: `1`, `1.0` and
+/// `True` are one key.
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum Key {
+    None,
+    Int(i64),
+    Float(u64),
+    Str(Rc<str>),
+    Tuple(Vec<Key>),
+    Name(Rc<str>),
+}
+
+fn key(v: &Py) -> Option<Key> {
+    Some(match v {
+        Py::None => Key::None,
+        Py::Bool(b) => Key::Int(*b as i64),
+        Py::Int(i) => Key::Int(*i),
+        Py::Float(f) if f.is_nan() => return None,
+        Py::Float(f) if f.fract() == 0.0 && f.abs() < 9.0e18 => Key::Int(*f as i64),
+        Py::Float(f) => Key::Float(f.to_bits()),
+        Py::Str(s) => Key::Str(s.clone()),
+        Py::Tuple(t) => Key::Tuple(t.iter().map(key).collect::<Option<_>>()?),
+        Py::Result(n) | Py::Type(n) => Key::Name(n.clone()),
+        _ => return None,
+    })
+}
+
+/// A dict being built: hashable keys are indexed, so a comprehension over
+/// many items is linear, as in Python.
+#[derive(Default)]
+struct DictBuilder {
+    entries: Vec<(Py, Py)>,
+    index: HashMap<Key, usize>,
+    unhashed: bool,
+}
+
+impl DictBuilder {
+    fn insert(&mut self, interp: &Interp, k: Py, v: Py) -> R<()> {
+        let k = interp.concrete(&k)?;
+        match key(&k) {
+            Some(h) if !self.unhashed => {
+                match self.index.get(&h) {
+                    Some(&i) => self.entries[i].1 = v,
+                    None => {
+                        self.index.insert(h, self.entries.len());
+                        self.entries.push((k, v));
+                    }
+                }
+                Ok(())
+            }
+            _ => {
+                self.unhashed = true;
+                interp.dict_insert(&mut self.entries, k, v)
+            }
+        }
+    }
+}
+
+/// The members of a collection, for `in` tests: hashed where Python would
+/// hash them; anything else (an abstract value) is compared one by one.
+struct Members {
+    keys: std::collections::HashSet<Key>,
+    rest: Vec<Py>,
+}
+
+impl Members {
+    fn of(items: &[Py]) -> Members {
+        let mut keys = std::collections::HashSet::new();
+        let mut rest = Vec::new();
+        for item in items {
+            match key(item) {
+                Some(k) => {
+                    keys.insert(k);
+                }
+                None => rest.push(item.clone()),
+            }
+        }
+        Members { keys, rest }
+    }
+
+    fn insert(&mut self, item: &Py) {
+        match key(item) {
+            Some(k) => {
+                self.keys.insert(k);
+            }
+            None => self.rest.push(item.clone()),
+        }
+    }
 }
 
 // -- control flow ---------------------------------------------------------
@@ -711,7 +836,18 @@ enum Flow {
 
 type R<T> = Result<T, Flow>;
 
+/// `OXTF_DEBUG_PYTHON`, read once: `1` logs failures, `2` every outcome,
+/// `3` exceptions as raised and caught, `time` each run's duration.
+fn debug() -> &'static str {
+    static LEVEL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    LEVEL.get_or_init(|| std::env::var("OXTF_DEBUG_PYTHON").unwrap_or_default())
+}
+
+#[track_caller]
 fn exc<T>(name: &str) -> R<T> {
+    if debug() == "3" {
+        eprintln!("raise {name} at {}", std::panic::Location::caller());
+    }
     Err(Flow::Exc(Rc::from(name)))
 }
 
@@ -738,15 +874,18 @@ struct Interp<'p> {
     self_attrs: HashMap<String, Py>,
     /// The alternative chosen for each `OneOf` resolved so far.
     choices: HashMap<usize, usize>,
-    steps: u32,
+    /// Mutable module and class attributes ([`Expr::Static`]) this run.
+    statics: HashMap<String, Py>,
+    /// Statements, expressions and copied data nodes so far this run.
+    steps: std::cell::Cell<u32>,
 }
 
 type Env = HashMap<String, Py>;
 
 impl<'p> Interp<'p> {
     fn step(&mut self) -> R<()> {
-        self.steps += 1;
-        if self.steps > STEP_BUDGET {
+        self.steps.set(self.steps.get() + 1);
+        if self.steps.get() > STEP_BUDGET {
             return unsupported("step budget exhausted");
         }
         Ok(())
@@ -756,6 +895,16 @@ impl<'p> Interp<'p> {
     fn concrete(&self, v: &Py) -> R<Py> {
         match v {
             Py::Abstract(w, tainted) => Err(Flow::Abstract(w.clone(), *tainted)),
+            // Operations without an in-place form read a copy, which counts
+            // against the step budget like the work it is.
+            Py::Data(j) => {
+                let nodes = json_nodes(j);
+                self.steps.set(self.steps.get().saturating_add(nodes));
+                if self.steps.get() > STEP_BUDGET {
+                    return unsupported("step budget exhausted");
+                }
+                Ok(json_to_py(j))
+            }
             Py::OneOf(id, alts) => match self.choices.get(id) {
                 Some(&i) => self.concrete(&alts[i]),
                 None => Err(Flow::Fork(*id, alts.len())),
@@ -765,6 +914,13 @@ impl<'p> Interp<'p> {
     }
 
     fn truthy(&self, v: &Py) -> R<bool> {
+        if let Py::Data(j) = v {
+            return Ok(match j {
+                Json::Object(m) => !m.is_empty(),
+                Json::Array(a) => !a.is_empty(),
+                _ => true,
+            });
+        }
         Ok(match self.concrete(v)? {
             Py::None => false,
             Py::Bool(b) => b,
@@ -833,12 +989,24 @@ impl<'p> Interp<'p> {
     }
 
     fn all_in(&self, x: &[Py], y: &[Py]) -> R<bool> {
+        let members = Members::of(y);
         for a in x {
-            if !self.contains_seq(y, a)? {
+            if !self.member(&members, y, a)? {
                 return Ok(false);
             }
         }
         Ok(true)
+    }
+
+    /// `needle in items`, with `members` built from `items`.
+    fn member(&self, members: &Members, items: &[Py], needle: &Py) -> R<bool> {
+        match key(needle) {
+            Some(k) if members.keys.contains(&k) => Ok(true),
+            // A hashable needle equals no other hashable item; only the
+            // unhashed ones (abstract values) remain to compare.
+            Some(_) => self.contains_seq(&members.rest, needle),
+            None => self.contains_seq(items, needle),
+        }
     }
 
     /// `needle in items`: true as soon as a concrete element equals it;
@@ -872,6 +1040,12 @@ impl<'p> Interp<'p> {
     }
 
     fn contains(&self, container: &Py, needle: &Py) -> R<bool> {
+        if let Py::Data(Json::Object(m)) = container {
+            return match self.concrete(needle)? {
+                Py::Str(k) => Ok(m.contains_key(&*k)),
+                _ => Ok(false),
+            };
+        }
         match self.concrete(container)? {
             Py::Str(s) => match self.concrete(needle)? {
                 Py::Str(n) => Ok(s.contains(&*n)),
@@ -1045,6 +1219,9 @@ impl<'p> Interp<'p> {
                 let outcome = match self.block(body, env) {
                     Ok(()) => self.block(orelse, env),
                     Err(Flow::Exc(raised)) => {
+                        if debug() == "3" {
+                            eprintln!("caught {raised}");
+                        }
                         let handler = handlers.iter().find(|h| {
                             h.types
                                 .as_ref()
@@ -1155,6 +1332,11 @@ impl<'p> Interp<'p> {
 
     /// The elements `for x in v` visits.
     fn iterate(&self, v: &Py) -> R<Vec<Py>> {
+        match v {
+            Py::Data(Json::Object(m)) => return Ok(m.keys().map(|k| Py::str(k)).collect()),
+            Py::Data(Json::Array(a)) => return Ok(a.iter().map(data_child).collect()),
+            _ => {}
+        }
         Ok(match self.concrete(v)? {
             Py::List(l) | Py::Set(l) => l.borrow().clone(),
             Py::Tuple(t) => t.to_vec(),
@@ -1182,6 +1364,22 @@ impl<'p> Interp<'p> {
     }
 
     fn subscript(&self, container: &Py, index: &Py) -> R<Py> {
+        match container {
+            Py::Data(Json::Object(m)) => {
+                return match self.concrete(index)? {
+                    Py::Str(k) => m
+                        .get(&*k)
+                        .map(data_child)
+                        .map_or_else(|| exc("KeyError"), Ok),
+                    _ => exc("KeyError"),
+                };
+            }
+            Py::Data(Json::Array(a)) => {
+                let i = self.index_of(index, a.len())?;
+                return Ok(data_child(&a[i]));
+            }
+            _ => {}
+        }
         match self.concrete(container)? {
             Py::List(l) => {
                 let items = l.borrow();
@@ -1318,12 +1516,12 @@ impl<'p> Interp<'p> {
                 Py::Set(Rc::new(RefCell::new(self.dedup(items)?)))
             }
             Expr::Dict { keys, values } => {
-                let mut out: Vec<(Py, Py)> = Vec::new();
+                let mut out = DictBuilder::default();
                 for (k, v) in keys.iter().zip(values) {
                     let (k, v) = (self.expr(k, env)?, self.expr(v, env)?);
-                    self.dict_insert(&mut out, k, v)?;
+                    out.insert(self, k, v)?;
                 }
-                Py::Dict(Rc::new(RefCell::new(out)))
+                Py::Dict(Rc::new(RefCell::new(out.entries)))
             }
             Expr::Listcomp { elt, generators } | Expr::Genexp { elt, generators } => {
                 let mut out = Vec::new();
@@ -1346,13 +1544,13 @@ impl<'p> Interp<'p> {
                 value,
                 generators,
             } => {
-                let mut out = Vec::new();
+                let mut out = DictBuilder::default();
                 self.comprehension(generators, env, &mut |this, env| {
                     let (k, v) = (this.expr(key, env)?, this.expr(value, env)?);
-                    this.dict_insert(&mut out, k, v)?;
+                    out.insert(this, k, v)?;
                     Ok(true)
                 })?;
-                Py::Dict(Rc::new(RefCell::new(out)))
+                Py::Dict(Rc::new(RefCell::new(out.entries)))
             }
             Expr::Lambda { params, body } => {
                 Py::Lambda(Rc::new((params.clone(), (**body).clone())))
@@ -1373,6 +1571,14 @@ impl<'p> Interp<'p> {
                 let obj = self.expr(value, env)?;
                 self.get_attr(&obj, attr)?
             }
+            Expr::Static { key, v } => match self.statics.get(key) {
+                Some(p) => p.clone(),
+                None => {
+                    let p = Py::from_const(v).map_err(Flow::Unsupported)?;
+                    self.statics.insert(key.clone(), p.clone());
+                    p
+                }
+            },
         })
     }
 
@@ -1382,8 +1588,10 @@ impl<'p> Interp<'p> {
 
     fn dedup(&self, items: Vec<Py>) -> R<Vec<Py>> {
         let mut out: Vec<Py> = Vec::new();
+        let mut members = Members::of(&[]);
         for item in items {
-            if !self.contains_seq(&out, &item)? {
+            if !self.member(&members, &out, &item)? {
+                members.insert(&item);
                 out.push(item);
             }
         }
@@ -1507,6 +1715,62 @@ impl<'p> Interp<'p> {
 
     fn binop(&self, op: BinOp, a: &Py, b: &Py, in_place: bool) -> R<Py> {
         let (a, b) = (self.concrete(a)?, self.concrete(b)?);
+        // Set algebra: `-` `|` `&` `^`, keeping the left operand's order.
+        if let (Py::Set(x), Py::Set(y)) = (&a, &b)
+            && matches!(
+                op,
+                BinOp::Sub | BinOp::Bitor | BinOp::Bitand | BinOp::Bitxor
+            )
+        {
+            let (xs, ys) = (x.borrow().clone(), y.borrow().clone());
+            let (in_xs, in_ys) = (Members::of(&xs), Members::of(&ys));
+            let mut out = Vec::new();
+            for v in &xs {
+                let in_y = self.member(&in_ys, &ys, v)?;
+                if match op {
+                    BinOp::Sub | BinOp::Bitxor => !in_y,
+                    BinOp::Bitand => in_y,
+                    _ => true,
+                } {
+                    out.push(v.clone());
+                }
+            }
+            if matches!(op, BinOp::Bitor | BinOp::Bitxor) {
+                for v in &ys {
+                    if !self.member(&in_xs, &xs, v)? {
+                        out.push(v.clone());
+                    }
+                }
+            }
+            if in_place {
+                *x.borrow_mut() = out;
+                return Ok(a.clone());
+            }
+            return Ok(Py::Set(Rc::new(RefCell::new(out))));
+        }
+        if matches!(op, BinOp::Bitor | BinOp::Bitand | BinOp::Bitxor) {
+            let int = |v: &Py| match v {
+                Py::Int(i) => Some(*i),
+                Py::Bool(b) => Some(*b as i64),
+                _ => None,
+            };
+            return match (int(&a), int(&b)) {
+                (Some(x), Some(y)) => {
+                    let r = match op {
+                        BinOp::Bitor => x | y,
+                        BinOp::Bitand => x & y,
+                        _ => x ^ y,
+                    };
+                    // bool op bool stays bool.
+                    Ok(if matches!((&a, &b), (Py::Bool(_), Py::Bool(_))) {
+                        Py::Bool(r != 0)
+                    } else {
+                        Py::Int(r)
+                    })
+                }
+                _ => exc("TypeError"),
+            };
+        }
         match (&a, &b, op) {
             (Py::Str(x), Py::Str(y), BinOp::Add) => return Ok(Py::str(&format!("{x}{y}"))),
             (Py::List(x), Py::List(y), BinOp::Add) => {
@@ -1578,6 +1842,7 @@ impl<'p> Interp<'p> {
                         )
                     }
                 }
+                BinOp::Bitor | BinOp::Bitand | BinOp::Bitxor => unreachable!("handled above"),
             });
         }
         match (number(&a), number(&b)) {
@@ -1592,6 +1857,7 @@ impl<'p> Interp<'p> {
                 BinOp::Mod if y == 0.0 => return exc("ZeroDivisionError"),
                 BinOp::Mod => x - y * (x / y).floor(),
                 BinOp::Pow => x.powf(y),
+                BinOp::Bitor | BinOp::Bitand | BinOp::Bitxor => unreachable!("handled above"),
             })),
             _ => exc("TypeError"),
         }
@@ -1683,7 +1949,11 @@ impl<'p> Interp<'p> {
         }
         let def = self.class(&i.class)?;
         if let Some(getter) = def.properties.get(attr) {
-            return self.call_function(getter, vec![obj.clone()], Vec::new());
+            let v = self.call_function(getter, vec![obj.clone()], Vec::new())?;
+            if def.cached.iter().any(|c| c == attr) {
+                i.attrs.borrow_mut().insert(attr.to_string(), v.clone());
+            }
+            return Ok(v);
         }
         if def.methods.contains_key(attr) {
             return Ok(Py::Bound(Rc::new((obj.clone(), Rc::from(attr)))));
@@ -1799,7 +2069,15 @@ impl<'p> Interp<'p> {
         let a0 = args.first().cloned();
         Ok(match name {
             "len" => {
-                let v = self.concrete(&a0.ok_or_else(type_error)?)?;
+                let v = a0.ok_or_else(type_error)?;
+                if let Py::Data(j) = &v {
+                    return Ok(Py::Int(match j {
+                        Json::Object(m) => m.len(),
+                        Json::Array(a) => a.len(),
+                        _ => return exc("TypeError"),
+                    } as i64));
+                }
+                let v = self.concrete(&v)?;
                 Py::Int(match v {
                     Py::Str(s) => s.chars().count(),
                     Py::List(l) | Py::Set(l) => l.borrow().len(),
@@ -1810,7 +2088,11 @@ impl<'p> Interp<'p> {
                 } as i64)
             }
             "isinstance" => {
-                let v = self.concrete(&a0.ok_or_else(type_error)?)?;
+                // Bundled data keeps its type without being copied.
+                let v = match a0.ok_or_else(type_error)? {
+                    data @ Py::Data(_) => data,
+                    other => self.concrete(&other)?,
+                };
                 let types = match args.get(1).map(|t| self.concrete(t)).transpose()? {
                     Some(Py::Type(t)) => vec![t],
                     Some(Py::Tuple(ts)) => ts
@@ -1822,7 +2104,11 @@ impl<'p> Interp<'p> {
                         .collect::<R<_>>()?,
                     _ => return exc("TypeError"),
                 };
-                let actual = v.type_name();
+                let actual = match &v {
+                    Py::Instance(i) => format!("class:{}", i.class),
+                    other => other.type_name().to_string(),
+                };
+                let actual = actual.as_str();
                 Py::Bool(
                     types
                         .iter()
@@ -2065,14 +2351,27 @@ impl<'p> Interp<'p> {
                 };
                 self.regex(name, &pattern, &subject, args.get(1))?
             }
-            "fnmatch.fnmatch" => {
+            "fnmatch.fnmatch" | "fnmatch.fnmatchcase" => {
                 let (Some(n), Some(p)) = (a0, args.get(1)) else {
                     return exc("TypeError");
                 };
                 match (self.concrete(&n)?, self.concrete(p)?) {
+                    (Py::Str(n), Py::Str(p)) if !p.contains('[') => {
+                        Py::Bool(glob(p.as_bytes(), n.as_bytes()))
+                    }
                     (Py::Str(n), Py::Str(p)) => {
-                        let re = regex::Regex::new(&fnmatch_regex(&p))
-                            .map_err(|e| Flow::Unsupported(e.to_string()))?;
+                        thread_local! {
+                            static COMPILED: RefCell<HashMap<Rc<str>, regex::Regex>> = RefCell::new(HashMap::new());
+                        }
+                        let re = match COMPILED.with(|m| m.borrow().get(&p).cloned()) {
+                            Some(re) => re,
+                            None => {
+                                let re = regex::Regex::new(&fnmatch_regex(&p))
+                                    .map_err(|e| Flow::Unsupported(e.to_string()))?;
+                                COMPILED.with(|m| m.borrow_mut().insert(p.clone(), re.clone()));
+                                re
+                            }
+                        };
                         Py::Bool(re.is_match(&n))
                     }
                     _ => return exc("TypeError"),
@@ -2111,6 +2410,8 @@ impl<'p> Interp<'p> {
             "type" => Py::Type(Rc::from(
                 self.concrete(&a0.ok_or_else(type_error)?)?.type_name(),
             )),
+            "typing.cast" => args.get(1).cloned().ok_or_else(type_error)?,
+            n if n.starts_with("iam.") => return self.iam_builtin(n, args, kwargs),
             "hasattr" => {
                 let (Some(obj), Some(Py::Str(name))) =
                     (a0, args.get(1).map(|n| self.concrete(n)).transpose()?)
@@ -2418,6 +2719,30 @@ impl<'p> Interp<'p> {
     }
 
     fn method(&mut self, recv: Py, name: &str, args: Vec<Py>, kwargs: Vec<(String, Py)>) -> R<Py> {
+        if let Py::Data(Json::Object(m)) = &recv {
+            match name {
+                "get" => {
+                    let found = match args.first().map(|k| self.concrete(k)).transpose()? {
+                        Some(Py::Str(k)) => m.get(&*k).map(data_child),
+                        Some(_) => None,
+                        None => return exc("TypeError"),
+                    };
+                    return Ok(found.unwrap_or_else(|| {
+                        Self::arg(&args, &kwargs, 1, "default").unwrap_or(Py::None)
+                    }));
+                }
+                "keys" => return Ok(Py::list(m.keys().map(|k| Py::str(k)).collect())),
+                "values" => return Ok(Py::list(m.values().map(data_child).collect())),
+                "items" => {
+                    return Ok(Py::list(
+                        m.iter()
+                            .map(|(k, v)| Py::tuple(vec![Py::str(k), data_child(v)]))
+                            .collect(),
+                    ));
+                }
+                _ => {}
+            }
+        }
         let recv = self.concrete(&recv)?;
         if matches!(recv, Py::Instance(_)) {
             return self.call_method(recv, name, args, kwargs);
@@ -2600,21 +2925,31 @@ impl<'p> Interp<'p> {
                     };
                     keyed.push((k, item));
                 }
-                // A stable insertion sort that surfaces comparison errors.
-                let mut sorted: Vec<(Py, Py)> = Vec::with_capacity(keyed.len());
-                for (k, item) in keyed {
-                    let mut at = sorted.len();
-                    while at > 0 {
-                        let o = self.order(&sorted[at - 1].0, &k)?;
-                        let after = if reverse { o.is_lt() } else { o.is_gt() };
-                        if !after {
-                            break;
-                        }
-                        at -= 1;
+                // A stable sort; the first comparison that fails (a
+                // TypeError across types) fails the call, as in Python.
+                let mut failed = None;
+                keyed.sort_by(|(a, _), (b, _)| {
+                    if failed.is_some() {
+                        return std::cmp::Ordering::Equal;
                     }
-                    sorted.insert(at, (k, item));
+                    match self.order(a, b) {
+                        Ok(o) => {
+                            if reverse {
+                                o.reverse()
+                            } else {
+                                o
+                            }
+                        }
+                        Err(f) => {
+                            failed = Some(f);
+                            std::cmp::Ordering::Equal
+                        }
+                    }
+                });
+                if let Some(f) = failed {
+                    return Err(f);
                 }
-                *l.borrow_mut() = sorted.into_iter().map(|(_, v)| v).collect();
+                *l.borrow_mut() = keyed.into_iter().map(|(_, v)| v).collect();
                 Py::None
             }
             (Py::Set(s), "add") => {
@@ -2626,12 +2961,17 @@ impl<'p> Interp<'p> {
                 Py::None
             }
             (Py::Set(s), "update") => {
-                for v in self.iterate(&a0.ok_or_else(type_error)?)? {
-                    let items = s.borrow().clone();
-                    if !self.contains_seq(&items, &v)? {
-                        s.borrow_mut().push(v);
+                let mut items = s.borrow().clone();
+                let mut members = Members::of(&items);
+                for arg in &args {
+                    for v in self.iterate(arg)? {
+                        if !self.member(&members, &items, &v)? {
+                            members.insert(&v);
+                            items.push(v);
+                        }
                     }
                 }
+                *s.borrow_mut() = items;
                 Py::None
             }
             (Py::Set(s), "discard" | "remove") => {
@@ -2666,8 +3006,9 @@ impl<'p> Interp<'p> {
                     }
                     _ => {
                         let mut out = Vec::new();
+                        let members = Members::of(&other);
                         for x in mine {
-                            let inside = self.contains_seq(&other, &x)?;
+                            let inside = self.member(&members, &other, &x)?;
                             if inside == (name == "intersection") {
                                 out.push(x);
                             }
@@ -3263,6 +3604,586 @@ impl Bounded {
     }
 }
 
+fn json_nodes(j: &Json) -> u32 {
+    match j {
+        Json::Array(a) => 1 + a.iter().map(json_nodes).sum::<u32>(),
+        Json::Object(m) => 1 + m.values().map(json_nodes).sum::<u32>(),
+        _ => 1,
+    }
+}
+
+/// policy_sentry's and cloudsplaining's IAM-database queries, ported
+/// exactly over [`iam::definition`] (see `NATIVE` in the importer).
+impl Interp<'_> {
+    fn iam_builtin(&mut self, name: &str, args: Vec<Py>, kwargs: Vec<(String, Py)>) -> R<Py> {
+        let arg = |i: usize, kw: &str| Self::arg(&args, &kwargs, i, kw);
+        let text = |this: &Self, v: Option<Py>| -> R<Rc<str>> {
+            match v.map(|v| this.concrete(&v)).transpose()? {
+                Some(Py::Str(s)) => Ok(s),
+                _ => exc("TypeError"),
+            }
+        };
+        Ok(match name {
+            "iam.get_all_service_prefixes" => Py::Set(Rc::new(RefCell::new(
+                iam::prefixes().map(Py::str).collect(),
+            ))),
+            "iam.get_all_actions" => {
+                let lower = match arg(0, "lowercase") {
+                    Some(v) => self.truthy(&v)?,
+                    None => false,
+                };
+                Py::Set(Rc::new(RefCell::new(
+                    iam::all_actions(lower)
+                        .into_iter()
+                        .map(|a| Py::str(&a))
+                        .collect(),
+                )))
+            }
+            "iam.get_actions_for_service" => {
+                let prefix = text(self, arg(0, "service_prefix"))?;
+                let lower = match arg(1, "lowercase") {
+                    Some(v) => self.truthy(&v)?,
+                    None => false,
+                };
+                Py::list(
+                    iam::actions_for_service(&prefix, lower)
+                        .into_iter()
+                        .map(|a| Py::str(&a))
+                        .collect(),
+                )
+            }
+            "iam.get_action_data" => {
+                let service = text(self, arg(0, "service"))?;
+                let action = text(self, arg(1, "action_name"))?;
+                self.action_data(&service, &action)?
+            }
+            "iam.remove_actions_not_matching_access_level" => {
+                let actions = self.iterate(&arg(0, "actions_list").ok_or_else(type_error)?)?;
+                let level = text(self, arg(1, "access_level"))?;
+                Py::list(self.matching_level(&actions, &level)?)
+            }
+            "iam.remove_read_level_actions" => {
+                let actions = self.iterate(&arg(0, "actions_list").ok_or_else(type_error)?)?;
+                let mut out = Vec::new();
+                for level in ["Write", "Permissions management", "Tagging"] {
+                    out.extend(self.matching_level(&actions, level)?);
+                }
+                Py::list(out)
+            }
+            "iam.expand" => {
+                let action = arg(0, "action").ok_or_else(type_error)?;
+                Py::list(self.expand(&action)?)
+            }
+            "iam.determine_actions_to_expand" => {
+                let actions = self.iterate(&arg(0, "action_list").ok_or_else(type_error)?)?;
+                let mut out: Vec<Py> = Vec::new();
+                for a in actions {
+                    match self.concrete(&a)? {
+                        Py::Str(s) if s.contains('*') => out.extend(self.expand(&Py::Str(s))?),
+                        Py::Str(s) => out.push(Py::Str(s)),
+                        _ => return exc("TypeError"),
+                    }
+                }
+                let list = Py::list(out);
+                self.method(list.clone(), "sort", Vec::new(), Vec::new())?;
+                list
+            }
+            "iam.remove_wildcard_only_actions" => {
+                let actions = self.iterate(&arg(0, "actions_list").ok_or_else(type_error)?)?;
+                let unique = self.dedup(actions)?;
+                let prefixes: std::collections::HashSet<&str> = iam::prefixes().collect();
+                let mut out = Vec::new();
+                for a in unique {
+                    let Py::Str(a) = self.concrete(&a)? else {
+                        return exc("AttributeError");
+                    };
+                    let parts: Vec<&str> = a.split(':').collect();
+                    let [prefix, action] = parts[..] else {
+                        return exc("ValueError");
+                    };
+                    if !prefixes.contains(prefix) {
+                        continue;
+                    }
+                    let Some(service) = iam::service(prefix) else {
+                        continue;
+                    };
+                    let Some(name) = iam::action_name(service, action) else {
+                        continue;
+                    };
+                    let types = service["privileges"][name]["resource_types"]
+                        .as_object()
+                        .map_or(0, |m| m.len());
+                    let first_arn = iam::entries(service, name).into_iter().next();
+                    match (types, first_arn) {
+                        (0, _) | (_, None) => {}
+                        (1, Some(arn)) if arn == "*" => {}
+                        _ => out.push(Py::str(&format!(
+                            "{}:{name}",
+                            service["prefix"].as_str().unwrap_or(prefix)
+                        ))),
+                    }
+                }
+                Py::list(out)
+            }
+            other => return unsupported(format!("builtin {other}")),
+        })
+    }
+
+    /// `get_action_data(service, action_name)`.
+    fn action_data(&self, service: &str, action: &str) -> R<Py> {
+        // get_service_prefix_data returns {} for an unknown service; the
+        // lookup that follows raises KeyError.
+        let Some(sd) = iam::service(service) else {
+            return exc("KeyError");
+        };
+        let names: Vec<&str> = if action == "*" {
+            sd["privileges"]
+                .as_object()
+                .map_or(Vec::new(), |m| m.keys().map(String::as_str).collect())
+        } else {
+            match iam::action_name(sd, action) {
+                Some(n) => vec![n],
+                None => return Ok(Py::Dict(Rc::new(RefCell::new(Vec::new())))),
+            }
+        };
+        let mut results = Vec::new();
+        for name in names {
+            results.extend(self.action_entries(sd, name));
+        }
+        Ok(Py::Dict(Rc::new(RefCell::new(vec![(
+            Py::str(service),
+            Py::list(results),
+        )]))))
+    }
+
+    /// `create_action_data_entries`: one entry per resource type, all
+    /// sharing one `dependent_actions` list, as in policy_sentry.
+    fn action_entries(&self, sd: &'static Json, name: &str) -> Vec<Py> {
+        let privilege = &sd["privileges"][name];
+        let dependent: List = Rc::new(RefCell::new(Vec::new()));
+        let mut out = Vec::new();
+        let empty = serde_json::Map::new();
+        for (rt, entry) in privilege["resource_types"].as_object().unwrap_or(&empty) {
+            if let Some(deps) = entry["dependent_actions"].as_array() {
+                dependent.borrow_mut().extend(deps.iter().map(json_to_py));
+            }
+            let arn = if rt.is_empty() {
+                "*".to_string()
+            } else {
+                sd["resources"]
+                    .get(rt)
+                    .and_then(|r| r.get("arn"))
+                    .and_then(Json::as_str)
+                    .unwrap_or("*")
+                    .to_string()
+            };
+            let pairs = vec![
+                (
+                    Py::str("action"),
+                    Py::str(&format!("{}:{name}", sd["prefix"].as_str().unwrap_or(""))),
+                ),
+                (Py::str("description"), Py::str("")),
+                (
+                    Py::str("access_level"),
+                    json_to_py(&privilege["access_level"]),
+                ),
+                (Py::str("api_documentation_link"), Py::str("")),
+                (Py::str("resource_arn_format"), Py::str(&arn)),
+                (Py::str("condition_keys"), Py::list(Vec::new())),
+                (Py::str("dependent_actions"), Py::List(dependent.clone())),
+            ];
+            out.push(Py::Dict(Rc::new(RefCell::new(pairs))));
+        }
+        out
+    }
+
+    /// `remove_actions_not_matching_access_level`.
+    fn matching_level(&self, actions: &[Py], level: &str) -> R<Vec<Py>> {
+        let mut actions = actions.to_vec();
+        if actions.len() == 1 && self.eq(&actions[0], &Py::str("*"))? {
+            actions = Vec::new();
+            for prefix in iam::prefixes() {
+                let Some(sd) = iam::service(prefix) else {
+                    continue;
+                };
+                for (name, p) in sd["privileges"].as_object().into_iter().flatten() {
+                    if p["access_level"] == level {
+                        actions.push(Py::str(&format!("{prefix}:{name}")));
+                    }
+                }
+            }
+        }
+        let mut out = Vec::new();
+        for a in actions {
+            let Py::Str(a) = self.concrete(&a)? else {
+                return exc("AttributeError");
+            };
+            let parts: Vec<&str> = a.split(':').collect();
+            let [prefix, action] = parts[..] else {
+                continue; // ValueError on unpacking: skipped
+            };
+            let Some(sd) = iam::service(&prefix.to_lowercase()) else {
+                continue;
+            };
+            if let Some(name) = iam::action_name(sd, action)
+                && sd["privileges"][name]["access_level"] == level
+            {
+                out.push(Py::str(&format!("{prefix}:{name}")));
+            }
+        }
+        Ok(out)
+    }
+
+    /// `expand(action)`.
+    fn expand(&self, action: &Py) -> R<Vec<Py>> {
+        let action = match self.concrete(action)? {
+            Py::List(l) => {
+                let items = l.borrow().clone();
+                let mut out = Vec::new();
+                for i in items {
+                    out.extend(self.expand(&i)?);
+                }
+                return Ok(out);
+            }
+            Py::Str(s) => s,
+            _ => return exc("TypeError"),
+        };
+        if !action.contains('*') {
+            return Ok(vec![Py::Str(action)]);
+        }
+        // A pure function of the bundled database: each wildcard is
+        // expanded once per thread, however many checks and resources ask.
+        thread_local! {
+            static EXPANDED: RefCell<Expansions> = RefCell::new(HashMap::new());
+        }
+        if let Some(hit) = EXPANDED.with(|m| m.borrow().get(&action).cloned()) {
+            return Ok(hit.iter().map(|a| Py::Str(a.clone())).collect());
+        }
+        let expanded: Vec<Rc<str>> = if &*action == "*" {
+            iam::all_actions(false)
+                .into_iter()
+                .map(|a| Rc::from(a.as_str()))
+                .collect()
+        } else {
+            // fnmatchcase(f"{prefix}:{name}".lower(), action.lower()), with
+            // the prefix (which names a service) matched literally.
+            let prefix = action.split(':').next().unwrap_or("");
+            let pattern = action.to_lowercase();
+            let name_glob = pattern.get(prefix.len() + 1..).unwrap_or("");
+            let regex = if name_glob.contains('[') {
+                Some(
+                    regex::Regex::new(&fnmatch_regex(name_glob))
+                        .map_err(|e| Flow::Unsupported(e.to_string()))?,
+                )
+            } else {
+                None
+            };
+            let found: Vec<Rc<str>> = if pattern.starts_with(&format!("{}:", prefix.to_lowercase()))
+            {
+                iam::action_names(prefix)
+                    .iter()
+                    .filter(|(_, lower)| match &regex {
+                        Some(re) => re.is_match(lower),
+                        None => glob(name_glob.as_bytes(), lower.as_bytes()),
+                    })
+                    .map(|(name, _)| Rc::from(format!("{prefix}:{name}").as_str()))
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            if found.is_empty() {
+                vec![action.clone()]
+            } else {
+                found
+            }
+        };
+        let expanded = Rc::new(expanded);
+        EXPANDED.with(|m| m.borrow_mut().insert(action, expanded.clone()));
+        Ok(expanded.iter().map(|a| Py::Str(a.clone())).collect())
+    }
+}
+
+/// Wildcard actions and what they expand to.
+type Expansions = HashMap<Rc<str>, Rc<Vec<Rc<str>>>>;
+
+/// `fnmatchcase` for a pattern of `*` and `?` (and literal characters).
+fn glob(p: &[u8], s: &[u8]) -> bool {
+    let (mut pi, mut si) = (0, 0);
+    let (mut star, mut mark) = (None, 0);
+    while si < s.len() {
+        if pi < p.len() && (p[pi] == b'?' || p[pi] == s[si]) {
+            pi += 1;
+            si += 1;
+        } else if pi < p.len() && p[pi] == b'*' {
+            star = Some(pi);
+            mark = si;
+            pi += 1;
+        } else if let Some(st) = star {
+            pi = st + 1;
+            mark += 1;
+            si = mark;
+        } else {
+            return false;
+        }
+    }
+    while pi < p.len() && p[pi] == b'*' {
+        pi += 1;
+    }
+    pi == p.len()
+}
+
+/// An element of bundled data: a container stays a view, a scalar is read.
+fn data_child(j: &'static Json) -> Py {
+    match j {
+        Json::Object(_) | Json::Array(_) => Py::Data(j),
+        other => json_to_py(other),
+    }
+}
+
+/// policy_sentry's IAM database, as the cloudsplaining checks read it.
+pub mod iam {
+    use std::sync::OnceLock;
+
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+
+    use serde_json::{Map, Value as Json, json};
+
+    /// The compact form bundled in `data/checkov/iam.ndjson` (written by
+    /// the importer from the pinned policy_sentry): a header line, then one
+    /// line per service, each parsed only when first read.
+    pub const COMPACT: &str = include_str!("../data/checkov/iam.ndjson");
+
+    /// The compact database: the header, and each service's line with its
+    /// compact and full (policy_sentry-shaped) forms, built on first use.
+    struct Compact {
+        header: Json,
+        prefixes: Vec<&'static str>,
+        services: std::collections::HashMap<&'static str, Service>,
+    }
+
+    struct Service {
+        line: &'static str,
+        compact: OnceLock<Json>,
+        full: OnceLock<Json>,
+    }
+
+    fn compact() -> Result<&'static Compact, String> {
+        static COMPACT_DB: OnceLock<Result<Compact, String>> = OnceLock::new();
+        COMPACT_DB
+            .get_or_init(|| {
+                let mut lines = COMPACT.lines();
+                let header: Json = serde_json::from_str(lines.next().ok_or("iam.ndjson: empty")?)
+                    .map_err(|e| format!("iam.ndjson: {e}"))?;
+                let mut prefixes = Vec::new();
+                let mut services = std::collections::HashMap::new();
+                for line in lines {
+                    // {"prefix":"<p>","service":...}: the prefix without a parse.
+                    let rest = line
+                        .strip_prefix("{\"prefix\":\"")
+                        .ok_or("iam.ndjson: a line without its prefix first")?;
+                    let prefix = &rest[..rest.find('"').ok_or("iam.ndjson: prefix")?];
+                    prefixes.push(prefix);
+                    services.insert(
+                        prefix,
+                        Service {
+                            line,
+                            compact: OnceLock::new(),
+                            full: OnceLock::new(),
+                        },
+                    );
+                }
+                Ok(Compact {
+                    header: header["header"].clone(),
+                    prefixes,
+                    services,
+                })
+            })
+            .as_ref()
+            .map_err(Clone::clone)
+    }
+
+    /// A service's compact entry (`prefix`, `actions`, `resources`).
+    fn compact_service(prefix: &str) -> Option<&'static Json> {
+        let s = compact().ok()?.services.get(prefix)?;
+        Some(s.compact.get_or_init(|| {
+            serde_json::from_str::<Json>(s.line)
+                .map(|mut v| v["service"].take())
+                .unwrap_or(Json::Null)
+        }))
+    }
+
+    /// `policy_sentry.shared.iam_data.iam_definition`, built (once) for
+    /// Python that reads it directly; the native queries do not need it.
+    pub fn definition() -> Result<&'static Json, String> {
+        static DEFINITION: OnceLock<Result<Json, String>> = OnceLock::new();
+        DEFINITION
+            .get_or_init(|| {
+                let c = compact()?;
+                let mut out = Map::new();
+                let key = c.header["schema_key"]
+                    .as_str()
+                    .ok_or("iam.ndjson: schema_key")?;
+                out.insert(key.to_string(), c.header["schema"].clone());
+                for prefix in prefixes() {
+                    out.insert(
+                        prefix.to_string(),
+                        raw_service(prefix).cloned().unwrap_or(Json::Null),
+                    );
+                }
+                Ok(Json::Object(out))
+            })
+            .as_ref()
+            .map_err(Clone::clone)
+    }
+
+    /// Every service prefix.
+    pub fn prefixes() -> impl Iterator<Item = &'static str> {
+        compact()
+            .ok()
+            .into_iter()
+            .flat_map(|c| c.prefixes.iter().copied())
+    }
+
+    /// A service in policy_sentry's shape, built on first use.
+    fn raw_service(prefix: &str) -> Option<&'static Json> {
+        let s = compact().ok()?.services.get(prefix)?;
+        let service = compact_service(prefix)?;
+        Some(s.full.get_or_init(|| build_service(service)))
+    }
+
+    /// `get_service_prefix_data`: the service, or `servicecatalog` for the
+    /// `catalog` ARNs of its resource types; `None` where it returns `{}`.
+    pub fn service(prefix: &str) -> Option<&'static Json> {
+        raw_service(prefix).or_else(|| {
+            (prefix == "catalog")
+                .then(|| raw_service("servicecatalog"))
+                .flatten()
+        })
+    }
+
+    /// A service's action names, as written and lowercased.
+    type Names = &'static [(String, String)];
+
+    /// A service's action names, as written and lowercased, built once.
+    pub fn action_names(prefix: &str) -> &'static [(String, String)] {
+        static NAMES: OnceLock<Mutex<HashMap<String, Names>>> = OnceLock::new();
+        let names = NAMES.get_or_init(Default::default);
+        let mut names = names.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(found) = names.get(prefix) {
+            return found;
+        }
+        let list: Vec<(String, String)> = compact_service(prefix)
+            .and_then(|s| s["actions"].as_object())
+            .into_iter()
+            .flatten()
+            .map(|(a, _)| (a.clone(), a.to_lowercase()))
+            .collect();
+        let leaked: &'static [(String, String)] = Box::leak(list.into_boxed_slice());
+        names.insert(prefix.to_string(), leaked);
+        leaked
+    }
+
+    /// `get_all_actions(lowercase)`.
+    pub fn all_actions(lowercase: bool) -> Vec<String> {
+        prefixes()
+            .flat_map(|p| actions_for_service(p, lowercase))
+            .collect()
+    }
+
+    /// `get_actions_for_service(prefix, lowercase)`, from the compact data.
+    pub fn actions_for_service(prefix: &str, lowercase: bool) -> Vec<String> {
+        let Some(service) = compact_service(prefix).or_else(|| {
+            (prefix == "catalog")
+                .then(|| compact_service("servicecatalog"))
+                .flatten()
+        }) else {
+            return Vec::new();
+        };
+        service["actions"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .map(|(a, _)| {
+                if lowercase {
+                    format!("{prefix}:{}", a.to_lowercase())
+                } else {
+                    format!("{prefix}:{a}")
+                }
+            })
+            .collect()
+    }
+
+    /// The action's name as the database spells it (case-insensitive).
+    pub fn action_name(service: &'static Json, action: &str) -> Option<&'static str> {
+        service["privileges_lower_name"]
+            .get(action.to_lowercase())?
+            .as_str()
+    }
+
+    /// The ARN format of each of an action's entries, in order.
+    pub fn entries(service: &'static Json, name: &str) -> Vec<String> {
+        service["privileges"][name]["resource_types"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .map(|(rt, _)| {
+                if rt.is_empty() {
+                    "*".to_string()
+                } else {
+                    service["resources"]
+                        .get(rt)
+                        .and_then(|r| r.get("arn"))
+                        .and_then(Json::as_str)
+                        .unwrap_or("*")
+                        .to_string()
+                }
+            })
+            .collect()
+    }
+
+    fn build_service(service: &Json) -> Json {
+        let mut privileges = Map::new();
+        let mut privileges_lower = Map::new();
+        for (action, entry) in service["actions"].as_object().into_iter().flatten() {
+            let mut resource_types = Map::new();
+            let mut resource_types_lower = Map::new();
+            for (rt, deps) in entry[1].as_object().into_iter().flatten() {
+                resource_types.insert(
+                    rt.clone(),
+                    json!({"resource_type": rt, "required": false,
+                           "condition_keys": [], "dependent_actions": deps}),
+                );
+                resource_types_lower.insert(rt.to_lowercase(), Json::String(rt.clone()));
+            }
+            privileges.insert(
+                action.clone(),
+                json!({
+                    "privilege": action, "access_level": entry[0], "description": "",
+                    "resource_types": resource_types,
+                    "resource_types_lower_name": resource_types_lower,
+                    "api_documentation_link": "",
+                }),
+            );
+            privileges_lower.insert(action.to_lowercase(), Json::String(action.clone()));
+        }
+        let mut resources = Map::new();
+        let mut resources_lower = Map::new();
+        for (name, arn) in service["resources"].as_object().into_iter().flatten() {
+            resources.insert(
+                name.clone(),
+                json!({"resource": name, "arn": arn, "condition_keys": []}),
+            );
+            resources_lower.insert(name.to_lowercase(), Json::String(name.clone()));
+        }
+        json!({
+            "prefix": service["prefix"], "service_name": "", "privileges": privileges,
+            "privileges_lower_name": privileges_lower, "resources": resources,
+            "resources_lower_name": resources_lower, "conditions": {},
+        })
+    }
+}
+
 /// A parsed JSON document as Python's `json.loads` returns it.
 fn json_to_py(j: &Json) -> Py {
     match j {
@@ -3326,7 +4247,17 @@ impl Converter {
 pub fn evaluate(program: &Program, resource: &Resource) -> Verdict {
     let conf = crate::checkov::resource_configuration(resource);
     let mut runs = 0;
-    run(program, resource, conf, &mut HashMap::new(), &mut runs)
+    let t = std::time::Instant::now();
+    let v = run(program, resource, conf, &mut HashMap::new(), &mut runs);
+    if debug() == "time" {
+        eprintln!(
+            "TIME {} {} {}us",
+            program.entry,
+            resource.address,
+            t.elapsed().as_micros()
+        );
+    }
+    v
 }
 
 fn run(
@@ -3355,15 +4286,39 @@ fn run(
         .filter_map(|(k, v)| Py::from_const(v).ok().map(|p| (k.clone(), p)))
         .collect();
     self_attrs.insert("entity_type".into(), Py::str(&resource.ty));
+    // Mutable class attributes (Checkov's class-level caches, such as the
+    // cloudsplaining checks' policy documents) are shared by every check of
+    // this resource, as in Checkov's process; a forked run starts afresh.
+    thread_local! {
+        static SHARED: RefCell<(u64, HashMap<String, Py>)> = RefCell::new((u64::MAX, HashMap::new()));
+    }
+    let shared = choices.is_empty();
+    let statics = if shared {
+        SHARED.with(|s| {
+            let s = s.borrow();
+            if s.0 == resource.uid {
+                s.1.clone()
+            } else {
+                HashMap::new()
+            }
+        })
+    } else {
+        HashMap::new()
+    };
     let mut interp = Interp {
         program,
         resource,
         self_attrs,
         choices: choices.clone(),
-        steps: 0,
+        statics,
+        steps: std::cell::Cell::new(0),
     };
     let outcome = interp.call_function(&program.entry, vec![py_conf], Vec::new());
-    if std::env::var("OXTF_DEBUG_PYTHON").as_deref() == Ok("2") {
+    if shared && !matches!(outcome, Err(Flow::Fork(..))) {
+        let statics = std::mem::take(&mut interp.statics);
+        SHARED.with(|s| *s.borrow_mut() = (resource.uid, statics));
+    }
+    if debug() == "2" {
         let what = match &outcome {
             Ok(Py::Result(r)) => r.to_string(),
             Ok(other) => format!("returned {}", other.type_name()),
@@ -3404,7 +4359,7 @@ fn run(
             truth::combine_one_of(verdicts, tainted)
         }
         Err(Flow::Unsupported(why)) => {
-            if std::env::var_os("OXTF_DEBUG_PYTHON").is_some() {
+            if !debug().is_empty() {
                 eprintln!(
                     "checkov_python {}: {}: {why}",
                     program.entry, resource.address
@@ -3413,7 +4368,7 @@ fn run(
             Verdict::new(Truth::Unknown, None)
         }
         Err(Flow::Exc(name)) => {
-            if std::env::var_os("OXTF_DEBUG_PYTHON").is_some() {
+            if !debug().is_empty() {
                 eprintln!(
                     "checkov_python {}: {}: raised {name}",
                     program.entry, resource.address

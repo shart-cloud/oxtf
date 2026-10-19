@@ -25,5 +25,7 @@ fn main() {
     std::fs::write(out.join("rules.json"), generated.rules_json).unwrap();
     std::fs::write(out.join("manifest.json"), generated.manifest_json).unwrap();
     std::fs::copy(pack.join("LICENSE.checkov"), out.join("LICENSE.checkov")).unwrap();
+    // policy_sentry's IAM database, for the cloudsplaining checks.
+    std::fs::copy(pack.join("iam.ndjson"), out.join("iam.ndjson")).unwrap();
     println!("wrote {}", out.display());
 }

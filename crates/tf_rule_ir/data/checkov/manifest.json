@@ -2069,41 +2069,37 @@
       "id": "CKV_AWS_286",
       "kind": "resource",
       "name": "Ensure IAM policies does not allow privilege escalation",
-      "reason": "custom Python scan_resource_conf: reads instance state: self.cache_key",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/IAMPrivilegeEscalation.py",
       "source_sha256": "516bb352c483252abb7c78783cbb1598a8df7f81c833badd8a2e4e58669b035e",
-      "status": "unsupported"
+      "status": "translated"
     },
     {
       "id": "CKV_AWS_287",
       "kind": "resource",
       "name": "Ensure IAM policies does not allow credentials exposure",
-      "reason": "custom Python scan_resource_conf: reads instance state: self.cache_key",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/IAMCredentialsExposure.py",
       "source_sha256": "ad3a1256d5303268a3079187d64b15bd5c3e07fed89121b8699df9a3de96c338",
-      "status": "unsupported"
+      "status": "translated"
     },
     {
       "id": "CKV_AWS_288",
       "kind": "resource",
       "name": "Ensure IAM policies does not allow data exfiltration",
-      "reason": "custom Python scan_resource_conf: reads instance state: self.cache_key",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/IAMDataExfiltration.py",
       "source_sha256": "f0a7a4c45b27ad5d520186ef64fc9e4925e2d486c28e80fb02463333dde660e7",
-      "status": "unsupported"
+      "status": "translated"
     },
     {
       "id": "CKV_AWS_289",
       "kind": "resource",
       "name": "Ensure IAM policies does not allow permissions management / resource exposure without constraints",
-      "reason": "custom Python scan_resource_conf: reads instance state: self.cache_key",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/IAMPermissionsManagement.py",
       "source_sha256": "4bff0b2e94b2eac319436dccd1eca3489c0e87589ad78b54e11948be7a0188cd",
-      "status": "unsupported"
+      "status": "translated"
     },
     {
       "id": "CKV_AWS_29",
@@ -2118,11 +2114,10 @@
       "id": "CKV_AWS_290",
       "kind": "resource",
       "name": "Ensure IAM policies does not allow write access without constraints",
-      "reason": "custom Python scan_resource_conf: reads instance state: self.cache_key",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/IAMWriteAccess.py",
       "source_sha256": "dc263b3786b4b0004c6a3c0c7110b4b6941d9a05df23f40c79cfe30efa76499a",
-      "status": "unsupported"
+      "status": "translated"
     },
     {
       "id": "CKV_AWS_291",
@@ -2762,11 +2757,10 @@
       "id": "CKV_AWS_355",
       "kind": "resource",
       "name": "Ensure no IAM policies documents allow \"*\" as a statement's resource for restrictable actions",
-      "reason": "custom Python scan_resource_conf: reads instance state: self.cache_key",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/IAMStarResourcePolicyDocument.py",
       "source_sha256": "4540421b935d9338226223254ecafc1657fb9f2be83966bb42b2850bc23039b3",
-      "status": "unsupported"
+      "status": "translated"
     },
     {
       "id": "CKV_AWS_357",
@@ -9516,17 +9510,17 @@
     }
   ],
   "ir_version": 4,
-  "rules": 1073,
+  "rules": 1079,
   "schema": 1,
   "semantics": "configured values; Checkov missing-value policy; oxtf abstract-value lattice",
   "source": "checkov",
   "source_version": "3.2.328",
   "translated": {
     "graph": 186,
-    "resource": 888
+    "resource": 894
   },
   "unsupported": {
     "graph": 0,
-    "resource": 22
+    "resource": 16
   }
 }

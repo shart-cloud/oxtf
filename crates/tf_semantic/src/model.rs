@@ -105,6 +105,9 @@ pub struct Resource {
     /// Views of `body` that rule engines derive, computed once on first use
     /// and shared by every rule that judges this instance.
     pub derived: Derived,
+    /// Unique per instance in this process (a cache key that, unlike an
+    /// address in memory, is never reused).
+    pub uid: u64,
 }
 
 /// Lazily computed views of a resource's body, by slot. A slot is owned
@@ -153,6 +156,10 @@ impl Resource {
             dependencies: Vec::new(),
             dependencies_complete: true,
             derived: Derived::default(),
+            uid: {
+                static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            },
         }
     }
 
