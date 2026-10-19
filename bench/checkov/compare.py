@@ -99,7 +99,9 @@ def main():
     # Graph v3 has its own graph_compare.py harness. Isolate resource clauses
     # here, including IDs shared by both kinds, so these cases test the original
     # resource predicate rather than the merged catalog rule.
-    rules = [{**r, "clauses": [c for c in r["clauses"] if c["condition"]["op"] != "checkov_graph"]} for r in rules]
+    # Python checks (checkov_python) have their own harness, python_compare.py.
+    rules = [{**r, "clauses": [c for c in r["clauses"] if c["condition"]["op"] not in ("checkov_graph", "checkov_python")]}
+             for r in rules]
     rules = [r for r in rules if r["clauses"]]
     checks = {c.id: c for registry in (resource_registry.checks, resource_registry.wildcard_checks)
               for group in registry.values() for c in group}
