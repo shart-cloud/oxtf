@@ -10,7 +10,7 @@ def test_scan_fixture_findings_fields():
     f = r.findings[0]
     assert f.rule == "aws-sg-open-ssh"
     assert f.level == "high"
-    assert f.severity == "definite"
+    assert f.certainty == "definite"
     assert f.address == "aws_security_group.admin"
     assert f.resource_type == "aws_security_group"
     assert f.module == ""
@@ -26,19 +26,19 @@ def test_scan_fixture_findings_fields():
         ("attribute", "main.tf", 6),
     ]
     assert "provenance step 1/4" in f.render()
-    assert '"severity":"definite"' in f.to_json().replace(" ", "")
+    assert '"certainty":"definite"' in f.to_json().replace(" ", "")
 
 
-def test_conditional_severity():
+def test_conditional_certainty():
     r = tfscan.scan(SSH_FIXTURES / "conditional_unconstrained_variable", bundled=False)
     (f,) = r.findings
-    assert f.severity == "conditional"
+    assert f.certainty == "conditional"
     assert "var.ssh_cidr" in f.message
 
 
 def test_recursive_all_fixtures_match_expect():
     r = tfscan.scan(FIXTURES, recursive=True, bundled=False)
-    got = {(f.rule, f.address, f.severity, f.root.rsplit("/", 1)[1]) for f in r.findings}
+    got = {(f.rule, f.address, f.certainty, f.root.rsplit("/", 1)[1]) for f in r.findings}
     expected = set()
     for case in FIXTURES.glob("*/*"):
         if not case.is_dir():
@@ -141,7 +141,7 @@ def test_scan_plan_maps_to_source():
     src = FIXTURES / "aws-s3-public-access-block" / "fail_permissive_block"
     r = tfscan.scan_plan(plan, source=src, bundled=False)
     (f,) = r.findings
-    assert (f.address, f.severity) == ("aws_s3_bucket.data", "definite")
+    assert (f.address, f.certainty) == ("aws_s3_bucket.data", "definite")
     assert f.file.endswith("fail_permissive_block/main.tf") and f.line == 1
     assert r.stats["roots"] == 1
     assert len(r.resources) >= 2
@@ -154,7 +154,7 @@ def test_foreign_policy_and_rule_errors():
     policy = rego / "foreign" / "conftest_hcl2_deny.rego"
     r = tfscan.scan(rego / "foreign", builtin=False, policies=[policy], policy_shape="hcl")
     assert {f.rule for f in r.findings} == {"rego:conftest_hcl2_deny"}
-    assert sorted(f.severity for f in r.findings) == ["conditional", "definite", "definite", "indeterminate"]
+    assert sorted(f.certainty for f in r.findings) == ["conditional", "definite", "definite", "indeterminate"]
     assert r.rule_errors == []
     broken = rego / "runtime_error" / "protocol_number.rego"
     r = tfscan.scan(rego / "foreign_runtime_error", builtin=False, policies=[broken], policy_shape="hcl")
@@ -211,7 +211,7 @@ def test_overlay_shadows_disk_and_verifies_a_fix():
     # A module that exists only in memory.
     mem = "/nonexistent/oxtf-py-overlay"
     r = tfscan.scan(mem, overlay={f"{mem}/main.tf": 'resource "aws_db_instance" "x" { storage_encrypted = false }'}, bundled=False)
-    assert [(g.address, g.severity) for g in r.findings] == [("aws_db_instance.x", "definite")]
+    assert [(g.address, g.certainty) for g in r.findings] == [("aws_db_instance.x", "definite")]
     assert r.findings[0].file == f"{mem}/main.tf"
 
 

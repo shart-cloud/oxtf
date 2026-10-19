@@ -50,13 +50,13 @@ fn existence_and_module_tfvars_provenance() {
     assert!(
         findings
             .iter()
-            .any(|f| f["resource"]["address"] == "module.db.aws_db_instance.db")
+            .any(|f| f["subject"]["address"] == "module.db.aws_db_instance.db")
     );
     assert!(actual["findings"].to_string().contains("terraform.tfvars"));
     assert_eq!(
         findings
             .iter()
-            .filter(|f| f["severity"] == "conditional")
+            .filter(|f| f["certainty"] == "conditional")
             .count(),
         2
     );
@@ -70,13 +70,13 @@ fn gcp_defaults_uncertainty_and_provenance() {
     assert!(
         findings
             .iter()
-            .any(|f| f["resource"]["address"] == "module.bucket.google_storage_bucket.bucket")
+            .any(|f| f["subject"]["address"] == "module.bucket.google_storage_bucket.bucket")
     );
     assert!(actual["findings"].to_string().contains("terraform.tfvars"));
     assert_eq!(
         findings
             .iter()
-            .filter(|f| f["severity"] == "conditional")
+            .filter(|f| f["certainty"] == "conditional")
             .count(),
         3
     );
@@ -101,8 +101,8 @@ fn unmodified_conftest_policy_yields_each_certainty_class() {
         .iter()
         .map(|f| {
             (
-                f["resource"]["address"].as_str().unwrap().to_string(),
-                f["severity"].as_str().unwrap().to_string(),
+                f["subject"]["address"].as_str().unwrap().to_string(),
+                f["certainty"].as_str().unwrap().to_string(),
                 f["message"].as_str().unwrap().to_string(),
             )
         })
@@ -111,7 +111,7 @@ fn unmodified_conftest_policy_yields_each_certainty_class() {
     assert!(
         findings
             .iter()
-            .all(|f| f["rule"]["id"] == "rego:conftest_hcl2_deny")
+            .all(|f| f["rule"] == "rego:conftest_hcl2_deny")
     );
     // hcl2json renders every block body as a list, so the policy's
     // `not disk.encryption_settings.enabled` is true for any disk that has the
@@ -150,7 +150,7 @@ fn unmodified_conftest_policy_yields_each_certainty_class() {
     // The conditional finding points at the variable through provenance.
     let cond = findings
         .iter()
-        .find(|f| f["severity"] == "conditional")
+        .find(|f| f["certainty"] == "conditional")
         .unwrap();
     assert!(
         cond["provenance"].to_string().contains("variable"),
@@ -180,7 +180,11 @@ fn runtime_error_in_a_foreign_policy_is_a_rule_error() {
         "{}",
         errors[0].message
     );
-    assert!(errors[0].message.contains("to_number"), "{}", errors[0].message);
+    assert!(
+        errors[0].message.contains("to_number"),
+        "{}",
+        errors[0].message
+    );
     assert_eq!(out.record().rule_errors.len(), 1);
 }
 
@@ -195,8 +199,17 @@ fn go_quoted_strings_in_a_foreign_policy_match_opa() {
         Shape::Hcl,
     ))
     .unwrap();
-    assert!(out.result.rule_errors.is_empty(), "{:?}", out.result.rule_errors);
-    let messages: Vec<_> = out.result.findings.iter().map(|f| f.message.as_str()).collect();
+    assert!(
+        out.result.rule_errors.is_empty(),
+        "{:?}",
+        out.result.rule_errors
+    );
+    let messages: Vec<_> = out
+        .result
+        .findings
+        .iter()
+        .map(|f| f.message.as_str())
+        .collect();
     assert!(
         messages.contains(
             &r#"AWS resource: "aws_security_group_rule" named "open" is missing required tags: {"environment", "owner"}"#
@@ -300,10 +313,10 @@ fn ported_policies_use_metadata_module_input_and_paths() {
         .iter()
         .map(|f| {
             (
-                f["rule"]["id"].as_str().unwrap().into(),
-                f["rule"]["level"].as_str().unwrap().into(),
-                f["resource"]["address"].as_str().unwrap().into(),
-                f["severity"].as_str().unwrap().into(),
+                f["rule"].as_str().unwrap().into(),
+                f["level"].as_str().unwrap().into(),
+                f["subject"]["address"].as_str().unwrap().into(),
+                f["certainty"].as_str().unwrap().into(),
                 f["location"]["line"].clone(),
             )
         })
@@ -331,8 +344,8 @@ fn ported_policies_use_metadata_module_input_and_paths() {
     let tainted = run(ports("fixtures/rego/ports_tf/tainted", Shape::Plan));
     let f = &tainted["findings"][0];
     assert_eq!(tainted["findings"].as_array().unwrap().len(), 1);
-    assert_eq!(f["resource"]["address"], "aws_s3_bucket.named");
-    assert_eq!(f["severity"], "conditional");
+    assert_eq!(f["subject"]["address"], "aws_s3_bucket.named");
+    assert_eq!(f["certainty"], "conditional");
     assert!(f["message"].as_str().unwrap().contains("var.name"), "{f}");
     assert_eq!(f["hidden"][0]["path"], "aws_s3_bucket.named.bucket");
     // Module input is defined for the plan shape only.
@@ -361,10 +374,10 @@ fn conftest_conventions_files_ablation_and_exceptions() {
         .iter()
         .map(|f| {
             (
-                f["rule"]["id"].as_str().unwrap().into(),
-                f["rule"]["level"].as_str().unwrap().into(),
+                f["rule"].as_str().unwrap().into(),
+                f["level"].as_str().unwrap().into(),
                 f["subject"].clone(),
-                f["severity"].as_str().unwrap().into(),
+                f["certainty"].as_str().unwrap().into(),
             )
         })
         .collect();
@@ -388,7 +401,16 @@ fn conftest_conventions_files_ablation_and_exceptions() {
             (
                 "rego:main.deny_unversioned".to_string(),
                 "medium".to_string(),
-                serde_json::json!({"kind": "resource", "address": "aws_s3_bucket.a"}),
+                serde_json::json!({
+                    "kind": "resource",
+                    "address": "aws_s3_bucket.a",
+                    "base_address": "aws_s3_bucket.a",
+                    "module": "",
+                    "mode": "managed",
+                    "type": "aws_s3_bucket",
+                    "name": "a",
+                    "key": null,
+                }),
                 "definite".to_string()
             ),
             (

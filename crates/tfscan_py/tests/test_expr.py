@@ -9,7 +9,7 @@ from tfscan.examples.sg_open_ssh import CALLBACK_RULE, EXPR_RULE
 
 
 def keys(r, msg=False):
-    return {(f.address, f.root, f.severity) + ((f.message,) if msg else ()) for f in r.findings}
+    return {(f.address, f.root, f.certainty) + ((f.message,) if msg else ()) for f in r.findings}
 
 
 def triple(path, recursive=False):
@@ -34,7 +34,7 @@ def test_expression_rule_equals_builtin_generated(generated):
     d = generated(120, 7)
     b, e, c = triple(d, recursive=True)
     assert len(b.findings) > 50
-    sev = {f.severity for f in b.findings}
+    sev = {f.certainty for f in b.findings}
     assert sev == {"definite", "conditional"}
     assert keys(e, msg=True) == keys(b, msg=True)
     assert keys(c, msg=True) == keys(b, msg=True)
@@ -104,7 +104,7 @@ resource "aws_s3_bucket" "unknown" { bucket = aws_vpc.v.id }
     def run(cond, **kw):
         r = rule("t", ["aws_s3_bucket"]).where_(cond).message("{address} {witness|-}")
         res = tfscan.scan(d, builtin=False, rules=[r], **kw)
-        return {f.address.split(".")[1]: f.severity for f in res.findings}
+        return {f.address.split(".")[1]: f.certainty for f in res.findings}
 
     assert run(col("bucket") == "logs") == {"known": "definite", "tainted": "conditional"}
     assert run(col("bucket") != "logs") == {"tainted": "conditional", "absent": "definite"}

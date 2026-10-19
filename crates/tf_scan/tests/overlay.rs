@@ -26,7 +26,12 @@ fn overlay_verifies_a_fix_without_writing() {
     let dir = repo().join("fixtures/rules/aws-rds-unencrypted/fail_explicit_false");
     let before = scan(ScanRequest::dirs(vec![dir.clone()], false)).unwrap();
     let f = &before.result.findings[0];
-    let fp = fingerprint(&f.rule, &f.address, f.attribute.as_deref());
+    let fp = fingerprint(
+        &f.rule,
+        "fixtures/rules/aws-rds-unencrypted/fail_explicit_false/main.tf",
+        "aws_db_instance.db",
+        f.attribute.as_deref(),
+    );
     assert_eq!(before.record().findings[0].fingerprint, fp);
 
     let mut req = ScanRequest::dirs(vec![dir.clone()], false);
@@ -40,6 +45,28 @@ fn overlay_verifies_a_fix_without_writing() {
             .unwrap()
             .contains("= false")
     );
+}
+
+/// A fingerprint names the file relative to its repository, so scanning
+/// the same directory spelled another way (or from elsewhere) keeps it.
+#[test]
+fn fingerprints_do_not_depend_on_how_the_path_is_spelled() {
+    let canonical = repo()
+        .canonicalize()
+        .unwrap()
+        .join("fixtures/rules/aws-rds-unencrypted/fail_explicit_false");
+    let dotted = repo().join("crates/../fixtures/rules/aws-rds-unencrypted/fail_explicit_false");
+    let fps = |dir: PathBuf| -> Vec<String> {
+        let out = scan(ScanRequest::dirs(vec![dir], false)).unwrap();
+        out.record()
+            .findings
+            .into_iter()
+            .map(|f| f.fingerprint)
+            .collect()
+    };
+    let a = fps(canonical);
+    assert!(!a.is_empty());
+    assert_eq!(a, fps(dotted));
 }
 
 /// A module that exists only in memory: the directory need not exist.
@@ -62,7 +89,7 @@ fn overlay_only_module_in_a_directory_that_does_not_exist() {
     let rec = out.record();
     assert_eq!(rec.findings.len(), 1, "{:?}", rec.diagnostics);
     let f = &rec.findings[0];
-    assert_eq!(f.severity, tf_linter::Severity::Definite);
+    assert_eq!(f.certainty, tf_linter::Certainty::Definite);
     assert_eq!(f.location.file, dir.join("main.tf").display().to_string());
     assert!(
         f.provenance

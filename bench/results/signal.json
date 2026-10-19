@@ -1,0 +1,18 @@
+{
+  "schema": 3,
+  "findings": 553,
+  "occurrences": 1535,
+  "rules_firing": 190,
+  "json_bytes": 1148883,
+  "json_bytes_per_finding": 2078,
+  "ndjson_bytes": 231225,
+  "ndjson_bytes_per_finding": 418,
+  "with_attribute_pct": 10.3,
+  "with_fix_hint_pct": 0.2,
+  "header_only_pct": 89.7,
+  "not_medium_pct": 0.2,
+  "levels": {
+    "high": 1,
+    "medium": 552
+  }
+}

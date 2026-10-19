@@ -1,10 +1,10 @@
-//! The finding record: its field set is the contract (schema 2), it survives
+//! The finding record: its field set is the contract (schema 3), it survives
 //! a JSON round trip, and fix hints say what the plan promised.
 
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use tf_linter::record::{FindingRecord, SCHEMA, ScanRecord};
+use tf_linter::record::{FindingRecord, SCHEMA, ScanRecord, SubjectRecord};
 use tf_linter::{ScanOptions, scan_dir};
 
 fn scan(case: &str) -> ScanRecord {
@@ -21,8 +21,8 @@ fn keys(v: &serde_json::Value) -> Vec<String> {
 /// Adding, removing or renaming a field here is a schema change: bump
 /// `SCHEMA` and `docs/FINDING_SCHEMA.md` together with this list.
 #[test]
-fn schema_2_field_set_is_pinned() {
-    assert_eq!(SCHEMA, 2);
+fn schema_3_field_set_is_pinned() {
+    assert_eq!(SCHEMA, 3);
     let r = scan("aws-rds-unencrypted/fail_absent_uses_default");
     let json = serde_json::to_value(&r).unwrap();
     assert_eq!(
@@ -31,6 +31,7 @@ fn schema_2_field_set_is_pinned() {
             "diagnostics",
             "findings",
             "rule_errors",
+            "rules",
             "schema",
             "stats",
             "suppressed"
@@ -47,6 +48,7 @@ fn schema_2_field_set_is_pinned() {
             "findings_by_rule",
             "indeterminate",
             "module_instances",
+            "occurrences",
             "resources",
             "roots"
         ]
@@ -56,53 +58,53 @@ fn schema_2_field_set_is_pinned() {
         keys(f),
         [
             "attribute",
+            "certainty",
             "configured",
             "effective",
             "fingerprint",
             "fix_hint",
             "hidden",
+            "level",
             "location",
             "message",
+            "occurrences",
             "provenance",
-            "resource",
             "root",
             "rule",
-            "schema",
-            "severity",
             "subject"
         ]
     );
+    assert_eq!(f["rule"], "aws-rds-unencrypted");
     assert_eq!(
-        f["subject"],
-        serde_json::json!({"kind": "resource", "address": "aws_db_instance.db"})
-    );
-    assert_eq!(
-        keys(&f["rule"]),
+        keys(&json["rules"]["aws-rds-unencrypted"]),
         [
+            "aliases",
             "category",
             "description",
             "guideline",
-            "id",
             "level",
             "source"
         ]
     );
     assert_eq!(
-        f["rule"]["source"],
+        json["rules"]["aws-rds-unencrypted"]["source"],
         serde_json::json!({"engine": "builtin", "file": null, "line": null})
     );
     assert_eq!(
-        keys(&f["resource"]),
+        keys(&f["subject"]),
         [
             "address",
             "base_address",
             "key",
+            "kind",
             "mode",
             "module",
             "name",
             "type"
         ]
     );
+    assert_eq!(f["subject"]["kind"], "resource");
+    assert_eq!(keys(&f["occurrences"][0]), ["address", "certainty", "root"]);
     assert_eq!(
         keys(&f["location"]),
         ["column", "end", "file", "line", "start"]
@@ -152,11 +154,21 @@ fn fingerprints_are_unique_within_a_scan_and_ignore_presentation() {
     assert_eq!(
         f.fingerprint,
         tf_linter::record::fingerprint(
-            &f.rule.id,
-            &f.resource.as_ref().unwrap().address,
+            &f.rule,
+            "fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local/main.tf",
+            "aws_security_group.admin",
             f.attribute.as_deref()
-        )
+        ),
+        "{:?}",
+        f.subject
     );
+}
+
+fn address(f: &FindingRecord) -> &str {
+    match &f.subject {
+        SubjectRecord::Resource(r) => &r.address,
+        SubjectRecord::File { file, .. } => file,
+    }
 }
 
 #[test]
@@ -170,10 +182,7 @@ fn fix_hints_name_the_edit_and_its_site() {
     );
     assert_eq!(h.value, serde_json::json!(true));
     assert!(h.site.is_none());
-    assert_eq!(
-        h.resource.address,
-        r.findings[0].resource.as_ref().unwrap().address
-    );
+    assert_eq!(h.resource.address, address(&r.findings[0]));
     assert!(r.findings[0].configured.is_none());
     assert_eq!(
         r.findings[0].effective.as_ref().unwrap().value,
@@ -195,7 +204,7 @@ fn fix_hints_name_the_edit_and_its_site() {
     let f = &r.findings[0];
     let h = f.fix_hint.as_ref().unwrap();
     assert_eq!(h.resource.ty, "aws_s3_bucket_public_access_block");
-    assert_ne!(h.resource.address, f.resource.as_ref().unwrap().address);
+    assert_ne!(h.resource.address, address(f));
     assert!(
         f.attribute.is_none(),
         "the deciding value is not on the bucket"

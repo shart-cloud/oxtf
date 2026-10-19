@@ -19,7 +19,8 @@ fn scan_prints_provenance_chain() {
         .output()
         .unwrap();
     let s = String::from_utf8(out.stdout).unwrap();
-    assert!(out.status.success());
+    // A definite finding fails the default --fail-on.
+    assert_eq!(out.status.code(), Some(1));
     assert!(s.contains("aws-sg-open-ssh [definite]"), "{s}");
     assert!(
         s.contains("aws_security_group.admin: ingress allows SSH (port 22) from 0.0.0.0/0"),
@@ -54,7 +55,7 @@ fn scan_json_and_recursive() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|f| f["severity"].as_str().unwrap())
+        .map(|f| f["certainty"].as_str().unwrap())
         .collect();
     assert_eq!(sev.iter().filter(|s| **s == "definite").count(), 3);
     assert_eq!(sev.iter().filter(|s| **s == "conditional").count(), 2);
@@ -95,15 +96,16 @@ fn current_directory_scan_loads_terraform_tfvars() {
             cmd.arg(path);
         }
         let out = cmd.output().unwrap();
-        assert!(
-            out.status.success(),
+        assert_eq!(
+            out.status.code(),
+            Some(1),
             "{}",
             String::from_utf8_lossy(&out.stderr)
         );
         let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
         assert_eq!(v["stats"]["files"], 2, "{path:?}: {v}");
         assert_eq!(v["findings"].as_array().unwrap().len(), 1, "{path:?}: {v}");
-        assert_eq!(v["findings"][0]["severity"], "definite");
+        assert_eq!(v["findings"][0]["certainty"], "definite");
         assert_eq!(v["findings"][0]["effective"]["value"], false);
     }
     std::fs::remove_dir_all(dir).unwrap();
@@ -144,8 +146,8 @@ fn scan_rule_file() {
             .iter()
             .map(|f| {
                 (
-                    f["resource"]["address"].clone(),
-                    f["severity"].clone(),
+                    f["subject"]["address"].clone(),
+                    f["certainty"].clone(),
                     f["message"].clone(),
                 )
             })
@@ -187,11 +189,11 @@ fn scan_plan_maps_to_source() {
         ])
         .output()
         .unwrap();
-    assert!(out.status.success());
+    assert_eq!(out.status.code(), Some(1));
     let j: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     let f = &j["findings"][0];
-    assert_eq!(f["resource"]["address"], "aws_s3_bucket.data");
-    assert_eq!(f["severity"], "definite");
+    assert_eq!(f["subject"]["address"], "aws_s3_bucket.data");
+    assert_eq!(f["certainty"], "definite");
     assert!(
         f["location"]["file"]
             .as_str()
@@ -251,7 +253,7 @@ fn rule_errors_exit_one_with_output() {
         ])
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(out.status.code(), Some(3));
     let err = String::from_utf8_lossy(&out.stderr);
     // Conftest evaluates the whole file, so the error names the file.
     assert!(
@@ -266,7 +268,7 @@ fn rule_errors_exit_one_with_output() {
             .as_array()
             .unwrap()
             .iter()
-            .all(|f| !f["rule"]["id"].as_str().unwrap().starts_with("rego:"))
+            .all(|f| !f["rule"].as_str().unwrap().starts_with("rego:"))
     );
 }
 
@@ -375,8 +377,9 @@ fn current_directory_scan_discovers_new_overlay_files_once() {
                 cmd.args(["--overlay", &format!("{prefix}/new.tf=patch.txt")]);
                 cmd.args(["--overlay", &format!("{prefix}/nested/new.tf=patch.txt")]);
                 let out = cmd.output().unwrap();
-                assert!(
-                    out.status.success(),
+                assert_eq!(
+                    out.status.code(),
+                    Some(1),
                     "{}",
                     String::from_utf8_lossy(&out.stderr)
                 );
@@ -421,7 +424,12 @@ fn default_scan_runs_the_bundled_checkov_catalog() {
             .as_array()
             .unwrap()
             .iter()
-            .map(|f| (f["rule"]["id"].as_str().unwrap().to_string(), f.clone()))
+            .map(|f| {
+                let id = f["rule"].as_str().unwrap().to_string();
+                let mut f = f.clone();
+                f["rule"] = v["rules"][&id].clone();
+                (id, f)
+            })
             .collect::<std::collections::BTreeMap<_, _>>()
     };
     let all = run(&[]);
@@ -460,4 +468,64 @@ fn rules_lists_the_bundled_catalog() {
     // gcp-storage-uniform-access replaces CKV_GCP_29, its alias.
     assert_eq!(count(&[]), 5 + 1079 - 1);
     assert_eq!(count(&["--no-builtin"]), 0);
+}
+
+/// Exit codes: 1 when a finding is at least as certain as `--fail-on`
+/// (default: definite), 0 otherwise; `never` never fails on findings.
+#[test]
+fn fail_on_sets_the_exit_code() {
+    let code = |case: &str, extra: &[&str]| {
+        let case = fixture(case);
+        let mut args = vec!["scan", "--no-bundled", "-q", case.as_str()];
+        args.extend_from_slice(extra);
+        Command::new(env!("CARGO_BIN_EXE_oxtf"))
+            .args(&args)
+            .output()
+            .unwrap()
+            .status
+            .code()
+    };
+    let definite = "aws-rds-unencrypted/fail_explicit_false";
+    let conditional = "aws-rds-unencrypted/conditional_unconstrained_variable";
+    assert_eq!(code(definite, &[]), Some(1));
+    assert_eq!(code(definite, &["--fail-on", "never"]), Some(0));
+    assert_eq!(code(conditional, &[]), Some(0));
+    assert_eq!(code(conditional, &["--fail-on", "conditional"]), Some(1));
+    assert_eq!(code(conditional, &["--fail-on", "indeterminate"]), Some(1));
+    assert_eq!(code(definite, &["--fail-on", "bogus"]), Some(2));
+}
+
+/// NDJSON: a line per finding and a closing summary; SARIF: one run whose
+/// results carry the record's fingerprints.
+#[test]
+fn ndjson_and_sarif_formats() {
+    let run = |format: &str| {
+        let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+            .args([
+                "scan",
+                "--no-bundled",
+                "--recursive",
+                "--format",
+                format,
+                &fixture("aws-rds-unencrypted"),
+            ])
+            .output()
+            .unwrap();
+        String::from_utf8(out.stdout).unwrap()
+    };
+    let lines: Vec<serde_json::Value> = run("ndjson")
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let (summary, findings) = lines.split_last().unwrap();
+    assert_eq!(summary["type"], "summary");
+    assert_eq!(summary["findings"], findings.len());
+    assert!(findings.iter().all(|f| f["type"] == "finding"));
+    let sarif: serde_json::Value = serde_json::from_str(&run("sarif")).unwrap();
+    assert_eq!(sarif["version"], "2.1.0");
+    let results = sarif["runs"][0]["results"].as_array().unwrap();
+    assert_eq!(results.len(), findings.len());
+    for (r, f) in results.iter().zip(findings) {
+        assert_eq!(r["partialFingerprints"]["oxtf/v1"], f["fingerprint"]);
+    }
 }

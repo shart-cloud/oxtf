@@ -549,8 +549,8 @@ impl Finding {
     }
     /// `"definite"`, `"conditional"` or `"indeterminate"` (foreign policies only).
     #[getter]
-    fn severity(&self) -> &'static str {
-        self.f().severity.as_str()
+    fn certainty(&self) -> &'static str {
+        self.f().certainty.as_str()
     }
     #[getter]
     fn address(&self) -> &str {
@@ -572,11 +572,15 @@ impl Finding {
     fn root(&self) -> String {
         self.f().root.display().to_string()
     }
-    /// Stable identity across scans (rule, address, attribute path).
+    /// Stable identity across scans (rule, repository-relative file, local
+    /// address, attribute path); shared by every occurrence of a finding.
     #[getter]
     fn fingerprint(&self) -> String {
-        let f = self.f();
-        tf_linter::record::fingerprint(&f.rule, &f.address, f.attribute.as_deref())
+        tf_linter::record::finding_fingerprint(
+            self.data.files(),
+            self.f(),
+            &mut tf_linter::record::RepoRoots::new(),
+        )
     }
     #[getter]
     fn category(&self) -> &'static str {
@@ -658,7 +662,7 @@ impl Finding {
         format!(
             "Finding({} {} {} {:?})",
             f.rule,
-            f.severity.as_str(),
+            f.certainty.as_str(),
             f.address,
             f.message
         )
@@ -954,12 +958,12 @@ impl DynRule for CallbackRule {
             Ok(reports) => Ok(reports
                 .into_iter()
                 .map(|rep| Judgement {
-                    severity: if rep.indeterminate {
-                        tf_linter::Severity::Indeterminate
+                    certainty: if rep.indeterminate {
+                        tf_linter::Certainty::Indeterminate
                     } else if rep.conditional {
-                        tf_linter::Severity::Conditional
+                        tf_linter::Certainty::Conditional
                     } else {
-                        tf_linter::Severity::Definite
+                        tf_linter::Certainty::Definite
                     },
                     witness: rep.witness,
                     message: rep.message,

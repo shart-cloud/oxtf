@@ -22,13 +22,14 @@ fn imported_check_can_be_listed_and_selected_without_checkov_installed() {
         .arg(&pack)
         .output()
         .unwrap();
-    assert!(scan.status.success(), "{:?}", scan);
+    // Findings at the default --fail-on (definite) exit 1.
+    assert_eq!(scan.status.code(), Some(1), "{:?}", scan);
     let result: serde_json::Value = serde_json::from_slice(&scan.stdout).unwrap();
     let findings = result["findings"].as_array().unwrap();
     assert_eq!(findings.len(), 1);
-    assert_eq!(findings[0]["rule"]["id"], "CKV_AWS_16");
-    assert_eq!(findings[0]["resource"]["address"], "aws_db_instance.bad");
-    assert_eq!(findings[0]["severity"], "definite");
+    assert_eq!(findings[0]["rule"], "CKV_AWS_16");
+    assert_eq!(findings[0]["subject"]["address"], "aws_db_instance.bad");
+    assert_eq!(findings[0]["certainty"], "definite");
     assert!(!findings[0]["provenance"].as_array().unwrap().is_empty());
     assert!(result["rule_errors"].as_array().unwrap().is_empty());
 }
@@ -65,14 +66,15 @@ resource "aws_flow_log" "log" { vpc_id = aws_vpc.good.id }
         .arg(&pack)
         .output()
         .unwrap();
-    assert!(
-        result.status.success(),
+    assert_eq!(
+        result.status.code(),
+        Some(1),
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
     let result: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
     assert_eq!(result["findings"].as_array().unwrap().len(), 1);
-    assert_eq!(result["findings"][0]["resource"]["address"], "aws_vpc.bad");
+    assert_eq!(result["findings"][0]["subject"]["address"], "aws_vpc.bad");
     assert!(result["rule_errors"].as_array().unwrap().is_empty());
 
     let plan_dir = dir.join("plan");
@@ -105,18 +107,20 @@ resource "aws_flow_log" "log" { vpc_id = aws_vpc.good.id }
     };
     std::fs::write(&plan_path, plan.to_string()).unwrap();
     let output = run();
-    assert!(
-        output.status.success(),
+    assert_eq!(
+        output.status.code(),
+        Some(1),
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
     let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(result["findings"].as_array().unwrap().len(), 1);
-    assert_eq!(result["findings"][0]["resource"]["address"], "aws_vpc.bad");
+    assert_eq!(result["findings"][0]["subject"]["address"], "aws_vpc.bad");
     plan.as_object_mut().unwrap().remove("configuration");
     std::fs::write(&plan_path, plan.to_string()).unwrap();
     let output = run();
-    assert_eq!(output.status.code(), Some(1));
+    // A rule error wins over findings: the scan is incomplete.
+    assert_eq!(output.status.code(), Some(3));
     let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(result["rule_errors"].as_array().unwrap().len(), 1);
     assert!(
@@ -181,13 +185,14 @@ resource "aws_s3_bucket" "good" { acl = "private" }
         .arg(dir.join("policies"))
         .output()
         .unwrap();
-    assert!(scan.status.success(), "{:?}", scan);
+    // Findings at the default --fail-on (definite) exit 1.
+    assert_eq!(scan.status.code(), Some(1), "{:?}", scan);
     let result: serde_json::Value = serde_json::from_slice(&scan.stdout).unwrap();
     let findings = result["findings"].as_array().unwrap();
     assert_eq!(findings.len(), 1, "{findings:#?}");
-    assert_eq!(findings[0]["rule"]["id"], "CKV2_CUSTOM_ACL");
-    assert_eq!(findings[0]["rule"]["level"], "high");
-    assert_eq!(findings[0]["resource"]["address"], "aws_s3_bucket.bad");
+    assert_eq!(findings[0]["rule"], "CKV2_CUSTOM_ACL");
+    assert_eq!(findings[0]["level"], "high");
+    assert_eq!(findings[0]["subject"]["address"], "aws_s3_bucket.bad");
 
     // An unsupported policy in a directory is skipped with a warning that
     // points into the policy file; the rest of the directory still runs.
@@ -203,7 +208,8 @@ resource "aws_s3_bucket" "good" { acl = "private" }
         .arg(dir.join("policies"))
         .output()
         .unwrap();
-    assert!(scan.status.success(), "{:?}", scan);
+    // Findings at the default --fail-on (definite) exit 1.
+    assert_eq!(scan.status.code(), Some(1), "{:?}", scan);
     let stderr = String::from_utf8_lossy(&scan.stderr);
     assert!(stderr.contains("warning: skipped rule file"), "{stderr}");
     // Drawn as a snippet of the policy file at the operator.
@@ -226,7 +232,7 @@ resource "aws_s3_bucket" "good" { acl = "private" }
             .as_array()
             .unwrap()
             .iter()
-            .any(|f| f["rule"]["id"] == "CKV2_CUSTOM_ACL")
+            .any(|f| f["rule"] == "CKV2_CUSTOM_ACL")
     );
 
     // Named directly, the same file is still a load error.

@@ -32,6 +32,6 @@ for builtin, expr in [("aws-rds-unencrypted", rds), ("gcp-storage-uniform-access
         p = os.path.join(REPO, path)
         b = tfscan.scan(p, recursive=True, select=[builtin])
         e = tfscan.scan(p, recursive=True, builtin=False, rules=[expr])
-        kb = {(f.address, f.root, f.severity) for f in b.findings}
-        ke = {(f.address, f.root, f.severity) for f in e.findings}
+        kb = {(f.address, f.root, f.certainty) for f in b.findings}
+        ke = {(f.address, f.root, f.certainty) for f in e.findings}
         print(f"| {builtin} | {label} | {len(kb)} | {len(ke)} | {'yes' if kb == ke else 'NO'} |")

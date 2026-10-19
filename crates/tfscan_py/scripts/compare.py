@@ -24,8 +24,8 @@ def run(path, recursive, which):
         r = tfscan.scan(path, recursive=recursive, builtin=False, rules=[EXPR_RULE])
     else:
         r = tfscan.scan(path, recursive=recursive, builtin=False, rules=[CALLBACK_RULE])
-    keys = {(f.address, f.root, f.severity) for f in r.findings}
-    with_msg = {(f.address, f.root, f.severity, f.message) for f in r.findings}
+    keys = {(f.address, f.root, f.certainty) for f in r.findings}
+    with_msg = {(f.address, f.root, f.certainty, f.message) for f in r.findings}
     return r, keys, with_msg
 
 

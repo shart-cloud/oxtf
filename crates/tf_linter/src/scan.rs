@@ -13,7 +13,7 @@ use tf_semantic::{
 
 use crate::engine::Linter;
 use crate::record::RuleError;
-use crate::rule::{Finding, Severity};
+use crate::rule::{Certainty, Finding};
 
 #[derive(Clone, Debug)]
 pub struct ScanOptions {
@@ -75,10 +75,10 @@ impl ScanStats {
                 .findings_by_rule
                 .entry(f.rule.to_string())
                 .or_default() += 1;
-            match f.severity {
-                Severity::Definite => stats.definite += 1,
-                Severity::Conditional => stats.conditional += 1,
-                Severity::Indeterminate => stats.indeterminate += 1,
+            match f.certainty {
+                Certainty::Definite => stats.definite += 1,
+                Certainty::Conditional => stats.conditional += 1,
+                Certainty::Indeterminate => stats.indeterminate += 1,
             }
         }
         stats

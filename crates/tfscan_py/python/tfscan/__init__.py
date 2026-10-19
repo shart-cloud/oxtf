@@ -5,7 +5,7 @@
 
     res = tfscan.scan("path/to/root", recursive=True)
     for f in res.findings:
-        print(f.rule, f.severity, f.address, f.message, f.file, f.line)
+        print(f.rule, f.certainty, f.address, f.message, f.file, f.line)
     table = res.findings_arrow()            # pyarrow.Table
     resources = res.resources.to_arrow()    # pyarrow.Table
 

@@ -1,14 +1,16 @@
 //! `oxtf`: Terraform security scanner.
 //!
 //! ```text
-//! oxtf scan [PATH...] [-r|--recursive] [--format text|json] [--var-file FILE]...
+//! oxtf scan [PATH...] [-r|--recursive] [--format text|json|ndjson|sarif] [--var-file FILE]...
 //!           [--rule ID]... [--rule-file PATH]... [--threads N] [--color] [--no-diagnostics] [--quiet]
 //! oxtf scan --plan PLAN.json [--source DIR] [options]
 //! oxtf rules
 //! ```
 //!
-//! Exit codes: 0 clean, 1 some rule failed on some resource (output is
-//! still printed; see `rule_errors`), 2 the scan could not run.
+//! Exit codes: 0 no finding at or above `--fail-on` (default: definite),
+//! 1 some finding is, 2 the scan could not run, 3 some rule failed on some
+//! resource (output is still printed; see `rule_errors`). 3 wins over 1:
+//! an incomplete scan is reported as such even when it found something.
 
 use std::io::{IsTerminal, Read, Write};
 use std::path::PathBuf;
@@ -27,7 +29,9 @@ use tf_linter::Linter;
 /// already reserved by then.)
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-use tf_linter::render::{location, render_finding, result_json};
+use tf_linter::Certainty;
+use tf_linter::record::ScanRecord;
+use tf_linter::render::{location, render_finding};
 use tf_scan::{Catalog, ScanInput, ScanRequest};
 
 const USAGE: &str = "usage:
@@ -47,7 +51,10 @@ value checks, graph policies and Python resource checks (1079 rules), run native
 
 scan options:
   -r, --recursive         every directory under PATH containing .tf files is a root module
-  -f, --format FMT        text (default) or json
+  -f, --format FMT        text (default), json (the finding record, docs/FINDING_SCHEMA.md),
+                          ndjson (one line per finding, then a summary line) or sarif
+      --fail-on C         exit 1 when a finding is at least this certain: definite
+                          (default), conditional, indeterminate, or never
       --var-file FILE     extra .tfvars for the root module(s) (repeatable)
       --rule ID           only run this rule (repeatable); ids come from the whole
                           catalog: bundled Checkov rules, seed rules, --rule-file rules
@@ -76,12 +83,28 @@ scan options:
       --threads N         worker threads (default: all CPUs)
       --color             force colored output
       --no-diagnostics    do not print parse / strict-bool / module diagnostics
-  -q, --quiet             text format: print only the summary";
+  -q, --quiet             text format: print only the summary
+
+A finding is one rule failing at one source location; the roots and resource
+instances it was reached from are its occurrences.
+
+exit codes: 0 no finding at or above --fail-on, 1 some finding is, 2 the scan
+could not run, 3 a rule failed on some resource (wins over 1)";
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Format {
+    Text,
+    Json,
+    Ndjson,
+    Sarif,
+}
 
 /// The command line, as parsed: a scan request plus output switches.
 struct Args {
     request: ScanRequest,
-    json: bool,
+    format: Format,
+    /// Exit 1 when a finding is at least this certain; `None` never.
+    fail_on: Option<Certainty>,
     color: bool,
     diagnostics: bool,
     quiet: bool,
@@ -99,7 +122,8 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut overlay = Vec::new();
     let mut a = Args {
         request: ScanRequest::dirs(Vec::new(), false),
-        json: false,
+        format: Format::Text,
+        fail_on: Some(Certainty::Definite),
         color: std::io::stdout().is_terminal(),
         diagnostics: true,
         quiet: false,
@@ -107,11 +131,24 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "-r" | "--recursive" => recursive = true,
-            "-f" | "--format" => match it.next().as_deref() {
-                Some("json") => a.json = true,
-                Some("text") => a.json = false,
-                other => return Err(format!("unknown format {other:?}")),
-            },
+            "-f" | "--format" => {
+                a.format = match it.next().as_deref() {
+                    Some("text") => Format::Text,
+                    Some("json") => Format::Json,
+                    Some("ndjson") => Format::Ndjson,
+                    Some("sarif") => Format::Sarif,
+                    other => return Err(format!("unknown format {other:?}")),
+                }
+            }
+            "--fail-on" => {
+                a.fail_on = match it.next().as_deref() {
+                    Some("definite") => Some(Certainty::Definite),
+                    Some("conditional") => Some(Certainty::Conditional),
+                    Some("indeterminate") => Some(Certainty::Indeterminate),
+                    Some("never") => None,
+                    other => return Err(format!("unknown --fail-on {other:?}")),
+                }
+            }
             "--var-file" => var_files.push(it.next().ok_or("--var-file needs a value")?.into()),
             "--rule" => selection
                 .get_or_insert_with(Vec::new)
@@ -227,7 +264,7 @@ fn main() -> ExitCode {
                 return rules_test(args);
             }
             let (rules, json) = match parse_args(args).and_then(|a| {
-                let json = a.json;
+                let json = a.format == Format::Json;
                 a.request
                     .catalog
                     .resolve()
@@ -363,12 +400,12 @@ fn load_message(message: &str, severity: miette::Severity, color: bool) -> Strin
     }
 }
 
-/// Exit codes: 0 clean run, 1 a rule failed on some resource (the output
-/// is still printed and carries the rule errors), 2 the scan could not run.
+/// Exit codes: see the module documentation.
 fn scan(a: Args) -> ExitCode {
     let Args {
         request,
-        json,
+        format,
+        fail_on,
         color,
         diagnostics,
         quiet,
@@ -398,34 +435,82 @@ fn scan(a: Args) -> ExitCode {
             None => eprintln!("rule error: {}: {}", e.rule, e.message),
         }
     }
-    print_result(r, json, color, diagnostics, quiet);
-    if r.rule_errors.is_empty() {
-        ExitCode::SUCCESS
-    } else {
+    let record = ScanRecord::from_result(r);
+    print_result(r, &record, format, color, diagnostics, quiet);
+    let failing = fail_on.is_some_and(|c| record.findings.iter().any(|f| f.certainty <= c));
+    if !r.rule_errors.is_empty() {
+        ExitCode::from(3)
+    } else if failing {
         ExitCode::from(1)
+    } else {
+        ExitCode::SUCCESS
     }
 }
 
 fn print_result(
     r: &tf_linter::ScanResult,
-    json: bool,
+    record: &ScanRecord,
+    format: Format,
     color: bool,
     diagnostics: bool,
     quiet: bool,
 ) {
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
-    if json {
-        let _ = writeln!(
-            out,
-            "{}",
-            serde_json::to_string_pretty(&result_json(r)).unwrap()
-        );
-        return;
+    match format {
+        Format::Json => {
+            let _ = writeln!(
+                out,
+                "{}",
+                serde_json::to_string_pretty(record).expect("scan record is JSON")
+            );
+            return;
+        }
+        Format::Ndjson => {
+            let _ = write!(out, "{}", tf_linter::formats::ndjson(record));
+            return;
+        }
+        Format::Sarif => {
+            let _ = writeln!(
+                out,
+                "{}",
+                serde_json::to_string_pretty(&tf_linter::formats::sarif(record))
+                    .expect("SARIF is JSON")
+            );
+            return;
+        }
+        Format::Text => {}
     }
     if !quiet {
-        for f in &r.findings {
-            let _ = writeln!(out, "{}", render_finding(&r.files, f, color));
+        // The record's findings, in its order: one report per finding,
+        // drawn from its representative occurrence.
+        for g in tf_linter::record::group(&r.files, &r.findings) {
+            let f = &r.findings[g.representative];
+            let _ = write!(out, "{}", render_finding(&r.files, f, color));
+            let others: Vec<String> = g
+                .members
+                .iter()
+                .filter(|&&i| i != g.representative)
+                .map(|&i| {
+                    let o = &r.findings[i];
+                    format!("{} ({})", o.address, o.root.display())
+                })
+                .collect();
+            if !others.is_empty() {
+                const SHOWN: usize = 3;
+                let more = others.len().saturating_sub(SHOWN);
+                let _ = writeln!(
+                    out,
+                    "  also reached as {}{}",
+                    others[..others.len().min(SHOWN)].join(", "),
+                    if more > 0 {
+                        format!(" and {more} more")
+                    } else {
+                        String::new()
+                    }
+                );
+            }
+            let _ = writeln!(out);
         }
         if diagnostics {
             // Skipped rule files were already printed to stderr.
@@ -437,7 +522,7 @@ fn print_result(
             }
         }
     }
-    let s = &r.stats;
+    let s = &record.stats;
     let by_rule: Vec<String> = s
         .findings_by_rule
         .iter()
@@ -445,18 +530,19 @@ fn print_result(
         .collect();
     let _ = writeln!(
         out,
-        "{} findings ({} definite, {} conditional, {} indeterminate) in {} root modules, {} module instances, {} files, {} resources; {} diagnostics; {} rule errors; {:.1} ms{}",
+        "{} findings ({} definite, {} conditional, {} indeterminate; {} occurrences) in {} root modules, {} module instances, {} files, {} resources; {} diagnostics; {} rule errors; {:.1} ms{}",
         s.findings,
         s.definite,
         s.conditional,
         s.indeterminate,
+        s.occurrences,
         s.roots,
         s.module_instances,
         s.files,
         s.resources,
         r.diagnostics.len(),
         r.rule_errors.len(),
-        s.elapsed.as_secs_f64() * 1000.0,
+        s.elapsed_ms,
         if by_rule.is_empty() {
             String::new()
         } else {

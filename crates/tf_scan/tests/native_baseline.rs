@@ -126,12 +126,14 @@ fn native_findings_match_baseline() {
         } else {
             vec!["aws_s3_bucket.b[\"b\"]"]
         };
+        // Instances of one declaration are occurrences of one finding.
         let addresses = |result: &Value| {
             let mut a: Vec<String> = result["findings"]
                 .as_array()
                 .unwrap()
                 .iter()
-                .map(|f| f["resource"]["address"].as_str().unwrap().to_string())
+                .flat_map(|f| f["occurrences"].as_array().unwrap())
+                .map(|o| o["address"].as_str().unwrap().to_string())
                 .collect();
             a.sort();
             a

@@ -57,7 +57,7 @@ fn seed_rule_fixtures() {
                     (
                         f.rule.to_string(),
                         f.address.to_string(),
-                        f.severity.as_str().to_string(),
+                        f.certainty.as_str().to_string(),
                     )
                 })
                 .collect();
