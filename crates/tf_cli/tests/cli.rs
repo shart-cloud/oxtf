@@ -458,6 +458,6 @@ fn rules_lists_the_bundled_catalog() {
     };
     assert_eq!(count(&["--no-bundled"]), 5);
     // gcp-storage-uniform-access replaces CKV_GCP_29, its alias.
-    assert_eq!(count(&[]), 5 + 1064 - 1);
+    assert_eq!(count(&[]), 5 + 1073 - 1);
     assert_eq!(count(&["--no-builtin"]), 0);
 }

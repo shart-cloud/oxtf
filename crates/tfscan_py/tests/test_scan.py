@@ -244,7 +244,7 @@ def test_bundled_checkov_catalog_runs_by_default():
     listed = {r["name"]: r for r in tfscan.rules()}
     assert listed["CKV_AWS_16"]["source"]["engine"] == "checkov"
     # gcp-storage-uniform-access replaces CKV_GCP_29, its alias.
-    assert len(listed) == len(tfscan.rules(bundled=False)) + 1064 - 1
+    assert len(listed) == len(tfscan.rules(bundled=False)) + 1073 - 1
     assert listed["gcp-storage-uniform-access"]["aliases"] == ["CKV_GCP_29"]
     assert "CKV_GCP_29" not in listed
 

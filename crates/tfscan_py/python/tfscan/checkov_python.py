@@ -35,6 +35,8 @@ BUILTINS = {
     "force_list", "force_int", "force_float",
     "re.match", "re.search", "re.fullmatch", "re.findall", "re.compile", "re.sub", "re.split",
     "fnmatch.fnmatch", "json.loads", "json.dumps", "type", "map", "filter",
+    "yaml.safe_load", "itertools.chain", "dpath.search", "dpath.get",
+    "ipaddress.ip_network", "ipaddress.ip_address", "hasattr",
 }
 # Checkov helpers run natively, by qualified name: their Python reads
 # parser internals, and their meaning over evaluated values is simple.
@@ -49,7 +51,7 @@ CHECKOV_HELPERS = {"force_list", "force_int", "force_float"}
 TYPES = {list: "list", dict: "dict", str: "str", int: "int", float: "float", bool: "bool",
          tuple: "tuple", set: "set", type(None): "NoneType"}
 EXCEPTIONS = {"Exception", "KeyError", "IndexError", "LookupError", "TypeError", "ValueError",
-              "AttributeError", "ZeroDivisionError", "ArithmeticError", "JSONDecodeError"}
+              "AttributeError", "ZeroDivisionError", "ArithmeticError", "JSONDecodeError", "YAMLError"}
 # Instance attributes Checkov sets per run; reads of these are state.
 RUN_STATE = {"evaluated_keys": [], "details": []}
 # Generic-base methods the programs may call; folded by calling them on the
@@ -97,9 +99,11 @@ def value(v, what="constant"):
     if isinstance(v, range):
         return {"range": [v.start, v.stop, v.step]}
     if isinstance(v, re.Pattern):
-        if v.flags & ~(re.UNICODE | re.IGNORECASE):
+        if v.flags & ~(re.UNICODE | re.IGNORECASE | re.MULTILINE | re.DOTALL):
             raise Unsupported(f"regex flags in {what}")
-        return {"pattern": ("(?i)" if v.flags & re.IGNORECASE else "") + v.pattern}
+        flags = "".join(f for f, bit in (("i", re.IGNORECASE), ("m", re.MULTILINE), ("s", re.DOTALL))
+                        if v.flags & bit)
+        return {"pattern": (f"(?{flags})" if flags else "") + v.pattern}
     if isinstance(v, type) and v in TYPES:
         return {"type": TYPES[v]}
     raise Unsupported(f"{what} of type {type(v).__name__}")
@@ -163,8 +167,8 @@ class Exporter:
             raise Unsupported(f"{key} is not a plain function")
         module_globals = vars(inspect.getmodule(fn))
         args = node.args
-        if args.vararg or args.kwarg or args.kwonlyargs or args.posonlyargs:
-            raise Unsupported(f"{key}: *args, **kwargs or keyword-only parameters")
+        if args.kwarg or args.kwonlyargs or args.posonlyargs:
+            raise Unsupported(f"{key}: **kwargs or keyword-only parameters")
         params = [a.arg for a in args.args]
         if is_method and not static and check:
             params = params[1:]
@@ -173,6 +177,8 @@ class Exporter:
         local = set(params) | assigned_names(node)
         body = self.block(node.body, module_globals, local)
         self.functions[key] = {"params": params, "defaults": defaults, "body": body}
+        if args.vararg:
+            self.functions[key]["vararg"] = args.vararg.arg
 
     def add_class(self, cls):
         """Export `cls` (a class of an inlined module): its methods and
@@ -489,6 +495,14 @@ class Exporter:
             if f.id in local:
                 return call({"local": f.id})
             target = g.get(f.id)
+            # hasattr(self, "x") on the check: decided at export.
+            if f.id == "hasattr" and target is None and self.in_check and len(e.args) == 2 \
+                    and isinstance(e.args[0], ast.Name) and e.args[0].id == "self" \
+                    and isinstance(e.args[1], ast.Constant):
+                return {"e": "const", "v": hasattr(self.check, e.args[1].value)}
+            qualified = f"{getattr(target, '__module__', '')}.{getattr(target, '__name__', '')}"
+            if callable(target) and qualified in BUILTINS:
+                return call({"builtin": qualified})
             if f.id in BUILTINS and (target is None or getattr(target, "__module__", "").startswith(
                     ("builtins", "checkov.common.util.type_forcers"))):
                 return call({"builtin": f.id})

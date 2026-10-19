@@ -91,6 +91,9 @@ pub struct Function {
     pub params: Vec<String>,
     pub defaults: Vec<Option<Expr>>,
     pub body: Vec<Stmt>,
+    /// The `*args` parameter, bound to a tuple of the extra positionals.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vararg: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -569,6 +572,9 @@ enum Py {
     Builtin(Rc<str>),
     /// An object of an inlined class.
     Instance(Rc<Instance>),
+    /// `ipaddress.ip_network` / `ip_address` (an address is a network of
+    /// one; `in` tests containment).
+    Net(py::Network, bool),
     /// A method of an object, not yet called.
     Bound(Rc<(Py, Rc<str>)>),
     Exception(Rc<str>),
@@ -632,7 +638,7 @@ impl Py {
                     "type" => Py::Type(Rc::from(inner.as_str().ok_or("type")?)),
                     "pattern" => {
                         let p = inner.as_str().ok_or("pattern")?;
-                        pyre::translate(p)?;
+                        check_pattern(p)?;
                         Py::Pattern(Rc::from(p))
                     }
                     "range" => {
@@ -673,6 +679,8 @@ impl Py {
             Py::Lambda(_) | Py::FuncRef(_) => "function",
             Py::Builtin(_) => "builtin_function_or_method",
             Py::Instance(_) => "object",
+            Py::Net(_, true) => "IPv4Address",
+            Py::Net(..) => "IPv4Network",
             Py::Bound(_) => "method",
             Py::Exception(_) => "type",
             Py::Abstract(..) | Py::OneOf(..) => "abstract",
@@ -804,6 +812,7 @@ impl<'p> Interp<'p> {
             }
             (Py::Range(a1, b1, s1), Py::Range(a2, b2, s2)) => (a1, b1, s1) == (a2, b2, s2),
             (Py::Instance(x), Py::Instance(y)) => Rc::ptr_eq(x, y),
+            (Py::Net(x, a), Py::Net(y, b)) => x == y && a == b,
             _ => match (number(&a), number(&b)) {
                 (Some(x), Some(y)) => x == y,
                 _ => false,
@@ -879,6 +888,10 @@ impl<'p> Interp<'p> {
             }
             Py::Range(a, b, s) => match self.concrete(needle)? {
                 Py::Int(i) => Ok(range_items(a, b, s).contains(&i)),
+                _ => Ok(false),
+            },
+            Py::Net(net, false) => match self.concrete(needle)? {
+                Py::Net(addr, true) => Ok(addr.subnet_of(&net)),
                 _ => Ok(false),
             },
             _ => exc("TypeError"),
@@ -1714,11 +1727,15 @@ impl<'p> Interp<'p> {
             return unsupported(format!("undefined function {key}"));
         };
         let mut env = Env::new();
-        if args.len() > f.params.len() {
+        if args.len() > f.params.len() && f.vararg.is_none() {
             return exc("TypeError");
         }
         for (p, a) in f.params.iter().zip(args.iter()) {
             env.insert(p.clone(), a.clone());
+        }
+        if let Some(rest) = &f.vararg {
+            let extra = args.get(f.params.len()..).unwrap_or_default().to_vec();
+            env.insert(rest.clone(), Py::tuple(extra));
         }
         for (k, v) in kwargs {
             if !f.params.contains(&k) || env.contains_key(&k) {
@@ -2028,7 +2045,7 @@ impl<'p> Interp<'p> {
                     if args.len() > 1 || !kwargs.is_empty() {
                         return unsupported("regex flags");
                     }
-                    pyre::translate(&p).map_err(Flow::Unsupported)?;
+                    check_pattern(&p).map_err(Flow::Unsupported)?;
                     Py::Pattern(p)
                 }
                 _ => return exc("TypeError"),
@@ -2094,6 +2111,81 @@ impl<'p> Interp<'p> {
             "type" => Py::Type(Rc::from(
                 self.concrete(&a0.ok_or_else(type_error)?)?.type_name(),
             )),
+            "hasattr" => {
+                let (Some(obj), Some(Py::Str(name))) =
+                    (a0, args.get(1).map(|n| self.concrete(n)).transpose()?)
+                else {
+                    return exc("TypeError");
+                };
+                match self.get_attr(&obj, &name) {
+                    Ok(_) => Py::Bool(true),
+                    Err(Flow::Exc(e)) if &*e == "AttributeError" => Py::Bool(false),
+                    Err(f) => return Err(f),
+                }
+            }
+            "yaml.safe_load" => match self.concrete(&a0.ok_or_else(type_error)?)? {
+                Py::Str(s) => match crate::pyyaml::load(&s) {
+                    Ok(doc) => json_to_py(&doc.value),
+                    Err(_) => return exc("YAMLError"),
+                },
+                _ => return exc("YAMLError"),
+            },
+            "itertools.chain" => {
+                let mut out = Vec::new();
+                for a in &args {
+                    out.extend(self.iterate(a)?);
+                }
+                Py::list(out)
+            }
+            "dpath.search" | "dpath.get" => {
+                let (Some(obj), Some(Py::Str(glob))) =
+                    (a0, args.get(1).map(|n| self.concrete(n)).transpose()?)
+                else {
+                    return exc("TypeError");
+                };
+                let matches = self.dpath(&obj, &glob)?;
+                if name == "dpath.search" {
+                    // Only its truthiness is used: whether anything matched.
+                    let found: Vec<(Py, Py)> =
+                        matches.into_iter().map(|v| (Py::str(&glob), v)).collect();
+                    Py::Dict(Rc::new(RefCell::new(found)))
+                } else {
+                    match matches.len() {
+                        0 => return exc("KeyError"),
+                        1 => matches.into_iter().next().expect("one match"),
+                        _ => return exc("ValueError"),
+                    }
+                }
+            }
+            "ipaddress.ip_network" | "ipaddress.ip_address" => {
+                let address = name == "ipaddress.ip_address";
+                if !kwargs.is_empty() || args.len() > 1 {
+                    return unsupported("ip_network with strict=");
+                }
+                let text = match self.concrete(&a0.ok_or_else(type_error)?)? {
+                    Py::Str(s) => s,
+                    _ => return unsupported("ip_network of a non-string"),
+                };
+                let Some(net) = py::network_str(&text) else {
+                    return exc("ValueError");
+                };
+                if address && text.contains('/') {
+                    return exc("ValueError");
+                }
+                // strict=True: a network whose address has host bits set is
+                // a ValueError.
+                if let Some((host, _)) = text.split_once('/') {
+                    let first = |n: py::Network| match n {
+                        py::Network::V4 { first, .. } => first as u128,
+                        py::Network::V6 { first, .. } => first,
+                    };
+                    match py::network_str(host) {
+                        Some(addr) if first(addr) == first(net) => {}
+                        _ => return exc("ValueError"),
+                    }
+                }
+                Py::Net(net, address)
+            }
             "map" | "filter" => {
                 let f = a0.ok_or_else(type_error)?;
                 let items = self.iterate(args.get(1).ok_or_else(type_error)?)?;
@@ -2154,6 +2246,45 @@ impl<'p> Interp<'p> {
             }
             other => return unsupported(format!("builtin {other}")),
         })
+    }
+
+    /// `dpath`'s glob over `obj`: `/`-separated segments, each matched with
+    /// `fnmatch` against dict keys and list indices (so `[0]` matches index
+    /// 0). `**` is not read.
+    fn dpath(&self, obj: &Py, glob: &str) -> R<Vec<Py>> {
+        let segments: Vec<&str> = glob.split('/').filter(|s| !s.is_empty()).collect();
+        if segments.contains(&"**") {
+            return unsupported("dpath **");
+        }
+        let mut current = vec![obj.clone()];
+        for seg in segments {
+            let re = regex::Regex::new(&fnmatch_regex(seg))
+                .map_err(|e| Flow::Unsupported(e.to_string()))?;
+            let mut next = Vec::new();
+            for v in current {
+                match self.concrete(&v)? {
+                    Py::Dict(d) => {
+                        for (k, x) in d.borrow().iter() {
+                            if let Py::Str(k) = k
+                                && re.is_match(k)
+                            {
+                                next.push(x.clone());
+                            }
+                        }
+                    }
+                    Py::List(l) => {
+                        for (i, x) in l.borrow().iter().enumerate() {
+                            if re.is_match(&i.to_string()) {
+                                next.push(x.clone());
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            current = next;
+        }
+        Ok(current)
     }
 
     /// `json.dumps` with its default separators and `ensure_ascii`.
@@ -2232,6 +2363,14 @@ impl<'p> Interp<'p> {
                 c.iter().map(|g| g.map(|m| Rc::from(m.as_str()))).collect(),
             ))
         };
+        if let Some(bounded) = Bounded::parse(pattern) {
+            return match name {
+                "re.match" | "re.search" => bounded?
+                    .find(subject, name == "re.search")?
+                    .map_or(Ok(Py::None), |g| Ok(Py::Match(Rc::new(g)))),
+                _ => unsupported("lookaround outside re.match / re.search"),
+            };
+        }
         Ok(match name {
             "re.match" => compile(pattern, pyre::Mode::Match)?
                 .captures(subject)
@@ -2282,6 +2421,17 @@ impl<'p> Interp<'p> {
         let recv = self.concrete(&recv)?;
         if matches!(recv, Py::Instance(_)) {
             return self.call_method(recv, name, args, kwargs);
+        }
+        // A compiled pattern's methods are the `re` functions of it.
+        if let Py::Pattern(p) = &recv
+            && matches!(
+                name,
+                "match" | "search" | "fullmatch" | "findall" | "sub" | "split"
+            )
+        {
+            let mut all = vec![Py::Pattern(p.clone())];
+            all.extend(args);
+            return self.builtin(&format!("re.{name}"), all, kwargs);
         }
         let a0 = args.first().cloned();
         Ok(match (&recv, name) {
@@ -3012,6 +3162,105 @@ fn fnmatch_regex(p: &str) -> String {
     }
     out.push_str("\\z");
     out
+}
+
+/// Whether `p` is a pattern this interpreter can run: one `pyre`
+/// translates, or a [`Bounded`] one.
+fn check_pattern(p: &str) -> Result<(), String> {
+    match Bounded::parse(p) {
+        Some(b) => b.map(|_| ()).map_err(|f| match f {
+            Flow::Unsupported(why) => why,
+            _ => "pattern".into(),
+        }),
+        None => pyre::translate(p).map(|_| ()),
+    }
+}
+
+/// A pattern with a lookbehind `(?<![class])` at its start and/or a
+/// lookahead `(?![class])` at its end (the `regex` crate has neither):
+/// the core is matched anchored at each start, and the characters before
+/// and after are tested against the classes. Exact when the core has one
+/// match per start (a fixed-width core, as Checkov's AWS key pattern);
+/// Python would also backtrack into a shorter core match.
+struct Bounded {
+    behind: Option<regex::Regex>,
+    core: regex::Regex,
+    ahead: Option<regex::Regex>,
+}
+
+impl Bounded {
+    fn parse(pattern: &str) -> Option<R<Bounded>> {
+        // Global inline flags stay in front of every part.
+        let (flags, rest) = match pattern.strip_prefix("(?") {
+            Some(r)
+                if r.find(')')
+                    .is_some_and(|i| r[..i].chars().all(|c| c.is_ascii_alphabetic()) && i > 0) =>
+            {
+                let i = r.find(')').expect("checked");
+                (&pattern[..i + 3], &r[i + 1..])
+            }
+            _ => ("", pattern),
+        };
+        let class = |s: &str| s.starts_with('[') && s.ends_with(']') && !s.contains(['(', ')']);
+        let (behind, rest) = match rest
+            .strip_prefix("(?<!")
+            .and_then(|r| r.find("])").map(|i| (r, i)))
+        {
+            Some((r, i)) if class(&r[..i + 1]) => (Some(&r[..i + 1]), &r[i + 2..]),
+            _ => (None, rest),
+        };
+        let (ahead, core) = match rest.rfind("(?!") {
+            Some(i) if rest.ends_with("])") && class(&rest[i + 3..rest.len() - 1]) => {
+                (Some(&rest[i + 3..rest.len() - 1]), &rest[..i])
+            }
+            _ => (None, rest),
+        };
+        if behind.is_none() && ahead.is_none() {
+            return None;
+        }
+        let compile = |p: &str| {
+            pyre::compile(&format!("{flags}{p}"), pyre::Mode::Match).map_err(Flow::Unsupported)
+        };
+        Some((|| {
+            Ok(Bounded {
+                behind: behind.map(compile).transpose()?,
+                core: compile(&format!("(?:{core})"))?,
+                ahead: ahead.map(compile).transpose()?,
+            })
+        })())
+    }
+
+    fn find(&self, subject: &str, search: bool) -> R<Option<Vec<Option<Rc<str>>>>> {
+        let class_at = |re: &Option<regex::Regex>, c: Option<char>| match (re, c) {
+            (Some(re), Some(c)) => re.is_match(c.encode_utf8(&mut [0; 4])),
+            _ => false,
+        };
+        let starts: Vec<usize> = if search {
+            subject
+                .char_indices()
+                .map(|(i, _)| i)
+                .chain([subject.len()])
+                .collect()
+        } else {
+            vec![0]
+        };
+        for start in starts {
+            if class_at(&self.behind, subject[..start].chars().next_back()) {
+                continue;
+            }
+            let Some(c) = self.core.captures(&subject[start..]) else {
+                continue;
+            };
+            let end = start + c.get(0).expect("group 0").end();
+            if class_at(&self.ahead, subject[end..].chars().next()) {
+                continue;
+            }
+            return Ok(Some(
+                c.iter().map(|g| g.map(|m| Rc::from(m.as_str()))).collect(),
+            ));
+        }
+        Ok(None)
+    }
 }
 
 /// A parsed JSON document as Python's `json.loads` returns it.

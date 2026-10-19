@@ -454,21 +454,19 @@
       "id": "CKV_AWS_112",
       "kind": "resource",
       "name": "Ensure Session Manager data is encrypted in transit",
-      "reason": "custom Python scan_resource_conf: except yaml.YAMLError",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/SSMSessionManagerDocumentEncryption.py",
       "source_sha256": "e99886e566f893a68f8dba7394834c6ad9cabb9df212dd57a086a24a1fd9398e",
-      "status": "unsupported"
+      "status": "translated"
     },
     {
       "id": "CKV_AWS_113",
       "kind": "resource",
       "name": "Ensure Session Manager logs are enabled and encrypted",
-      "reason": "custom Python scan_resource_conf: except yaml.YAMLError",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/SSMSessionManagerDocumentLogging.py",
       "source_sha256": "d9b494175b39731604cf4f20c7ef33fa98b2a9767b86ef089762a0a4a0bd5fa7",
-      "status": "unsupported"
+      "status": "translated"
     },
     {
       "id": "CKV_AWS_114",
@@ -2071,7 +2069,7 @@
       "id": "CKV_AWS_286",
       "kind": "resource",
       "name": "Ensure IAM policies does not allow privilege escalation",
-      "reason": "custom Python scan_resource_conf: call hasattr",
+      "reason": "custom Python scan_resource_conf: reads instance state: self.cache_key",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/IAMPrivilegeEscalation.py",
       "source_sha256": "516bb352c483252abb7c78783cbb1598a8df7f81c833badd8a2e4e58669b035e",
@@ -2081,7 +2079,7 @@
       "id": "CKV_AWS_287",
       "kind": "resource",
       "name": "Ensure IAM policies does not allow credentials exposure",
-      "reason": "custom Python scan_resource_conf: call hasattr",
+      "reason": "custom Python scan_resource_conf: reads instance state: self.cache_key",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/IAMCredentialsExposure.py",
       "source_sha256": "ad3a1256d5303268a3079187d64b15bd5c3e07fed89121b8699df9a3de96c338",
@@ -2091,7 +2089,7 @@
       "id": "CKV_AWS_288",
       "kind": "resource",
       "name": "Ensure IAM policies does not allow data exfiltration",
-      "reason": "custom Python scan_resource_conf: call hasattr",
+      "reason": "custom Python scan_resource_conf: reads instance state: self.cache_key",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/IAMDataExfiltration.py",
       "source_sha256": "f0a7a4c45b27ad5d520186ef64fc9e4925e2d486c28e80fb02463333dde660e7",
@@ -2101,7 +2099,7 @@
       "id": "CKV_AWS_289",
       "kind": "resource",
       "name": "Ensure IAM policies does not allow permissions management / resource exposure without constraints",
-      "reason": "custom Python scan_resource_conf: call hasattr",
+      "reason": "custom Python scan_resource_conf: reads instance state: self.cache_key",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/IAMPermissionsManagement.py",
       "source_sha256": "4bff0b2e94b2eac319436dccd1eca3489c0e87589ad78b54e11948be7a0188cd",
@@ -2120,7 +2118,7 @@
       "id": "CKV_AWS_290",
       "kind": "resource",
       "name": "Ensure IAM policies does not allow write access without constraints",
-      "reason": "custom Python scan_resource_conf: call hasattr",
+      "reason": "custom Python scan_resource_conf: reads instance state: self.cache_key",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/IAMWriteAccess.py",
       "source_sha256": "dc263b3786b4b0004c6a3c0c7110b4b6941d9a05df23f40c79cfe30efa76499a",
@@ -2764,7 +2762,7 @@
       "id": "CKV_AWS_355",
       "kind": "resource",
       "name": "Ensure no IAM policies documents allow \"*\" as a statement's resource for restrictable actions",
-      "reason": "custom Python scan_resource_conf: call hasattr",
+      "reason": "custom Python scan_resource_conf: reads instance state: self.cache_key",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/IAMStarResourcePolicyDocument.py",
       "source_sha256": "4540421b935d9338226223254ecafc1657fb9f2be83966bb42b2850bc23039b3",
@@ -3063,21 +3061,19 @@
       "id": "CKV_AWS_45",
       "kind": "resource",
       "name": "Ensure no hard-coded secrets exist in lambda environment",
-      "reason": "custom Python scan_resource_conf: checkov.common.util.secrets.string_has_secrets: *args, **kwargs or keyword-only parameters",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/LambdaEnvironmentCredentials.py",
       "source_sha256": "c988f19c26c0e5632cd2cecf38f30e2b3193e8e2d6870e94ce3825e4bac4918d",
-      "status": "unsupported"
+      "status": "translated"
     },
     {
       "id": "CKV_AWS_46",
       "kind": "resource",
       "name": "Ensure no hard-coded secrets exist in EC2 user data",
-      "reason": "custom Python scan_resource_conf: checkov.common.util.secrets.string_has_secrets: *args, **kwargs or keyword-only parameters",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/aws/EC2Credentials.py",
       "source_sha256": "ec8d00943591567f10436f8b0e0366b9d5a9529609424330d2de3ad04054dd44",
-      "status": "unsupported"
+      "status": "translated"
     },
     {
       "id": "CKV_AWS_47",
@@ -4390,11 +4386,10 @@
       "id": "CKV_AZURE_183",
       "kind": "resource",
       "name": "Ensure that VNET uses local DNS addresses",
-      "reason": "custom Python scan_resource_conf: call ip_network",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/azure/VnetLocalDNS.py",
       "source_sha256": "b6f252bb7c2eb4c6bf9d0ee06c88ead2c3245e0f52567422f48377a7c0c7e853",
-      "status": "unsupported"
+      "status": "translated"
     },
     {
       "id": "CKV_AZURE_184",
@@ -4906,11 +4901,10 @@
       "id": "CKV_AZURE_235",
       "kind": "resource",
       "name": "Ensure that Azure container environment variables are configured with secure values only",
-      "reason": "custom Python scan_resource_conf: itertools used as a value",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/azure/AzureContainerInstanceEnvVarSecureValueType.py",
       "source_sha256": "6d8e88c62cf69f752a142bb3e5eb3af1d051d24e7552329e450528749f4e9dd7",
-      "status": "unsupported"
+      "status": "translated"
     },
     {
       "id": "CKV_AZURE_236",
@@ -5150,11 +5144,10 @@
       "id": "CKV_AZURE_4",
       "kind": "resource",
       "name": "Ensure AKS logging to Azure Monitoring is Configured",
-      "reason": "overridden scan_resource_conf: dpath used as a value",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/azure/AKSLoggingEnabled.py",
       "source_sha256": "556371db763c63166d1a80fa44ccf562e651904502a8810d6cceca692e4fd33d",
-      "status": "unsupported"
+      "status": "translated"
     },
     {
       "id": "CKV_AZURE_40",
@@ -5205,11 +5198,10 @@
       "id": "CKV_AZURE_45",
       "kind": "resource",
       "name": "Ensure that no sensitive credentials are exposed in VM custom_data",
-      "reason": "custom Python scan_resource_conf: checkov.common.util.secrets.string_has_secrets: *args, **kwargs or keyword-only parameters",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/azure/VMCredsInCustomData.py",
       "source_sha256": "2c3d9e041180c3fdbeae0b4de1be46d5a7842405608d44076cd675121eb98f06",
-      "status": "unsupported"
+      "status": "translated"
     },
     {
       "id": "CKV_AZURE_47",
@@ -5242,11 +5234,10 @@
       "id": "CKV_AZURE_5",
       "kind": "resource",
       "name": "Ensure RBAC is enabled on AKS clusters",
-      "reason": "custom Python scan_resource_conf: dpath used as a value",
       "severity_defaulted": true,
       "source": "terraform/checks/resource/azure/AKSRbacEnabled.py",
       "source_sha256": "5ebbd304760809576a5ba9eed784f432899ea8c0418c9ab90fd156473fade20d",
-      "status": "unsupported"
+      "status": "translated"
     },
     {
       "id": "CKV_AZURE_50",
@@ -9525,17 +9516,17 @@
     }
   ],
   "ir_version": 4,
-  "rules": 1064,
+  "rules": 1073,
   "schema": 1,
   "semantics": "configured values; Checkov missing-value policy; oxtf abstract-value lattice",
   "source": "checkov",
   "source_version": "3.2.328",
   "translated": {
     "graph": 186,
-    "resource": 879
+    "resource": 888
   },
   "unsupported": {
     "graph": 0,
-    "resource": 31
+    "resource": 22
   }
 }

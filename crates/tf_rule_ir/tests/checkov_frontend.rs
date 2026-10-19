@@ -160,8 +160,6 @@ fn regex_matches_python() {
             "(?=a)",
             r"(a)\1",
             "a*+",
-            "(?s).",
-            "(?m)^a",
             "(?x)a b",
             r"(?a)\w",
             "^(?!x)",
