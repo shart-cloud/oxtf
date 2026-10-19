@@ -371,6 +371,128 @@ it has been reviewed. The value-check harness (`bench/checkov/compare.py`)
 is the correctness gate for every operator that follows, as it was for
 the existing 508.
 
+### Result (done 2026-10-19): one interpreter, not one operator per shape
+
+**How it was done**
+- `scripts/classify_checkov.py` reads each check's *deciding code*:
+  - the methods of its class and its helper bases (`Abs*` classes and
+    similar), stopping at Checkov's generic bases;
+  - the module-level helpers of the checks they call;
+  - type annotations stripped.
+- It records two labels for each check in
+  `bench/checkov/python_checks.json` (388 rows):
+  - a *shape*: what the check is about;
+  - a *tier*: the smallest restricted-Python subset its code stays
+    within.
+- About 25 checks were read by hand, at least 3 per tier and from the
+  two largest shape buckets. Three classifier bugs found that way were
+  fixed:
+  - Checkov's shared utilities were treated as inlined helpers;
+  - type annotations were counted as names;
+  - `super().scan_resource_conf` was rejected, though it is Checkov's
+    generic value check.
+
+**Why tiers, not shapes.** Reading the code changed the plan's premise.
+The shapes are not the useful axis:
+- 212 of the 388 (`multi-attribute` 127, `quantified-block` 85) are
+  small decision trees over the Checkov-shaped `conf`. They test whether
+  a key is present, compare `conf[k][0] ==` a literal, test `in` a list,
+  `is None` and `isinstance`, and combine those with `and`/`or` and
+  early `return CheckResult.X`.
+- The domain-looking shapes (`open-ingress`, `named-setting`,
+  `version-compare`) are the same code plus loops and string or number
+  operations.
+- So the leverage is in one native interpreter for a restricted Python
+  subset, run over the Checkov-shaped configuration the value checks
+  already build (`checkov::configuration`). Per-shape operators would
+  each cover a few dozen checks.
+
+**Tiers.** Each tier adds constructs to the one before; the cumulative
+column counts the checks covered up to that tier.
+
+| Tier | Constructs it adds | Checks | Cumulative |
+|---|---|---:|---:|
+| decision-tree | `if`/`return`, `get`/`[k]`/`[0]`, `in`, `==`, `is None`, `isinstance`, `and`/`or`/`not`, locals, instance and module constants, `force_list`, `super()` value check | 162 | 162 (42%) |
+| loops | `for`, comprehensions, `any`/`all`, `len`, `enumerate`, `sort` with a key lambda, `break`/`continue` | 116 | 278 (72%) |
+| string-number-ops | `lower`/`startswith`/`split`/`replace`/..., `int`/`float`/`force_int`, arithmetic, `fnmatch`, version tuples | 52 | 330 (85%) |
+| regex | `re.match`/`search`/`findall`, compiled patterns (`tf_rule_ir::pyre` already translates Python regex) | 11 | 341 (88%) |
+| exceptions | `try`/`except` as a fallback result when a lookup fails | 17 | 358 (92%) |
+| domain-helper | see below | 27 | 385 (99%) |
+| outside-subset | 2 read Checkov's resource graph (`self.graph`), 1 depends on the current date (`datetime.now`) | 3 | 388 |
+
+**Domain helpers (27):**
+- IAM/resource policy parsing: `extract_policy_dict`,
+  `ResourcePolicyDocument`, `json.loads`/`yaml`. 12 checks.
+- cloudsplaining: needs policy_sentry's IAM action database. 6 checks.
+- `find_in_dict`/`dpath` path search over a nested dict. 5 checks.
+- `string_has_secrets`: Checkov's secret regexes. 3 checks.
+- `ipaddress`. 1 check.
+
+**Shape × tier**, for reference:
+
+| shape | decision | loops | string/num | regex | except | domain | outside |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| multi-attribute | 115 | 4 | 1 | 0 | 0 | 7 | 0 |
+| quantified-block | 0 | 82 | 2 | 0 | 0 | 1 | 0 |
+| open-ingress | 2 | 5 | 18 | 3 | 12 | 0 | 0 |
+| single-attribute | 31 | 0 | 0 | 0 | 0 | 0 | 0 |
+| number-compare | 11 | 3 | 13 | 1 | 0 | 0 | 1 |
+| named-setting | 1 | 20 | 3 | 0 | 0 | 0 | 0 |
+| policy-document | 1 | 0 | 0 | 0 | 2 | 15 | 2 |
+| string-match | 0 | 0 | 12 | 6 | 1 | 0 | 0 |
+| version-compare | 1 | 0 | 3 | 1 | 2 | 0 | 0 |
+| secret-scan | 0 | 0 | 0 | 0 | 0 | 3 | 0 |
+| cidr | 0 | 2 | 0 | 0 | 0 | 1 | 0 |
+
+**Recommended next plan.** To be written only after review.
+
+*A `checkov_python` clause.* The importer serializes each check's
+deciding code as a normalized AST, with instance and module constants
+folded in, into rule IR. `tf_rule_ir` then interprets it natively over
+`checkov::configuration` (the same conf shape, with string booleans
+already normalized as of 514d960). The order:
+1. **decision-tree + loops: 278 checks (72%).** The interpreter core:
+   Python values (dict, list, str, number, bool, None) and the subset's
+   semantics. The semantics to match exactly:
+   - truthiness: `[False]` is true;
+   - `in` on a string is a substring test, on a list membership;
+   - `['x'] == 'x'` is false;
+   - `dict.get` defaults;
+   - `KeyError`/`IndexError` (abort with no result unless caught);
+   - in-place `sort` mutates only the check's copy.
+2. **string/number ops, regex, exceptions: +80 → 358 checks (92%).**
+   Mostly library surface on the same core. Regex reuses `pyre`.
+3. **Domain helpers, each a native function: up to +27.**
+   - Policy parsing (12) first.
+   - `find_in_dict`/`dpath` (5) and `ipaddress` (1) are small.
+   - Secrets (3) needs Checkov's patterns vendored.
+   - cloudsplaining (6) needs policy_sentry's action database. Defer,
+     or bundle it as data.
+4. **Outside (3):** the two `self.graph` checks are candidates for the
+   graph engine. Skip `datetime.now`.
+
+*Abstract values.* A branch on a value that is not known follows the
+existing lattice:
+- Unknown makes the result Unknown (no finding);
+- Tainted makes it conditional;
+- OneOf evaluates each alternative and joins the results.
+
+`self.evaluated_keys`, which Checkov sets for its own reporting, gives
+the deciding attribute path for findings, which the value checks lack
+today.
+
+*Conformance.* The value harness needs richer generators: nested blocks
+and lists built from the keys each check reads (`signature.keys`), with
+the existing value variants at each leaf. Better still, Checkov's own
+per-check test fixtures (`tests/terraform/checks/resource/**`, not in
+the PyPI package; needs the 3.2.328 git tag) as a second corpus. The
+gate stays 0 disagreements.
+
+*Alternative considered.* Transpiling the Python to existing IR
+expressions. Rejected: the IR has no statements, early return or loops
+with exits, so most of the 278 would not fit without growing it into
+the same interpreter.
+
 ## Branching
 
 These commits stack on `feat/checkov-native-policies` (638afcb, not
