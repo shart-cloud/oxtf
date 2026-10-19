@@ -749,12 +749,92 @@ fn substring(v: &Value, s: &str, expected: &Json) -> Verdict {
     }
 }
 
+/// An attribute value as Checkov's parser leaves it: `clean_parser_types`
+/// (`terraform/modules/module_utils.py`) turns the strings `"true"` and
+/// `"false"` into booleans at every depth, except under a key named
+/// `alias`. Checkov renders variables and locals into the same shape, so
+/// this applies to evaluated values, not only to literals.
+///
+/// Not modelled: the same function also moves a list's strings, sorted,
+/// after its other elements.
+fn parser_types(value: &Value) -> Value {
+    parser_types_changed(value).unwrap_or_else(|| value.clone())
+}
+
+/// [`parser_types`], or `None` when nothing changes (the common case,
+/// which then costs no allocation).
+fn parser_types_changed(value: &Value) -> Option<Value> {
+    let changed = |kind: Kind| Value {
+        kind,
+        prov: value.prov.clone(),
+    };
+    match &value.kind {
+        Kind::Known(Known::String(s)) => match &**s {
+            "true" => Some(changed(Kind::Known(Known::Bool(true)))),
+            "false" => Some(changed(Kind::Known(Known::Bool(false)))),
+            _ => None,
+        },
+        Kind::Known(Known::List(items)) => {
+            let new: Vec<Option<Value>> = items.iter().map(parser_types_changed).collect();
+            new.iter().any(Option::is_some).then(|| {
+                changed(Kind::Known(Known::List(std::sync::Arc::new(
+                    new.into_iter()
+                        .zip(items.iter())
+                        .map(|(n, old)| n.unwrap_or_else(|| old.clone()))
+                        .collect(),
+                ))))
+            })
+        }
+        Kind::Known(Known::Object(items)) => {
+            let new: Vec<Option<Value>> = items
+                .iter()
+                .map(|(k, v)| {
+                    if &**k == "alias" {
+                        None
+                    } else {
+                        parser_types_changed(v)
+                    }
+                })
+                .collect();
+            new.iter().any(Option::is_some).then(|| {
+                changed(Kind::Known(Known::Object(std::sync::Arc::new(
+                    new.into_iter()
+                        .zip(items.iter())
+                        .map(|(n, (k, old))| (k.clone(), n.unwrap_or_else(|| old.clone())))
+                        .collect(),
+                ))))
+            })
+        }
+        Kind::OneOf(o) => {
+            let new: Vec<Option<Value>> = o.alternatives.iter().map(parser_types_changed).collect();
+            new.iter().any(Option::is_some).then(|| {
+                Value::one_of(
+                    new.into_iter()
+                        .zip(o.alternatives.iter())
+                        .map(|(n, old)| n.unwrap_or_else(|| old.clone()))
+                        .collect(),
+                    o.tainted,
+                )
+                .child_of(value)
+            })
+        }
+        _ => None,
+    }
+}
+
 /// Graph vertices unwrap parser lists; blocks still retain their cardinality.
 fn graph_configuration(body: &Body) -> Value {
     let mut map: Map = body
         .attrs
         .iter()
-        .map(|a| (a.name.clone(), a.value.clone()))
+        .map(|a| {
+            let value = if &*a.name == "alias" {
+                a.value.clone()
+            } else {
+                parser_types(&a.value)
+            };
+            (a.name.clone(), value)
+        })
         .collect();
     for block in &body.blocks {
         if map.contains_key(&block.ty) {
@@ -1096,10 +1176,15 @@ pub(crate) fn equal(value: &Value, expected: &Json) -> Verdict {
 /// Checkov-shaped configured field, keeping source evidence and unknowns.
 pub fn field(body: &Body, name: &str) -> Option<Value> {
     if let Some(a) = body.attr(name) {
-        return Some(if a.from_blocks {
-            block_values(&a.value)
+        let value = if name == "alias" {
+            a.value.clone()
         } else {
-            Value::list(vec![a.value.clone()])
+            parser_types(&a.value)
+        };
+        return Some(if a.from_blocks {
+            block_values(&value)
+        } else {
+            Value::list(vec![value])
         });
     }
     let blocks: Vec<_> = body

@@ -18,6 +18,9 @@ import time
 import hcl2
 from checkov.terraform import runner  # registers upstream checks
 from checkov.terraform.checks.resource.registry import resource_registry
+# Checkov's parser applies this to every parsed file before any check runs
+# (string booleans become booleans); parse cases the same way.
+from checkov.terraform.modules.module_utils import clean_parser_types
 
 
 def graph_cases(rule, manifest, corpus):
@@ -32,7 +35,7 @@ def graph_cases(rule, manifest, corpus):
 
     def leaves(node):
         if "attribute" in node:
-            values = attributes.setdefault(node["attribute"], [None, False, True, 0, 1, "", "unexpected", [], {}])
+            values = attributes.setdefault(node["attribute"], [None, False, True, 0, 1, "", "unexpected", "true", "false", [], {}])
             value = node.get("value")
             values.extend(value if isinstance(value, list) else [value])
         for key in ("and", "or"):
@@ -56,7 +59,7 @@ def graph_cases(rule, manifest, corpus):
         for i, values in enumerate(cases):
             contents = "\n".join(f"{k} = {json.dumps(v)}" for k, v in values.items())
             blocks.append(f'resource "{ty}" "case_{i}" {{\n{contents}\n}}\n')
-            graph.add_node(i, **values, resource_type=ty, block_type_="resource", source_="terraform",
+            graph.add_node(i, **clean_parser_types(copy.deepcopy(values)), resource_type=ty, block_type_="resource", source_="terraform",
                            id_=i, __address__=f"{ty}.case_{i}", file_path_=str(root / "main.tf"))
         passed, failed, unknown = check.run(graph)
         outcomes = {n["__address__"]: label for nodes, label in ((passed,"PASSED"), (failed,"FAILED"), (unknown,"UNKNOWN")) for n in nodes}
@@ -112,7 +115,7 @@ def main():
             condition = clause["condition"]
             if condition["op"] != "checkov_value":
                 continue
-            values = [None, False, True, 0, 1, "", "unexpected", [], ["unexpected", "other"], {}]
+            values = [None, False, True, 0, 1, "", "unexpected", "true", "false", "True", [], ["unexpected", "other"], {}]
             values.extend(condition["values"])
             # Missing is separate from explicit null.
             values = ["__missing__", *{json.dumps(x, sort_keys=True): x for x in values}.values()]
@@ -123,7 +126,7 @@ def main():
             for i, value in enumerate(values):
                 contents = "" if value == "__missing__" else body(condition["path"], value)
                 text = f'resource "{ty}" "case_{i}" {{\n{contents}\n}}\n'
-                conf = hcl2.loads(text)["resource"][0][ty][f"case_{i}"]
+                conf = clean_parser_types(hcl2.loads(text)["resource"][0][ty][f"case_{i}"])
                 check = copy.deepcopy(checks[rule["name"]])
                 try:
                     outcome = check.scan_entity_conf(conf, ty).value
