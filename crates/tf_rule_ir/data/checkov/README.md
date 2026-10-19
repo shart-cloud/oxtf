@@ -9,6 +9,17 @@ helpers it calls), interpreted natively; Checkov itself is not run.
 Upstream IDs, names and categories are kept, and each rule records the
 upstream file it came from.
 
+Some Python checks call into libraries Checkov depends on, and their
+programs carry translations of that code too:
+
+- [cloudsplaining](https://github.com/salesforce/cloudsplaining) 0.7.0
+  (`ResourcePolicyDocument`), BSD 3-Clause, `LICENSE.cloudsplaining`;
+- [policy_sentry](https://github.com/salesforce/policy_sentry) 0.13.2
+  (the `ARN` parser), MIT, `LICENSE.policy_sentry`.
+
+These two files are kept by hand: the generator writes only `rules.json`,
+`manifest.json` and `LICENSE.checkov`.
+
 - `rules.json`: the rules compiled into oxtf (`tf_rule_ir::bundled`).
   `build.rs` turns it into a static table at build time, so a scan reads
   no JSON at startup and compiles a rule only when it first judges a
