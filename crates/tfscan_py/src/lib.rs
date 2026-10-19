@@ -1100,6 +1100,7 @@ fn build_catalog(
                     file: None,
                     line: None,
                 },
+                aliases: Vec::new(),
             },
             func: cb.getattr("func")?.unbind(),
             error: error.clone(),
@@ -1315,6 +1316,10 @@ fn rule_dict<'py>(py: Python<'py>, r: &RuleInfo) -> PyResult<Bound<'py, PyDict>>
     )?;
     src.set_item("line", r.source.line)?;
     d.set_item("source", src)?;
+    d.set_item(
+        "aliases",
+        r.aliases.iter().map(|a| a.as_ref()).collect::<Vec<_>>(),
+    )?;
     Ok(d)
 }
 

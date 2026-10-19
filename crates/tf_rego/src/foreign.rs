@@ -195,6 +195,7 @@ pub fn rules(opts: &Options) -> Result<Vec<Box<dyn DynRule>>, String> {
                     file: Some(u.file.clone()),
                     line: Some(u.line),
                 },
+                aliases: Vec::new(),
             },
             types: u.meta.resource_types.clone(),
             input,

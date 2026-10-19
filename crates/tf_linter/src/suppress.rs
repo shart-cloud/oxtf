@@ -99,15 +99,17 @@ pub fn checkov_skips(
     files: &FileTable,
     store: Option<&ModuleStore>,
 ) -> (Vec<Finding>, Vec<Suppressed>) {
-    if !findings.iter().any(|f| f.source.engine == Engine::Checkov) {
+    // A rule that aliases a Checkov rule is suppressed by its IDs too.
+    let skippable = |f: &Finding| f.source.engine == Engine::Checkov || !f.aliases.is_empty();
+    if !findings.iter().any(skippable) {
         return (findings, Vec::new());
     }
     let mut cache: HashMap<FileId, Vec<Skip>> = HashMap::new();
     let mut kept = Vec::new();
     let mut suppressed = Vec::new();
     for f in findings {
-        let hit = match (&f.subject, f.source.engine) {
-            (FindingSubject::Resource(id), Engine::Checkov) => analysis
+        let hit = match &f.subject {
+            FindingSubject::Resource(id) if skippable(&f) => analysis
                 .modules
                 .iter()
                 .flat_map(|m| &m.resources)
@@ -119,7 +121,12 @@ pub fn checkov_skips(
                             let skips = cache.entry(file).or_insert_with(|| skips(files, file));
                             skips
                                 .iter()
-                                .find(|s| first < s.line && s.line < last && *s.id == *f.rule)
+                                .find(|s| {
+                                    first < s.line
+                                        && s.line < last
+                                        && (*s.id == *f.rule
+                                            || f.aliases.iter().any(|a| **a == *s.id))
+                                })
                                 .map(|s| (s.comment.clone(), s.at))
                         })
                 }),

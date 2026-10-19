@@ -746,6 +746,7 @@ pub fn compile(spec: RuleSpec) -> Result<CompiledRule, String> {
         runs_on_module: false,
         guideline: spec.guideline.as_deref().map(Arc::from),
         source: spec.origin.0.clone(),
+        aliases: Vec::new(),
     };
     let fix = derive_fix(&spec);
     Ok(CompiledRule {

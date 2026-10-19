@@ -20,6 +20,7 @@ fn info() -> RuleInfo {
         runs_on_module: false,
         guideline: None,
         source: Default::default(),
+        aliases: Vec::new(),
     }
 }
 

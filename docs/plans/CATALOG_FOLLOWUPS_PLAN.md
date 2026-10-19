@@ -226,6 +226,73 @@ keep one rule.
   is 5 + 693 − *n*, and they show as aliases on their canonical rules.
   Update the counts in the CLI test.
 
+### Result (implemented 2026-10-19)
+
+**Method.** Each pair was compared on four sets of cases, with real
+Checkov 3.2.328 as the reference:
+- the corpus;
+- the seed rule's fixtures;
+- hand-written edge cases;
+- for the GCP pair, also the harness's generated cases for that check.
+
+| Pair | Outcome |
+|---|---|
+| `gcp-storage-uniform-access` / `CKV_GCP_29` | **Equivalent → aliased** |
+| `aws-rds-unencrypted` / `CKV_AWS_16` | Not equivalent: kept both |
+| `aws-s3-public-access-block` / `CKV2_AWS_6` | Not equivalent: kept both |
+
+**GCP pair: equivalent, and aliased.**
+- They agree on the corpus, all five seed fixtures, and eight edge cases:
+  string `"true"`, `"True"` and `"false"`, `"true"` through an untyped
+  variable, a typed variable and a local, `null`, and a dynamic `count`.
+- They also agree on all but one of Checkov's 14 generated cases. The
+  exception is `= 1`, which Checkov passes only because Python treats
+  `1 == True`; Terraform rejects a number for this boolean.
+- Getting there exposed a conformance bug in the bundled catalog. Checkov
+  reads string booleans as booleans and our translation did not; fixed
+  in 514d960, which also made both harnesses test that case.
+
+**RDS pair: not equivalent.** The seed rule skips read replicas, which
+inherit encryption from their source. Checkov flags them: 1 corpus
+resource (`replica-postgres`). The seed behaviour is the better one, but
+`CKV_AWS_16` must match Checkov, so both run.
+
+**S3 pair: not equivalent.**
+- `CKV2_AWS_6` requires only `block_public_acls` and
+  `block_public_policy`; the seed rule requires all four protections.
+- The seed rule also looks for the access block only in the bucket's own
+  module. A block in the root that refers to `module.m.id` is a seed
+  false positive; Checkov follows the connection.
+- **Follow-up:** make the seed rule follow cross-module references (the
+  resource graph has them).
+
+**Design change from the plan: the seed rule survives.** The plan said
+the Checkov rule would be canonical, with the seed rule's better output
+carried over as an override. Comparing findings showed the seed rule's
+output is computed, not static:
+- a specific message (`uniform_bucket_level_access is not set (provider
+  default: false)`);
+- the deciding attribute;
+- a fix hint.
+
+The Checkov rule has only its title, with no attribute and no fix hint.
+Static JSON can't carry any of that, so the seed rule is canonical:
+- `RuleMeta::ALIASES` names the bundled IDs it replaces, exposed as
+  `RuleInfo::aliases`.
+- An alias shadows like a name in `Catalog::resolve`, which drops
+  `CKV_GCP_29` when the seed rules are on.
+- Either ID selects the rule (`--rule`, `select=`).
+- A `checkov:skip` of either ID suppresses it.
+- `oxtf rules` and `tfscan.rules()` list the aliases.
+
+**Gate**
+- Corpus findings unchanged (974). No corpus resource had both GCP
+  findings, so nothing dropped there.
+- `rules` lists 5 + 693 − 1 = 697.
+- New tests cover replacement, selection by alias, the bundled rule
+  without seeds, `checkov:skip` by alias (`tf_scan/tests/aliases.rs`),
+  and the Python listing and selection.
+
 ## 3. Classify the 388 untranslated checks
 
 | Reason in `manifest.json` | Checks |

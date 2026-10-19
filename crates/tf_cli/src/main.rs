@@ -263,6 +263,7 @@ fn main() -> ExitCode {
                             "runs_on_module": r.runs_on_module,
                             "guideline": r.guideline.as_deref(),
                             "source": tf_linter::record::SourceRef::from(&r.source),
+                            "aliases": r.aliases.iter().map(|a| &**a).collect::<Vec<_>>(),
                         })
                     })
                     .collect();
@@ -275,11 +276,14 @@ fn main() -> ExitCode {
                 } else {
                     r.resource_types.join(", ")
                 };
-                let source = match (&r.source.file, r.source.line) {
+                let mut source = match (&r.source.file, r.source.line) {
                     (Some(f), Some(l)) => format!("  {}:{l}", f.display()),
                     (Some(f), None) => format!("  {}", f.display()),
                     _ => String::new(),
                 };
+                if !r.aliases.is_empty() {
+                    source = format!("  (also {}){source}", r.aliases.join(", "));
+                }
                 println!(
                     "{:<28} {:<9} {:<11} {:<9} {}  [{}]{source}",
                     r.name,

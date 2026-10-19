@@ -151,6 +151,10 @@ pub trait RuleMeta {
     const RESOURCE_TYPES: &'static [&'static str] = &[];
     /// Whether [`Rule::module_verdicts`] should be called (cross-resource rules).
     const RUNS_ON_MODULE: bool = false;
+    /// IDs of bundled rules this rule replaces: proven to flag the same
+    /// resources, so a catalog holding both keeps only this one. It is
+    /// selected by, and `checkov:skip`-suppressed by, any of them too.
+    const ALIASES: &'static [&'static str] = &[];
 }
 
 /// What a rule says. Both hooks default to "nothing".
@@ -288,6 +292,8 @@ pub struct RuleInfo {
     /// A page explaining the rule and its fix, when the rule names one.
     pub guideline: Option<Arc<str>>,
     pub source: RuleSource,
+    /// Other IDs of this rule ([`RuleMeta::ALIASES`]).
+    pub aliases: Vec<Arc<str>>,
 }
 
 /// Where a rule comes from.
@@ -388,6 +394,7 @@ impl<T: Rule> DynRule for T {
             runs_on_module: T::RUNS_ON_MODULE,
             guideline: None,
             source: RuleSource::default(),
+            aliases: T::ALIASES.iter().map(|s| Arc::from(*s)).collect(),
         }
     }
     fn judge_resource(&self, resource: &Resource) -> Result<Vec<Judgement>, RuleFailure> {
@@ -444,6 +451,8 @@ pub struct Finding {
     pub level: Level,
     pub guideline: Option<Arc<str>>,
     pub source: RuleSource,
+    /// The rule's other IDs ([`RuleInfo::aliases`]).
+    pub aliases: Vec<Arc<str>>,
     /// What the finding is about.
     pub subject: FindingSubject,
     /// Resource address, module path included (`module.m.aws_s3_bucket.b`);
@@ -584,6 +593,7 @@ impl Finding {
             level: info.level,
             guideline: info.guideline.clone(),
             source: info.source.clone(),
+            aliases: info.aliases.clone(),
             subject: FindingSubject::Resource(resource.id.clone()),
             address: resource.address.clone(),
             resource_type: Some(resource.ty.clone()),
@@ -644,6 +654,7 @@ impl Finding {
             level: info.level,
             guideline: info.guideline.clone(),
             source: info.source.clone(),
+            aliases: info.aliases.clone(),
             subject: FindingSubject::File {
                 path: file.path.clone(),
             },

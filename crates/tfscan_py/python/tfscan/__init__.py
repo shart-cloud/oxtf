@@ -454,9 +454,10 @@ def rules(
     ``builtin`` is false: the seed rules and, unless ``bundled`` is false,
     the bundled Checkov catalog) and every rule in ``rule_files`` (any format), each
     a dict with ``name``, ``level``, ``category``, ``description``,
-    ``resource_types``, ``runs_on_module``, ``guideline`` and ``source``
-    (``engine``, ``file``, ``line``). A rule file in a directory that does
-    not load is skipped with a ``UserWarning``."""
+    ``resource_types``, ``runs_on_module``, ``guideline``, ``source``
+    (``engine``, ``file``, ``line``) and ``aliases`` (other IDs that select
+    the rule; a seed rule lists the bundled rule it replaces). A rule file
+    in a directory that does not load is skipped with a ``UserWarning``."""
     import warnings
 
     out, skipped = _tfscan.rules_info(

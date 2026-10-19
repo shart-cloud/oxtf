@@ -457,6 +457,7 @@ fn rules_lists_the_bundled_catalog() {
         v.as_array().unwrap().len()
     };
     assert_eq!(count(&["--no-bundled"]), 5);
-    assert_eq!(count(&[]), 5 + 693);
+    // gcp-storage-uniform-access replaces CKV_GCP_29, its alias.
+    assert_eq!(count(&[]), 5 + 693 - 1);
     assert_eq!(count(&["--no-builtin"]), 0);
 }

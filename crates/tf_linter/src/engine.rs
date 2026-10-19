@@ -304,10 +304,18 @@ pub fn select_rules(
     rules: Vec<Box<dyn DynRule>>,
     ids: &[String],
 ) -> Result<Vec<Box<dyn DynRule>>, RuleSelectionError> {
-    let names: Vec<_> = rules.iter().map(|r| r.info().name).collect();
+    // A rule is selected by its name or any of its aliases.
+    let names: Vec<Vec<Arc<str>>> = rules
+        .iter()
+        .map(|r| {
+            let info = r.info();
+            std::iter::once(info.name).chain(info.aliases).collect()
+        })
+        .collect();
+    let named = |names: &[Arc<str>], id: &str| names.iter().any(|n| &**n == id);
     let mut unknown_ids = Vec::new();
     for id in ids {
-        if !names.iter().any(|name| name.as_ref() == id) && !unknown_ids.contains(id) {
+        if !names.iter().any(|n| named(n, id)) && !unknown_ids.contains(id) {
             unknown_ids.push(id.clone());
         }
     }
@@ -317,6 +325,6 @@ pub fn select_rules(
     Ok(rules
         .into_iter()
         .zip(names)
-        .filter_map(|(rule, name)| ids.iter().any(|id| name.as_ref() == id).then_some(rule))
+        .filter_map(|(rule, n)| ids.iter().any(|id| named(&n, id)).then_some(rule))
         .collect())
 }

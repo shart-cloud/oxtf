@@ -16,6 +16,7 @@ impl RuleMeta for GcpStorageUniformAccess {
     const DESCRIPTION: &'static str =
         "Cloud Storage bucket does not enforce uniform bucket-level access";
     const RESOURCE_TYPES: &'static [&'static str] = &["google_storage_bucket"];
+    const ALIASES: &'static [&'static str] = &["CKV_GCP_29"];
 }
 
 impl Rule for GcpStorageUniformAccess {

@@ -121,13 +121,18 @@ impl Catalog {
     pub fn resolve(mut self) -> Result<Resolved, ScanError> {
         let mut warnings = Vec::new();
         // A shadowed rule leaves a hole, so each rule keeps the position of
-        // its source; holes are dropped at the end.
+        // its source; holes are dropped at the end. A rule's aliases shadow
+        // as its name does: a seed rule replaces the bundled rule it
+        // aliases.
         let mut rules: Vec<Option<Box<dyn DynRule>>> = Vec::new();
         let mut by_name: HashMap<Arc<str>, usize> = HashMap::new();
         let mut add = |batch: Vec<Box<dyn DynRule>>| {
             for rule in batch {
-                if let Some(old) = by_name.insert(rule.info().name, rules.len()) {
-                    rules[old] = None;
+                let info = rule.info();
+                for name in std::iter::once(info.name).chain(info.aliases) {
+                    if let Some(old) = by_name.insert(name, rules.len()) {
+                        rules[old] = None;
+                    }
                 }
                 rules.push(Some(rule));
             }

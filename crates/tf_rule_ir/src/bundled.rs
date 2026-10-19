@@ -111,6 +111,7 @@ pub fn rules() -> Result<Vec<Box<dyn DynRule>>, String> {
                         file: Some(h.file.into()),
                         line: h.line,
                     },
+                    aliases: Vec::new(),
                 },
                 compiled: OnceLock::new(),
             }) as Box<dyn DynRule>)
