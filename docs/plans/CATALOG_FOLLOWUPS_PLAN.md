@@ -638,9 +638,18 @@ corpus once (27 minutes) and compares it with oxtf.
   - **`CKV_AWS_79`:** Checkov does not render the variable the example
     module passes in.
 
-  oxtf evaluates these as Terraform would. This set is the input to
-  deciding whether to emulate more of Checkov's module rendering or
-  leave oxtf Terraform-faithful.
+  oxtf evaluates these as Terraform would.
+
+**Decided (2026-10-19): stay faithful to Terraform.**
+- **Evaluation:** oxtf evaluates a configuration as Terraform does
+  (variables, module inputs, `count`/`for_each`, dynamic blocks,
+  functions) and does not copy where Checkov's rendering falls short.
+  Divergences of that kind are expected, and the corpus comparison is
+  read with that in mind.
+- **Shape:** what is reproduced is the *shape* Checkov's checks are
+  written against: list wrapping, string booleans, sorted lists, a JSON
+  policy as a dict, literal list elements. Without it a check's own
+  code would misread a correctly evaluated value.
 
 Unlike the fixtures, this comparison is not a gate.
 
