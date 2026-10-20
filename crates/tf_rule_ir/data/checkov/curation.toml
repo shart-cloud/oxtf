@@ -24,7 +24,17 @@
 #
 # Order: the most frequent rules on the 17-repository corpus first
 # (docs/plans/SIGNAL_PLAN.md, workstream D), then well-known critical
-# checks the corpus of library modules rarely exercises.
+# checks the corpus of library modules rarely exercises, then every other
+# rule a default corpus scan reported, grouped by service.
+#
+# Principles, so calls stay consistent:
+# - exposure or an over-grant is `security`, levelled by blast radius;
+# - logging, flow logs and log retention are `audit`;
+# - backups, availability, deletion protection, cost, capacity and
+#   operational style are `hygiene`;
+# - a customer-managed key where the provider already encrypts the data
+#   is a compliance choice: `low`, `hygiene`. Data not encrypted at all
+#   is `security`.
 
 # -- most frequent on the corpus ----------------------------------------
 
@@ -153,7 +163,7 @@ why = "log retention of a year is a compliance choice"
 
 [CKV_AWS_158]
 level = "low"
-profile = "security"
+profile = "hygiene"
 category = "encryption"
 why = "log groups are encrypted by default; a customer key adds key control"
 
@@ -413,3 +423,780 @@ level = "critical"
 profile = "security"
 category = "storage"
 why = "storage blobs allowing public access"
+
+# -- the rest of a default corpus scan, by service ---------------------
+
+[CKV_AWS_88]
+level = "medium"
+profile = "security"
+category = "network"
+why = "an instance with a public IP is reachable from the internet subject to its security groups"
+
+[CKV_AWS_61]
+level = "high"
+profile = "security"
+category = "iam"
+why = "a trust policy that lets any principal assume the role"
+
+[CKV_AWS_289]
+level = "high"
+profile = "security"
+category = "iam"
+why = "an IAM policy allowing permissions management or resource exposure"
+
+[CKV_AWS_258]
+level = "high"
+profile = "security"
+category = "iam"
+why = "a Lambda function URL without authentication is publicly invocable"
+
+[CKV_AWS_9]
+level = "low"
+profile = "security"
+category = "iam"
+why = "password expiry for IAM users"
+
+[CKV_AWS_10]
+level = "low"
+profile = "security"
+category = "iam"
+why = "password length for IAM users"
+
+[CKV_AWS_12]
+level = "low"
+profile = "security"
+category = "iam"
+why = "password complexity for IAM users"
+
+[CKV2_AWS_22]
+level = "low"
+profile = "security"
+category = "iam"
+why = "console access for an IAM user is a long-lived credential"
+
+[CKV_AWS_273]
+level = "low"
+profile = "security"
+category = "iam"
+why = "IAM users rather than SSO: long-lived credentials"
+
+[CKV_AWS_40]
+level = "low"
+profile = "hygiene"
+category = "iam"
+why = "policies on users rather than groups or roles is access-management style"
+
+[CKV2_AWS_64]
+level = "low"
+profile = "security"
+category = "iam"
+why = "without a key policy the default grants the whole account"
+
+[CKV_AWS_148]
+level = "low"
+profile = "security"
+category = "network"
+why = "the default VPC has public subnets that assign public IPs"
+
+[CKV_AWS_260]
+level = "medium"
+profile = "security"
+category = "network"
+why = "HTTP open to 0.0.0.0/0"
+
+[CKV_AWS_382]
+level = "low"
+profile = "security"
+category = "network"
+why = "unrestricted egress eases exfiltration; it is also the AWS default"
+
+[CKV2_AWS_11]
+level = "low"
+profile = "audit"
+why = "VPC flow logs are visibility, not exposure"
+
+[CKV2_AWS_20]
+level = "medium"
+profile = "security"
+category = "encryption"
+why = "an ALB serving HTTP without redirecting to HTTPS"
+
+[CKV_AWS_2]
+level = "medium"
+profile = "security"
+category = "encryption"
+why = "an ALB listener serving plain HTTP"
+
+[CKV_AWS_103]
+level = "medium"
+profile = "security"
+category = "encryption"
+why = "a listener allowing TLS below 1.2"
+
+[CKV_AWS_378]
+level = "low"
+profile = "security"
+category = "encryption"
+why = "plain HTTP between the load balancer and its targets"
+
+[CKV2_AWS_28]
+level = "low"
+profile = "security"
+category = "network"
+why = "a WAF in front of a public ALB is defence in depth"
+
+[CKV_AWS_91]
+level = "low"
+profile = "audit"
+why = "load balancer access logs"
+
+[CKV_AWS_150]
+level = "low"
+profile = "hygiene"
+why = "deletion protection guards against accidents, not attackers"
+
+[CKV_AWS_34]
+level = "medium"
+profile = "security"
+category = "encryption"
+why = "viewers allowed over plain HTTP"
+
+[CKV_AWS_174]
+level = "medium"
+profile = "security"
+category = "encryption"
+why = "viewer TLS below 1.2"
+
+[CKV_AWS_68]
+level = "low"
+profile = "security"
+category = "network"
+why = "a WAF in front of a distribution is defence in depth"
+
+[CKV2_AWS_47]
+level = "low"
+profile = "security"
+category = "network"
+why = "Log4j managed rules on the attached WAF"
+
+[CKV2_AWS_32]
+level = "low"
+profile = "security"
+why = "a response headers policy sets browser security headers"
+
+[CKV_AWS_259]
+level = "low"
+profile = "security"
+why = "HSTS in the response headers policy"
+
+[CKV_AWS_86]
+level = "low"
+profile = "audit"
+why = "CloudFront access logs"
+
+[CKV_AWS_310]
+level = "low"
+profile = "hygiene"
+why = "origin failover is availability"
+
+[CKV_AWS_305]
+level = "low"
+profile = "hygiene"
+why = "a default root object is site configuration"
+
+[CKV_AWS_374]
+level = "low"
+profile = "hygiene"
+category = "network"
+why = "geo restriction is a business choice"
+
+[CKV2_AWS_42]
+level = "low"
+profile = "hygiene"
+why = "a custom certificate is branding; the default one is valid TLS"
+
+[CKV_AWS_38]
+level = "high"
+profile = "security"
+category = "network"
+why = "the EKS API endpoint open to 0.0.0.0/0"
+
+[CKV_AWS_39]
+level = "medium"
+profile = "security"
+category = "network"
+why = "a public EKS API endpoint, reachable subject to its CIDR list"
+
+[CKV_AWS_339]
+level = "medium"
+profile = "security"
+why = "an unsupported Kubernetes version gets no security patches"
+
+[CKV_AWS_37]
+level = "low"
+profile = "audit"
+why = "EKS control plane logs"
+
+[CKV_AWS_16]
+level = "high"
+profile = "security"
+category = "encryption"
+why = "RDS storage unencrypted at rest"
+
+[CKV2_AWS_69]
+level = "medium"
+profile = "security"
+category = "encryption"
+why = "RDS connections allowed without TLS"
+
+[CKV_AWS_161]
+level = "low"
+profile = "security"
+category = "iam"
+why = "IAM authentication replaces long-lived database passwords"
+
+[CKV_AWS_162]
+level = "low"
+profile = "security"
+category = "iam"
+why = "IAM authentication replaces long-lived database passwords"
+
+[CKV_AWS_226]
+level = "low"
+profile = "security"
+why = "automatic minor upgrades bring security patches"
+
+[CKV_AWS_353]
+level = "low"
+profile = "hygiene"
+why = "Performance Insights is performance monitoring"
+
+[CKV_AWS_354]
+level = "low"
+profile = "hygiene"
+category = "encryption"
+why = "Performance Insights data is encrypted by default; a customer key adds key control"
+
+[CKV_AWS_133]
+level = "low"
+profile = "hygiene"
+category = "storage"
+why = "backup retention is recovery, not exposure"
+
+[CKV_AWS_118]
+level = "low"
+profile = "hygiene"
+why = "enhanced monitoring is OS metrics at a cost"
+
+[CKV_AWS_157]
+level = "low"
+profile = "hygiene"
+category = "storage"
+why = "Multi-AZ is availability"
+
+[CKV_AWS_293]
+level = "low"
+profile = "hygiene"
+why = "deletion protection guards against accidents, not attackers"
+
+[CKV_AWS_139]
+level = "low"
+profile = "hygiene"
+why = "deletion protection guards against accidents, not attackers"
+
+[CKV_AWS_326]
+level = "low"
+profile = "hygiene"
+why = "backtracking is recovery"
+
+[CKV2_AWS_8]
+level = "low"
+profile = "hygiene"
+category = "storage"
+why = "AWS Backup coverage is recovery"
+
+[CKV_AWS_245]
+level = "low"
+profile = "hygiene"
+category = "encryption"
+why = "replicated backups are encrypted; a customer key adds key control"
+
+[CKV_AWS_327]
+level = "low"
+profile = "hygiene"
+category = "encryption"
+why = "a customer key for an encrypted cluster adds key control"
+
+[CKV_AWS_129]
+level = "low"
+profile = "audit"
+why = "database logs exported to CloudWatch"
+
+[CKV_AWS_324]
+level = "low"
+profile = "audit"
+why = "database logs exported to CloudWatch"
+
+[CKV_AWS_325]
+level = "low"
+profile = "audit"
+why = "MySQL audit logs"
+
+[CKV2_AWS_30]
+level = "low"
+profile = "audit"
+why = "Postgres query logging"
+
+[CKV2_AWS_27]
+level = "low"
+profile = "audit"
+why = "Postgres query logging"
+
+[CKV2_AWS_65]
+level = "low"
+profile = "security"
+category = "storage"
+why = "bucket ACLs left enabled can grant access outside the bucket policy"
+
+[CKV_AWS_145]
+level = "low"
+profile = "hygiene"
+category = "encryption"
+why = "S3 encrypts objects by default; a KMS key adds key control"
+
+[CKV_AWS_18]
+level = "low"
+profile = "audit"
+why = "S3 server access logs"
+
+[CKV_AWS_21]
+level = "low"
+profile = "hygiene"
+category = "storage"
+why = "versioning is recovery"
+
+[CKV_AWS_144]
+level = "low"
+profile = "hygiene"
+category = "storage"
+why = "cross-region replication is availability"
+
+[CKV2_AWS_61]
+level = "low"
+profile = "hygiene"
+category = "storage"
+why = "lifecycle rules are cost"
+
+[CKV2_AWS_62]
+level = "low"
+profile = "hygiene"
+why = "event notifications are integration"
+
+[CKV_AWS_300]
+level = "low"
+profile = "hygiene"
+category = "storage"
+why = "aborting failed multipart uploads is cost"
+
+[CKV_AWS_43]
+level = "medium"
+profile = "security"
+category = "encryption"
+why = "Kinesis stream data unencrypted at rest"
+
+[CKV_AWS_42]
+level = "medium"
+profile = "security"
+category = "encryption"
+why = "EFS data unencrypted at rest"
+
+[CKV_AWS_185]
+level = "low"
+profile = "hygiene"
+category = "encryption"
+why = "a customer key for an encrypted stream adds key control"
+
+[CKV_AWS_184]
+level = "low"
+profile = "hygiene"
+category = "encryption"
+why = "a customer key for an encrypted file system adds key control"
+
+[CKV_AWS_189]
+level = "low"
+profile = "hygiene"
+category = "encryption"
+why = "a customer key for an encrypted volume adds key control"
+
+[CKV_AWS_119]
+level = "low"
+profile = "hygiene"
+category = "encryption"
+why = "DynamoDB encrypts tables by default; a customer key adds key control"
+
+[CKV_AWS_209]
+level = "low"
+profile = "hygiene"
+category = "encryption"
+why = "MQ encrypts by default; a customer key adds key control"
+
+[CKV_AWS_149]
+level = "low"
+profile = "hygiene"
+category = "encryption"
+why = "secrets are encrypted by default; a customer key adds key control"
+
+[CKV_AWS_136]
+level = "low"
+profile = "hygiene"
+category = "encryption"
+why = "ECR encrypts with AES-256 by default; KMS adds key control"
+
+[CKV_AWS_28]
+level = "low"
+profile = "hygiene"
+category = "storage"
+why = "point-in-time recovery is recovery"
+
+[CKV2_AWS_9]
+level = "low"
+profile = "hygiene"
+category = "storage"
+why = "AWS Backup coverage is recovery"
+
+[CKV2_AWS_18]
+level = "low"
+profile = "hygiene"
+category = "storage"
+why = "AWS Backup coverage is recovery"
+
+[CKV_AWS_207]
+level = "low"
+profile = "security"
+why = "automatic minor upgrades bring security patches"
+
+[CKV_AWS_48]
+level = "low"
+profile = "audit"
+why = "MQ broker logs"
+
+[CKV_AWS_304]
+level = "low"
+profile = "security"
+why = "secrets not rotated within 90 days"
+
+[CKV2_AWS_57]
+level = "low"
+profile = "security"
+why = "secrets never rotated"
+
+[CKV_AWS_272]
+level = "low"
+profile = "security"
+why = "code signing guards the deployment path"
+
+[CKV_AWS_173]
+level = "low"
+profile = "hygiene"
+category = "encryption"
+why = "environment variables are encrypted by default; a customer key adds key control"
+
+[CKV_AWS_116]
+level = "low"
+profile = "hygiene"
+why = "a dead-letter queue is reliability"
+
+[CKV_AWS_117]
+level = "low"
+profile = "hygiene"
+category = "network"
+why = "VPC placement is network design, not exposure"
+
+[CKV_AWS_50]
+level = "low"
+profile = "hygiene"
+why = "X-Ray tracing is observability"
+
+[CKV_AWS_51]
+level = "low"
+profile = "security"
+why = "mutable tags let a pushed image replace a deployed one"
+
+[CKV_AWS_163]
+level = "low"
+profile = "security"
+why = "scanning images on push finds known vulnerabilities"
+
+[CKV_AWS_66]
+level = "low"
+profile = "audit"
+why = "log retention is a compliance choice"
+
+[CKV_GCP_18]
+level = "high"
+profile = "security"
+category = "network"
+why = "a GKE control plane reachable from the internet"
+
+[CKV_GCP_41]
+level = "high"
+profile = "security"
+category = "iam"
+why = "Service Account User or Token Creator at project level can act as every service account"
+
+[CKV_GCP_49]
+level = "high"
+profile = "security"
+category = "iam"
+why = "project-level roles that impersonate or manage service accounts"
+
+[CKV_GCP_42]
+level = "high"
+profile = "security"
+category = "iam"
+why = "a service account with admin roles"
+
+[CKV_GCP_117]
+level = "high"
+profile = "security"
+category = "iam"
+why = "basic roles (owner, editor) at project level"
+
+[CKV_GCP_46]
+level = "medium"
+profile = "security"
+category = "iam"
+why = "the default service account bound at project level"
+
+[CKV_GCP_13]
+level = "medium"
+profile = "security"
+category = "iam"
+why = "GKE client certificates are long-lived credentials"
+
+[CKV_GCP_114]
+level = "medium"
+profile = "security"
+category = "storage"
+why = "without public access prevention one IAM binding makes the bucket public"
+
+[CKV_GCP_106]
+level = "medium"
+profile = "security"
+category = "network"
+why = "HTTP open to the internet"
+
+[CKV_GCP_43]
+level = "medium"
+profile = "security"
+category = "encryption"
+why = "a KMS key not rotated within 90 days"
+
+[CKV_GCP_83]
+level = "low"
+profile = "hygiene"
+category = "encryption"
+why = "Pub/Sub encrypts by default; a customer key adds key control"
+
+[CKV_GCP_62]
+level = "low"
+profile = "audit"
+why = "bucket access logs"
+
+[CKV_GCP_23]
+level = "low"
+profile = "hygiene"
+category = "network"
+why = "alias IP ranges are network design"
+
+[CKV_GCP_70]
+level = "low"
+profile = "hygiene"
+why = "a release channel is upgrade policy"
+
+[CKV_GCP_78]
+level = "low"
+profile = "hygiene"
+category = "storage"
+why = "versioning is recovery"
+
+[CKV_AZURE_5]
+level = "high"
+profile = "security"
+category = "iam"
+why = "an AKS cluster without RBAC"
+
+[CKV_AZURE_6]
+level = "high"
+profile = "security"
+category = "network"
+why = "without authorized IP ranges the AKS API server is reachable from anywhere"
+
+[CKV_AZURE_115]
+level = "medium"
+profile = "security"
+category = "network"
+why = "a public AKS API endpoint"
+
+[CKV_AZURE_141]
+level = "medium"
+profile = "security"
+category = "iam"
+why = "the AKS local admin account bypasses Azure AD"
+
+[CKV_AZURE_7]
+level = "medium"
+profile = "security"
+category = "network"
+why = "without network policy every pod can reach every pod"
+
+[CKV_AZURE_109]
+level = "medium"
+profile = "security"
+category = "network"
+why = "a key vault whose firewall allows all networks"
+
+[CKV_AZURE_139]
+level = "medium"
+profile = "security"
+category = "network"
+why = "a container registry reachable over public networks"
+
+[CKV_AZURE_164]
+level = "medium"
+profile = "security"
+why = "content trust blocks unsigned images: supply-chain defence in depth"
+
+[CKV_AZURE_166]
+level = "low"
+profile = "security"
+why = "quarantine holds images until scanned"
+
+[CKV_AZURE_116]
+level = "low"
+profile = "security"
+why = "the Azure Policy add-on enforces cluster policy"
+
+[CKV_AZURE_172]
+level = "low"
+profile = "security"
+why = "rotating CSI driver secrets"
+
+[CKV_AZURE_40]
+level = "low"
+profile = "security"
+why = "keys without expiry are never forced to rotate"
+
+[CKV_AZURE_117]
+level = "low"
+profile = "hygiene"
+category = "encryption"
+why = "AKS disks are encrypted by default; a disk encryption set adds key control"
+
+[CKV_AZURE_4]
+level = "low"
+profile = "audit"
+why = "AKS monitoring"
+
+[CKV_AZURE_165]
+level = "low"
+profile = "hygiene"
+why = "geo-replication is availability"
+
+[CKV_AZURE_167]
+level = "low"
+profile = "hygiene"
+why = "untagged manifest retention is cost"
+
+[CKV_AZURE_233]
+level = "low"
+profile = "hygiene"
+why = "zone redundancy is availability"
+
+[CKV_AZURE_237]
+level = "low"
+profile = "hygiene"
+category = "network"
+why = "dedicated data endpoints are network design"
+
+[CKV_AZURE_170]
+level = "low"
+profile = "hygiene"
+why = "the paid SKU is an SLA"
+
+[CKV_AZURE_232]
+level = "low"
+profile = "hygiene"
+why = "system node taints are scheduling"
+
+[CKV_AZURE_226]
+level = "low"
+profile = "hygiene"
+why = "ephemeral OS disks are performance"
+
+[CKV2_AZURE_29]
+level = "low"
+profile = "hygiene"
+category = "network"
+why = "the network plugin is network design"
+
+[CKV_K8S_28]
+level = "medium"
+profile = "security"
+why = "NET_RAW lets a container spoof traffic on the node network"
+
+[CKV_K8S_29]
+level = "low"
+profile = "security"
+why = "a pod without a security context runs with the runtime's defaults"
+
+[CKV_K8S_30]
+level = "low"
+profile = "security"
+why = "a container without a security context runs with the runtime's defaults"
+
+[CKV_K8S_43]
+level = "low"
+profile = "security"
+why = "an image by tag can change under the same name"
+
+[CKV_K8S_41]
+level = "low"
+profile = "security"
+category = "iam"
+why = "workloads on the default service account share its permissions"
+
+[CKV_K8S_10]
+level = "low"
+profile = "hygiene"
+why = "CPU requests are capacity planning"
+
+[CKV_K8S_11]
+level = "low"
+profile = "hygiene"
+why = "CPU limits are capacity planning"
+
+[CKV_K8S_12]
+level = "low"
+profile = "hygiene"
+why = "memory limits are capacity planning"
+
+[CKV_K8S_13]
+level = "low"
+profile = "hygiene"
+why = "memory requests are capacity planning"
+
+[CKV_K8S_15]
+level = "low"
+profile = "hygiene"
+why = "image pull policy is deployment style"
+
+[CKV_K8S_8]
+level = "low"
+profile = "hygiene"
+why = "liveness probes are reliability"
+
+[CKV_K8S_9]
+level = "low"
+profile = "hygiene"
+why = "readiness probes are reliability"

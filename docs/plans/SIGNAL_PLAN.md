@@ -136,14 +136,14 @@ Found along the way, for later:
   `tfscan.fix(fingerprint, path, ...)` (`tf_scan::fix`) apply the hint in
   memory, rescan with the edit as an overlay, and report the diff and
   whether the finding is gone; `--write` writes only a verified edit.
-- A fix hint's `site` replaces `x = var.x` with a literal. In a library
-  module the better edit is usually the variable's default, the origin of
-  the value's provenance; the hint should offer that site.
+- ~~A fix hint's `site` replaces `x = var.x` with a literal.~~ Done (F):
+  the hint carries `default_site`, and `oxtf fix` writes the default
+  first.
 - `configured` / `effective` hold the whole top-level attribute, so an IAM
   finding embeds its full policy (15 KB). For nested attribute paths the
   deciding sub-value would be enough.
 
-## D. Curate the catalog — mechanism done, first curation in review
+## D. Curate the catalog — done for every rule a default corpus scan reports; in review
 
 - `crates/tf_rule_ir/data/checkov/curation.toml`, hand-maintained and never
   regenerated: per Checkov ID a `level`, optional `category`, a `profile`
@@ -170,9 +170,55 @@ Effect on the corpus: a default scan reports 374 findings instead of 552
 (the 178 audit and hygiene findings move behind `--profile`), and 26.7 %
 of them have a level other than medium (from 0.2 %): 4 critical, 60 high.
 
-Next: fix templates for nested attributes (block-aware fix actions), and
-curating down the 154 default findings still from unreviewed rules, in
-frequency order.
+Second curation (2026-10-20): the 139 unreviewed rules behind the 154
+default findings that were left. They fire once or twice each, so they
+were reviewed together under principles written at the top of the file:
+exposure and over-grants are `security`, levelled by blast radius;
+logging and retention are `audit`; backups, availability, deletion
+protection, cost and operational style are `hygiene`; a customer-managed
+key where the provider already encrypts the data is `low` `hygiene`
+(CKV_AWS_158 moved there, for consistency with CKV_GCP_38). 206 rules are
+curated; a default corpus scan now reports no unreviewed rule: 289
+findings, 49 % not medium (4 critical, 76 high, 147 medium, 62 low).
+
+## F. Fixes for nested attributes and variable defaults — done
+
+- **Nested paths.** A fix hint's `attribute` is a path of block names and
+  an attribute. Checkov value checks against one literal derive one at any
+  depth (index segments dropped), and so do graph attribute checks with
+  dotted paths; fixes are per resource type, so a rule whose clauses use
+  different paths per type (CKV_AZURE_15) still gets one.
+  `FixHint::set_path` builds the hint per resource against the provider
+  schema: each block on the path is written at most once and not by
+  `dynamic`, and a block to create needs no other required attribute or
+  block. Otherwise there is no hint.
+- **Edits keep the file's layout.** A replaced value keeps the text up to
+  its `=`. An inserted attribute aligns with the one-line attributes above
+  it, re-padding them only when the new name is the longest, as `terraform
+  fmt` does. One-line blocks (`master_auth {}`) are opened up. New blocks
+  are indented from the enclosing brace. Every corpus edit passes
+  `terraform fmt -check`.
+- **Variable defaults.** When the attribute is written as exactly
+  `var.<name>` and the value's provenance is that variable's default, the
+  hint carries `default_site`. `oxtf fix` writes the default first, which
+  keeps the module's interface, and falls back to the attribute when a
+  caller passes its own value. `--at default|attribute` (Python `at=`)
+  picks one.
+- **Verification is per declaration.** A fix is verified when the rule no
+  longer fails on the declaration (rule, module directory, local address)
+  from any root, so a finding that moves to another attribute is not
+  reported as fixed.
+- **Bug fixed along the way.** `apply_fix` looked up the hint's resource
+  address in every root; two examples that each declare `aws_instance.this`
+  got the first one's file edited. It now looks only in the finding's
+  root.
+- **Python read tracing.** `"k" in conf.keys()`, a common Checkov idiom,
+  is now traced like `"k" in conf`: CKV_GCP_69 and CKV_GCP_39 name their
+  attribute (19 corpus findings).
+
+Corpus: every one of the 56 fix hints applies and verifies (38 at the
+attribute, 18 at a variable default). Hints: 8.3 % → 10.1 % of all
+findings.
 
 ## E. Signal gate — in place
 
@@ -186,16 +232,17 @@ guard on every change to the output or the catalog.
 
 ## Results so far
 
-| | main | after A + B | after C |
-| --- | --- | --- | --- |
-| Findings | 1,535 | 553 (1,535 occurrences) | 552 (1,535 occurrences) |
-| Distinct fingerprints | 959 for 554 distinct problems (one backlog issue per module path) | 553, one per finding | 552 |
-| With the deciding attribute | 12 % | 10 % | 79 % |
-| With a fix hint | 0.1 % | 0.2 % | 8.3 % |
-| JSON | 2.6 MB | 1.15 MB (2,078 B per finding) | 1.6 MB (2,888 B; the added bytes are provenance) |
-| NDJSON | — | 231 KB (418 B per finding) | 247 KB (448 B) |
-| Exit code with definite findings | 0 | 1 | 1 |
-| Corpus wall time, JSON, min of 5 | 0.21 s | 0.22 s | 0.21 s |
+| | main | after A + B | after C | after D + F |
+| --- | --- | --- | --- | --- |
+| Findings | 1,535 | 553 (1,535 occurrences) | 552 (1,535 occurrences) | 552; 289 in the default profile |
+| Distinct fingerprints | 959 for 554 distinct problems (one backlog issue per module path) | 553, one per finding | 552 | 552 |
+| With the deciding attribute | 12 % | 10 % | 79 % | 83 % |
+| With a fix hint | 0.1 % | 0.2 % | 8.3 % | 10.1 %, all verified |
+| Level other than medium | 0.2 % | 0.2 % | 0.2 % | 73 %; 49 % in the default profile |
+| JSON | 2.6 MB | 1.15 MB (2,078 B per finding) | 1.6 MB (2,888 B; the added bytes are provenance) | — |
+| NDJSON | — | 231 KB (418 B per finding) | 247 KB (448 B) | 450 B per finding |
+| Exit code with definite findings | 0 | 1 | 1 | 1 |
+| Corpus wall time, JSON, min of 5 | 0.21 s | 0.22 s | 0.21 s | 0.22 s |
 
 `fixtures/baseline/native.json` was regenerated for the new shape; every
 case expands back to exactly the old judgements, with the representative's
