@@ -92,6 +92,35 @@ fn functions() {
     assert!(s("sha256(\"x\")").contains("unsupported function sha256"));
 }
 
+#[test]
+fn sensitivity_survives_computation_without_changing_values() {
+    for expression in [
+        "upper(sensitive(\"secret\"))",
+        "jsondecode(jsonencode({ x = sensitive(\"secret\") })).x",
+        "sensitive(true) ? \"secret\" : \"public\"",
+        "[for x in sensitive([\"secret\"]) : upper(x)][0]",
+        "keys({ (sensitive(\"secret\")) = 1 })[0]",
+        "length([for x in [1] : x if sensitive(false)])",
+        "sensitive(4) * 2",
+        "!sensitive(false)",
+        "sensitive(false) && true",
+        "can(sensitive(\"secret\"))",
+        "length(sensitive([])[*])",
+        "length(sensitive(null)[*])",
+        "try(tonumber(sensitive(\"secret\")), \"fallback\")",
+        "(flag ? \"secret\" : sensitive(\"secret\"))",
+    ] {
+        let v = ev_with(expression, &[("flag", Value::tainted("flag"))]);
+        assert!(v.is_sensitive(), "{expression}: {v:?}");
+        assert_eq!(v.to_string(), "(sensitive)", "{expression}");
+    }
+    let secret = ev("upper(sensitive(\"secret\"))");
+    assert_eq!(secret.as_str(), Some("SECRET"));
+    let clear = ev("nonsensitive({ x = sensitive(\"secret\") }).x");
+    assert!(!clear.is_sensitive());
+    assert_eq!(clear.as_str(), Some("secret"));
+}
+
 // Regressions from the final code review.
 
 #[test]
@@ -269,4 +298,30 @@ fn try_evaluates_a_needed_fallback_once_and_skips_unneeded_ones() {
         });
         assert_eq!(r.0.get(), calls, "{expression}");
     }
+}
+
+#[test]
+fn regex_functions_preserve_capture_shapes_and_replacement_semantics() {
+    assert_eq!(
+        s(r#"replace("policy-name!", "/[^0-9A-Za-z]*/", "")"#),
+        "\"policyname\""
+    );
+    assert_eq!(
+        s(r#"replace("a1 b2", "/([a-z])([0-9])/", "$2-$1")"#),
+        "\"1-a 2-b\""
+    );
+    assert_eq!(
+        s(r#"regex("projects/([^/]+)/", "projects/example/global/networks/n")"#),
+        "[\"example\"]"
+    );
+    assert_eq!(
+        s(r#"regex("(?P<key>[a-z]+)=(?P<value>[0-9]+)", "x=12")"#),
+        "{key = \"x\", value = \"12\"}"
+    );
+    assert_eq!(s(r#"regex("[a-z]+", "123abc")"#), "\"abc\"");
+    assert_eq!(s(r#"can(regex("(?P<n>a)(b)", "ab"))"#), "false");
+    assert_eq!(s(r#"can(regex("x", "abc"))"#), "false");
+    assert_eq!(s(r#"can(regex("\\d", "٣"))"#), "false");
+    assert_eq!(s(r#"regex("\\Q(a)\\E", "(a)")"#), "\"(a)\"");
+    assert!(ev(r#"regex("(.)", sensitive("secret"))"#).is_sensitive());
 }

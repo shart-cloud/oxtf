@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Shallow-clone the corpus repos into corpus/repos/ and record their commits.
+# Fetch exactly the reviewed corpus commits; never reset an existing checkout.
 set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p repos
-: > repos.lock
-grep -v '^#' repos.txt | while read -r r; do
-  [ -z "$r" ] && continue
+while read -r r sha; do
+  [[ -z "$r" || "$r" == \#* ]] && continue
+  [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid pin for $r" >&2; exit 1; }
   d="repos/${r//\//__}"
   if [ ! -d "$d" ]; then
-    if [ -f repos.lock.pinned ] && sha=$(grep "^$r " repos.lock.pinned | cut -d' ' -f2); then
-      git init -q "$d" && git -C "$d" fetch -q --depth 1 "https://github.com/$r" "$sha" && git -C "$d" checkout -q FETCH_HEAD
-    else
-      git clone -q --depth 1 "https://github.com/$r" "$d"
-    fi
+    git init -q "$d"
+    git -C "$d" fetch -q --depth 1 "https://github.com/$r" "$sha"
+    git -C "$d" checkout -q FETCH_HEAD
   fi
-  echo "$r $(git -C "$d" rev-parse HEAD)" >> repos.lock
-done
+  actual=$(git -C "$d" rev-parse HEAD)
+  [[ "$actual" == "$sha" ]] || { echo "$d: expected $sha, found $actual" >&2; exit 1; }
+  [[ -z "$(git -C "$d" status --porcelain)" ]] || { echo "$d: checkout is modified" >&2; exit 1; }
+done < repos.lock.pinned

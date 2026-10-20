@@ -19,12 +19,13 @@ use std::sync::Arc;
 
 use tf_linter::Profile;
 use tf_linter::rule::DynRule;
-use tf_linter::{Linter, RuleSelectionError, ScanOptions, ScanRecord, ScanResult, discover_roots};
+use tf_linter::{Linter, RuleSelectionError, ScanOptions, ScanRecord, ScanResult};
 use tf_plan::{PlanError, PlanOptions};
 use tf_rego::{Policies, PolicyError};
 use tf_semantic::source::normalize;
 use tf_semantic::{Analysis, DiagSeverity, Diagnostic, FileTable};
 
+pub use tf_fetch::{FetchLimits, FetchReport, FetchRequest, FetchedModule, fetch};
 pub use tf_rego::Shape;
 pub use tf_rego::foreign::{TestOutcome, TestResult};
 
@@ -264,6 +265,9 @@ pub struct ScanRequest {
     pub selection: Option<Vec<String>>,
     /// Extra `-var-file`s for the root module(s) (directory input only).
     pub var_files: Vec<PathBuf>,
+    /// Installed Terraform data directory, relative to each source root
+    /// unless absolute. Defaults to `.terraform`; scanning never fetches.
+    pub data_dir: Option<PathBuf>,
     /// Worker threads; `None` = number of CPUs.
     pub threads: Option<usize>,
     /// In-memory files that shadow the disk for this scan: their text is
@@ -286,6 +290,7 @@ impl ScanRequest {
             catalog: self.catalog.try_clone()?,
             selection: self.selection.clone(),
             var_files: self.var_files.clone(),
+            data_dir: self.data_dir.clone(),
             threads: self.threads,
             overlay: self.overlay.clone(),
             keep_models: self.keep_models,
@@ -299,6 +304,7 @@ impl ScanRequest {
             catalog: Catalog::seed(),
             selection: None,
             var_files: Vec::new(),
+            data_dir: None,
             threads: None,
             overlay: Vec::new(),
             keep_models: true,
@@ -312,6 +318,7 @@ impl ScanRequest {
             catalog: Catalog::seed(),
             selection: None,
             var_files: Vec::new(),
+            data_dir: None,
             threads: None,
             overlay: Vec::new(),
             keep_models: true,
@@ -425,11 +432,18 @@ pub fn scan(mut req: ScanRequest) -> Result<ScanOutput, ScanError> {
                 }
                 // Normalised so a root is never analysed twice under two
                 // spellings when the overlay adds directories below.
-                roots.extend(discover_roots(p, recursive).iter().map(|r| normalize(r)));
+                if !recursive || p.is_dir() {
+                    roots.extend(
+                        tf_linter::scan::discover_roots_checked(p, recursive)
+                            .map_err(|e| ScanError::Input(format!("{}: {e}", p.display())))?
+                            .iter()
+                            .map(|r| normalize(r)),
+                    );
+                }
                 if recursive {
                     // Directories that exist only in the overlay.
                     for f in files.overlay_under(p) {
-                        if f.extension().is_some_and(|x| x == "tf")
+                        if tf_semantic::module::is_config(f)
                             && let Some(dir) = f.parent().map(normalize)
                             && !roots.contains(&dir)
                         {
@@ -441,6 +455,7 @@ pub fn scan(mut req: ScanRequest) -> Result<ScanOutput, ScanError> {
             let opts = ScanOptions {
                 recursive,
                 var_files: req.var_files,
+                data_dir: req.data_dir,
                 threads: req.threads,
                 overlay: req.overlay,
                 keep_models: req.keep_models,
@@ -455,8 +470,15 @@ pub fn scan(mut req: ScanRequest) -> Result<ScanOutput, ScanError> {
                 ));
             }
             let files = Arc::new(FileTable::with_overlay(req.overlay));
-            let (result, analysis) =
-                tf_plan::scan_plan_with_model(&linter, &plan, &PlanOptions { source }, files)?;
+            let (result, analysis) = tf_plan::scan_plan_with_model(
+                &linter,
+                &plan,
+                &PlanOptions {
+                    source,
+                    data_dir: req.data_dir,
+                },
+                files,
+            )?;
             output(result, vec![analysis])
         }
     }
@@ -475,9 +497,15 @@ pub struct FixOutcome {
     /// The file's text before the edit.
     pub original: String,
     pub edit: FixEdit,
-    /// The rule no longer fails on the declaration in a scan of the same
-    /// request with the edit as an overlay (on no attribute, from no root).
+    /// A display diff with sensitive source ranges masked. `original` and
+    /// `edit.text` remain raw so callers can apply the edit without data loss.
+    pub diff: String,
+    /// Both scans completed and the rule no longer fails on the declaration
+    /// with the edit as an overlay (on no attribute, from no root).
     pub verified: bool,
+    /// Analysis failures or coverage gaps in either scan. Empty does not
+    /// imply verified: the finding may still be present.
+    pub verification_errors: Vec<String>,
 }
 
 /// Why [`fix`] produced no edit.
@@ -584,12 +612,39 @@ pub fn fix(
             .overlay
             .push((edit.file.clone(), Arc::from(edit.text.as_str())));
         let after = scan(verify).map_err(FixError::Scan)?;
+        let before_file = r
+            .files
+            .load(&edit.file)
+            .map_err(|e| FixError::Apply(e.to_string()))?;
+        let after_file = after
+            .result
+            .files
+            .load(&edit.file)
+            .map_err(|e| FixError::Apply(e.to_string()))?;
+        let diff = unified_diff(
+            &edit.file,
+            &r.files.display_text(before_file.id),
+            &after.result.files.display_text(after_file.id),
+        );
         let mut repos = tf_linter::record::RepoRoots::new();
-        let verified = !after.result.findings.iter().any(|f| {
-            f.rule == representative.rule
-                && tf_linter::record::finding_subject_key(&after.result.files, f, &mut repos)
-                    == subject
-        });
+        let verification_errors: Vec<String> = r
+            .completion_issues()
+            .into_iter()
+            .map(|e| format!("before edit: {e}"))
+            .chain(
+                after
+                    .result
+                    .completion_issues()
+                    .into_iter()
+                    .map(|e| format!("after edit: {e}")),
+            )
+            .collect();
+        let verified = verification_errors.is_empty()
+            && !after.result.findings.iter().any(|f| {
+                f.rule == representative.rule
+                    && tf_linter::record::finding_subject_key(&after.result.files, f, &mut repos)
+                        == subject
+            });
         let outcome = FixOutcome {
             fingerprint: fingerprint.to_string(),
             rule: rule.clone(),
@@ -597,7 +652,9 @@ pub fn fix(
             site,
             original,
             edit,
+            diff,
             verified,
+            verification_errors,
         };
         if verified {
             return Ok(outcome);
@@ -725,6 +782,12 @@ pub fn apply_fix_at(
     };
     if let Some(at) = at {
         let sf = files.get(at.file);
+        if files.is_protected(&sf.path) {
+            return Err("automatic edits to installed module files are disabled".into());
+        }
+        if sf.path.extension().is_some_and(|e| e == "json") {
+            return Err("JSON source edits require a format-aware fix".into());
+        }
         let mut text = sf.text.to_string();
         let (start, end) = (at.span.start as usize, at.span.end as usize);
         let eq = text[start..end]
@@ -773,6 +836,12 @@ pub fn apply_fix_at(
         missing = rest;
     }
     let sf = files.get(body.span.file);
+    if files.is_protected(&sf.path) {
+        return Err("automatic edits to installed module files are disabled".into());
+    }
+    if sf.path.extension().is_some_and(|e| e == "json") {
+        return Err("JSON source edits require a format-aware fix".into());
+    }
     let mut text = sf.text.to_string();
     let span = body.span.span;
     insert_into_body(

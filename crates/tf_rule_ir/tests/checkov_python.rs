@@ -40,7 +40,7 @@ fn list(items: Vec<J>) -> J {
 
 /// Run `body` as `scan_resource_conf(self, conf)` on the only resource of
 /// `source`.
-fn run(source: &str, body: Vec<J>) -> tf_eval::Verdict {
+fn try_run(source: &str, body: Vec<J>) -> Result<tf_eval::Verdict, String> {
     let program = json!({
         "version": 1, "entry": "Check.scan_resource_conf", "self": {"evaluated_keys": {"list": []}},
         "functions": {"Check.scan_resource_conf": {"params": ["conf"], "defaults": [null], "body": body}},
@@ -59,7 +59,13 @@ fn run(source: &str, body: Vec<J>) -> tf_eval::Verdict {
         .iter()
         .find(|r| &*r.ty == "test_resource")
         .expect("a test_resource");
-    compiled[0].verdict(r).unwrap_or(tf_eval::Verdict::FALSE)
+    compiled[0]
+        .verdict(r)
+        .map(|v| v.unwrap_or(tf_eval::Verdict::FALSE))
+}
+
+fn run(source: &str, body: Vec<J>) -> tf_eval::Verdict {
+    try_run(source, body).unwrap()
 }
 
 fn truth(source: &str, body: Vec<J>) -> Truth {
@@ -87,6 +93,19 @@ fn attributes_are_wrapped_in_a_list_as_checkov_parses_them() {
     );
     // A bare string is not equal to the one-element list.
     assert_eq!(truth(src, fails_when_equal("a", json!("x"))), Truth::False);
+}
+
+#[test]
+fn unsupported_execution_is_an_error() {
+    let error = try_run(
+        r#"resource "test_resource" "r" {}"#,
+        vec![ret(json!({
+            "e": "call", "func": {"builtin": "round"},
+            "args": [c(json!(1.25)), c(json!(1))], "kwargs": []
+        }))],
+    )
+    .unwrap_err();
+    assert!(error.contains("round with ndigits"), "{error}");
 }
 
 #[test]
@@ -164,7 +183,7 @@ resource "test_resource" "r" { a = var.on ? "x" : "y" }"#;
 }
 
 #[test]
-fn exceptions_are_caught_or_mean_no_result() {
+fn exceptions_are_caught_or_reported_as_errors() {
     let src = r#"resource "test_resource" "r" { a = "x" }"#;
     let missing = sub(name("conf"), c(json!("missing")));
     let caught = vec![
@@ -181,7 +200,7 @@ fn exceptions_are_caught_or_mean_no_result() {
                "orelse": [], "finally": []}),
         ret(result("FAILED")),
     ];
-    assert_eq!(truth(src, wrong), Truth::Unknown);
+    assert!(try_run(src, wrong).unwrap_err().contains("KeyError"));
 }
 
 #[test]
@@ -230,7 +249,7 @@ EOF
 }
 
 #[test]
-fn a_runaway_program_is_unknown() {
+fn a_runaway_program_reports_budget_exhaustion() {
     let src = r#"resource "test_resource" "r" { a = "x" }"#;
     // for _ in range(10**7): pass
     let range = json!({"e": "call", "func": {"builtin": "range"}, "args": [c(json!(10_000_000))], "kwargs": []});
@@ -238,7 +257,7 @@ fn a_runaway_program_is_unknown() {
         json!({"s": "for", "target": {"t": "name", "id": "_"}, "iter": range, "body": [{"s": "pass"}], "orelse": []}),
         ret(result("FAILED")),
     ];
-    assert_eq!(truth(src, body), Truth::Unknown);
+    assert!(try_run(src, body).unwrap_err().contains("budget exhausted"));
 }
 
 /// Classes of inlined modules (cloudsplaining's policy documents):
@@ -280,7 +299,10 @@ fn objects_of_inlined_classes() {
     let compiled = tf_rule_ir::compile_json(&rule.to_string()).unwrap();
     let files = FileTable::with_overlay([(PathBuf::from("py-test/main.tf"), Arc::from(src))]);
     let a = tf_semantic::analyze_module(Path::new("py-test"), &AnalyzeOptions::default(), &files);
-    let v = compiled[0].verdict(&a.modules[0].resources[0]).unwrap();
+    let v = compiled[0]
+        .verdict(&a.modules[0].resources[0])
+        .unwrap()
+        .unwrap();
     assert_eq!(v.truth, Truth::True);
 }
 

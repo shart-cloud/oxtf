@@ -57,6 +57,11 @@ pub struct Body {
 }
 
 impl Body {
+    pub fn is_sensitive(&self) -> bool {
+        self.attrs.iter().any(|a| a.value.is_sensitive())
+            || self.blocks.iter().any(|b| b.body.is_sensitive())
+    }
+
     pub fn attr(&self, name: &str) -> Option<&Attr> {
         self.attrs.iter().find(|a| &*a.name == name)
     }
@@ -282,6 +287,7 @@ pub struct Module {
     pub dir: PathBuf,
     /// Index of the parent module instance in `Analysis::modules`.
     pub parent: Option<usize>,
+    pub package: Option<crate::installed::InstalledPackage>,
     pub resources: Vec<Resource>,
     pub variables: Vec<VariableInfo>,
     pub outputs: Vec<VariableInfo>,
@@ -299,6 +305,21 @@ pub struct Module {
 }
 
 impl Module {
+    pub fn is_sensitive(&self) -> bool {
+        self.resources.iter().any(|r| r.body.is_sensitive())
+            || self
+                .variables
+                .iter()
+                .chain(&self.outputs)
+                .chain(&self.locals)
+                .any(|v| v.value.is_sensitive())
+            || self.block_values.values().any(Value::is_sensitive)
+            || self
+                .module_calls
+                .iter()
+                .any(|c| c.arguments.iter().any(|(_, v)| v.is_sensitive()))
+    }
+
     /// Resource-index lookup by (type, name) within this module instance.
     pub fn resources_of<'s>(&'s self, ty: &'s str) -> impl Iterator<Item = &'s Resource> + 's {
         self.resources
@@ -336,7 +357,7 @@ pub struct AnalysisStats {
     pub attributes: usize,
 }
 
-/// Result of analysing one root module (and its local child modules).
+/// Result of analysing one root module and its local or installed children.
 #[derive(Clone, Debug)]
 pub struct Analysis {
     pub root_dir: PathBuf,

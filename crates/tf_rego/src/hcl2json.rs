@@ -18,6 +18,7 @@
 //!   `provider`, `ignore_changes`, conditions) keep hcl2json's `${...}`.
 
 use serde_json::{Map, Value as Json, json};
+use std::borrow::Cow;
 use tf_ast::{Block, Body, Expression, ObjectKey, Template, TemplateElement, UnaryOperator};
 use tf_eval::{Evaluator, NoResolver, Scope, Truth, Value};
 use tf_linter::ConfigFile;
@@ -30,6 +31,8 @@ use crate::projection::{self, Abstraction, Projection};
 pub fn raw<'a>(ast: &'a tf_ast::File<'a>, text: &str) -> Result<Json, String> {
     let mut r = Renderer {
         text,
+        definition: None,
+        json: false,
         file: FileId(0),
         mode: Mode_::Raw,
         abstractions: Vec::new(),
@@ -56,6 +59,8 @@ pub struct InstanceDocument<'m> {
 pub fn evaluated<'m>(cf: &ConfigFile<'m>) -> Result<FileDocument<'m>, String> {
     let mut r = Renderer {
         text: &cf.source.text,
+        definition: Some(cf.definition),
+        json: cf.source.path.extension().is_some_and(|e| e == "json"),
         file: cf.source.id,
         mode: Mode_::Evaluated(cf.module),
         abstractions: Vec::new(),
@@ -157,12 +162,14 @@ fn syntax(blocks: &[&str], attr: &str) -> bool {
 
 struct Renderer<'t, 'm> {
     text: &'t str,
+    definition: Option<&'m tf_semantic::module::ModuleDef<'m>>,
+    json: bool,
     file: FileId,
     mode: Mode_<'m>,
     abstractions: Vec<Abstraction>,
 }
 
-impl<'t, 'm> Renderer<'t, 'm> {
+impl<'t, 'm: 't> Renderer<'t, 'm> {
     /// `ConvertBody`: blocks first, then attributes (an attribute replaces a
     /// block of the same name, as Go map assignment does).
     fn body<'a>(
@@ -424,6 +431,28 @@ impl<'t, 'm> Renderer<'t, 'm> {
         site: Site<'_>,
         at: &str,
     ) -> Result<Option<Json>, String> {
+        let original = (self.text, self.file, self.json);
+        if let Some(definition) = self.definition {
+            let file = definition.origins.file(e, self.file);
+            if file != self.file
+                && let Some((source, _)) = definition.files.iter().find(|(sf, _)| sf.id == file)
+            {
+                self.file = file;
+                self.text = &source.text;
+                self.json = source.path.extension().is_some_and(|e| e == "json");
+            }
+        }
+        let result = self.attribute_in_source(e, site, at);
+        (self.text, self.file, self.json) = original;
+        result
+    }
+
+    fn attribute_in_source<'e>(
+        &mut self,
+        e: &'e Expression<'e>,
+        site: Site<'_>,
+        at: &str,
+    ) -> Result<Option<Json>, String> {
         match (self.mode, site) {
             (Mode_::Raw, _) | (Mode_::Evaluated(_), Site::Syntax) => self.expr(e).map(Some),
             (Mode_::Evaluated(m), Site::Fold) => {
@@ -446,12 +475,19 @@ impl<'t, 'm> Renderer<'t, 'm> {
 
     /// `rangeSource`: the source text, plus a following `)` (hcl2json works
     /// around hclsyntax ranges that stop short of it).
-    fn source(&self, span: Span) -> &'t str {
+    fn source(&self, span: Span) -> Cow<'t, str> {
         let mut end = span.end as usize;
-        if self.text.as_bytes().get(end) == Some(&b')') {
+        if !self.json && self.text.as_bytes().get(end) == Some(&b')') {
             end += 1;
         }
-        &self.text[span.start as usize..end]
+        let text = &self.text[span.start as usize..end];
+        if self.json
+            && text.contains('\\')
+            && let Ok(decoded) = serde_json::from_str::<String>(&format!("\"{text}\""))
+        {
+            return Cow::Owned(decoded);
+        }
+        Cow::Borrowed(text)
     }
 
     fn wrap(&self, e: &Expression<'_>) -> Json {
@@ -524,7 +560,7 @@ impl<'t, 'm> Renderer<'t, 'm> {
                 }
                 TemplateElement::If(x) => {
                     out.push_str("%{if ");
-                    out.push_str(self.source(x.condition.span()));
+                    out.push_str(&self.source(x.condition.span()));
                     out.push('}');
                     out.push_str(&self.template(&x.then_template)?);
                     if let Some(e) = &x.else_template {
@@ -544,7 +580,7 @@ impl<'t, 'm> Renderer<'t, 'm> {
                     }
                     out.push_str(&x.value_var.name);
                     out.push_str(" in ");
-                    out.push_str(self.source(x.collection.span()));
+                    out.push_str(&self.source(x.collection.span()));
                     out.push('}');
                     out.push_str(&self.template(&x.template)?);
                     out.push_str("%{endfor}");

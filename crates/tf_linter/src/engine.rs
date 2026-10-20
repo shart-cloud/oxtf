@@ -10,7 +10,32 @@ use tf_semantic::source::FileTable;
 use tf_semantic::store::ModuleStore;
 
 use crate::record::RuleError;
-use crate::rule::{ConfigFile, DynRule, Finding, RuleInfo, Subject};
+use crate::rule::{ConfigFile, DynRule, Engine, Finding, Judgement, RuleInfo, Subject};
+
+/// Foreign/custom programs can interpolate arbitrary input into a message.
+/// Without a dependency trace for that string, redact the whole message
+/// when its input scope contained sensitive values.
+fn protect(info: &RuleInfo, mut j: Judgement, sensitive: bool) -> Judgement {
+    if sensitive
+        && (info.source.engine != Engine::Builtin
+            || j.witness.as_ref().is_some_and(tf_eval::Value::is_sensitive))
+    {
+        j.message = format!(
+            "{} (policy message redacted: sensitive input)",
+            info.description
+        );
+        j.witness = j.witness.map(tf_eval::Value::sensitive);
+    }
+    j
+}
+
+fn failure(message: String, sensitive: bool) -> String {
+    if sensitive {
+        "rule execution failed on sensitive input (details redacted)".into()
+    } else {
+        message
+    }
+}
 
 /// Where a root's parsed source lives while its rules run, for rules that
 /// judge whole files.
@@ -104,6 +129,10 @@ impl Linter {
     /// rules.
     pub fn run_with(&self, analysis: &Analysis, sources: Option<Sources<'_>>) -> RunOutput {
         let root = analysis.root_dir.as_path();
+        let sensitive = analysis
+            .modules
+            .iter()
+            .any(tf_semantic::Module::is_sensitive);
         let mut out = Vec::new();
         let mut rule_errors = Vec::new();
         // A graph rule judges only resources of its declared types (data
@@ -135,13 +164,18 @@ impl Linter {
             match rule.judge_graph(graph.as_ref().expect("graph requested")) {
                 Ok(judgements) => {
                     for (r, j) in judgements {
-                        out.extend(Finding::build(&self.infos[i], r, j, root));
+                        out.extend(Finding::build(
+                            &self.infos[i],
+                            r,
+                            protect(&self.infos[i], j, sensitive),
+                            root,
+                        ));
                     }
                 }
                 Err(message) => rule_errors.push(RuleError {
                     rule: self.infos[i].name.to_string(),
                     resource: None,
-                    message,
+                    message: failure(message, sensitive),
                 }),
             }
         }
@@ -151,9 +185,14 @@ impl Linter {
             let mut config = Vec::new();
             if let Some(src) = sources {
                 for m in &analysis.modules {
-                    for (sf, ast) in &src.store.module(src.files, &m.dir).files {
+                    let definition = src.store.module(src.files, &m.dir);
+                    for (sf, ast) in &definition.files {
+                        if tf_semantic::module::is_override(&sf.path) && ast.body.items.is_empty() {
+                            continue;
+                        }
                         config.push(ConfigFile {
                             module: m,
+                            definition,
                             source: sf.clone(),
                             ast,
                             run,
@@ -170,6 +209,7 @@ impl Linter {
                 match rule.judge_files(analysis, &config) {
                     Ok(judgements) => {
                         for (subject, j) in judgements {
+                            let j = protect(&self.infos[i], j, sensitive);
                             match subject {
                                 Subject::Resource(r) => {
                                     out.extend(Finding::build(&self.infos[i], r, j, root))
@@ -194,7 +234,7 @@ impl Linter {
                     Err(message) => rule_errors.push(RuleError {
                         rule: self.infos[i].name.to_string(),
                         resource: None,
-                        message,
+                        message: failure(message, sensitive),
                     }),
                 }
             }
@@ -207,13 +247,18 @@ impl Linter {
                         rule_errors.push(RuleError {
                             rule: self.infos[i].name.to_string(),
                             resource: None,
-                            message,
+                            message: failure(message, m.is_sensitive()),
                         });
                         continue;
                     }
                 };
                 for (r, j) in judged {
-                    out.extend(Finding::build(&self.infos[i], r, j, root));
+                    out.extend(Finding::build(
+                        &self.infos[i],
+                        r,
+                        protect(&self.infos[i], j, m.is_sensitive()),
+                        root,
+                    ));
                 }
             }
             for r in &m.resources {
@@ -228,21 +273,78 @@ impl Linter {
                             rule_errors.push(RuleError {
                                 rule: self.infos[i].name.to_string(),
                                 resource: Some(r.address.to_string()),
-                                message,
+                                message: failure(message, r.body.is_sensitive()),
                             });
                             continue;
                         }
                     };
                     for j in judged {
-                        out.extend(Finding::build(&self.infos[i], r, j, root));
+                        out.extend(Finding::build(
+                            &self.infos[i],
+                            r,
+                            protect(&self.infos[i], j, r.body.is_sensitive()),
+                            root,
+                        ));
                     }
                 }
             }
+        }
+        let packages: HashMap<_, _> = analysis
+            .modules
+            .iter()
+            .filter_map(|m| m.package.as_ref().map(|p| (m.address.as_ref(), p)))
+            .collect();
+        for f in &mut out {
+            f.package = packages.get(f.module.as_ref()).map(|p| (*p).clone());
+            if f.package.is_some()
+                || f.fix_hint
+                    .as_ref()
+                    .is_some_and(|h| packages.contains_key(h.resource.module.as_ref()))
+            {
+                f.fix_hint = None;
+            }
+        }
+        if let Some(sources) = sources {
+            protect_fix_hints(&mut out, analysis, sources.files);
         }
         RunOutput {
             findings: out,
             rule_errors,
             suppressed: Vec::new(),
+        }
+    }
+}
+
+/// The HCL writer cannot edit JSON or installed packages. Resolve the actual
+/// target, including insertions and cross-resource hints, before exposing it.
+pub fn protect_fix_hints(findings: &mut [Finding], analysis: &Analysis, files: &FileTable) {
+    let writable = |at: tf_span::FileSpan| {
+        let sf = files.get(at.file);
+        !files.is_protected(&sf.path) && sf.path.extension().is_none_or(|e| e != "json")
+    };
+    for f in findings {
+        let Some(h) = &mut f.fix_hint else { continue };
+        let target = h.site.or_else(|| {
+            let r = analysis
+                .modules
+                .iter()
+                .flat_map(|m| &m.resources)
+                .find(|r| r.id == h.resource)?;
+            let mut body = &r.body;
+            let path: Vec<_> = h.attribute.split('.').collect();
+            for name in &path[..path.len().saturating_sub(1)] {
+                if let Some(block) = body.blocks_of(name).next() {
+                    body = &block.body;
+                } else {
+                    break;
+                }
+            }
+            Some(body.span)
+        });
+        if !writable(f.primary) || !target.is_some_and(writable) {
+            f.fix_hint = None;
+        } else if h.variable.as_ref().is_some_and(|(_, at)| !writable(*at)) {
+            h.variable = None;
         }
     }
 }

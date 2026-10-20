@@ -7,8 +7,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use tf_semantic::{
-    Analysis, AnalyzeOptions, Diagnostic, FileTable, ModuleStore, analyze_module_shared,
+    Analysis, AnalyzeOptions, DiagSeverity, Diagnostic, FileTable, ModuleStore,
+    analyze_module_shared,
 };
 
 use crate::engine::Linter;
@@ -23,6 +25,7 @@ pub struct ScanOptions {
     pub recursive: bool,
     /// Extra `-var-file`s for the root module(s).
     pub var_files: Vec<PathBuf>,
+    pub data_dir: Option<PathBuf>,
     /// Worker threads (rayon); `None` = number of CPUs.
     pub threads: Option<usize>,
     /// In-memory files that shadow the disk (`FileTable::with_overlay`):
@@ -40,6 +43,7 @@ impl Default for ScanOptions {
         ScanOptions {
             recursive: false,
             var_files: Vec::new(),
+            data_dir: None,
             threads: None,
             overlay: Vec::new(),
             keep_models: true,
@@ -99,31 +103,103 @@ pub struct ScanResult {
     pub suppressed: Vec<crate::suppress::Suppressed>,
 }
 
-/// Directories to treat as root modules.
-pub fn discover_roots(path: &Path, recursive: bool) -> Vec<PathBuf> {
-    if !recursive {
-        return vec![path.to_path_buf()];
-    }
-    let mut out = Vec::new();
-    walk(path, &mut out);
-    out
+/// Whether analysis completed, independently of whether it found violations.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ScanStatus {
+    #[default]
+    Complete,
+    /// A source, module or rule was skipped, or an analysis limit was reached.
+    Incomplete,
+    /// An input could not be analysed or a rule failed to execute.
+    Failed,
 }
 
-fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(rd) = std::fs::read_dir(dir) else {
-        return;
-    };
+impl ScanStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Complete => "complete",
+            Self::Incomplete => "incomplete",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+/// Diagnostics that prevent interpreting silence as a completed check.
+pub fn limits_analysis(d: &Diagnostic) -> bool {
+    d.severity == DiagSeverity::Error
+        || d.code.starts_with("coverage-")
+        || matches!(
+            d.code,
+            "rule-skipped"
+                | "module-cycle"
+                | "module-depth"
+                | "module-missing"
+                | "plan-errored"
+                | "plan-format"
+        )
+}
+
+impl ScanResult {
+    pub fn status(&self) -> ScanStatus {
+        if !self.rule_errors.is_empty()
+            || self
+                .diagnostics
+                .iter()
+                .any(|d| d.severity == DiagSeverity::Error)
+        {
+            ScanStatus::Failed
+        } else if self.diagnostics.iter().any(limits_analysis) {
+            ScanStatus::Incomplete
+        } else {
+            ScanStatus::Complete
+        }
+    }
+
+    /// Reasons a scan cannot establish that a proposed fix was checked.
+    pub fn completion_issues(&self) -> Vec<String> {
+        self.diagnostics
+            .iter()
+            .filter(|d| limits_analysis(d))
+            .map(|d| format!("{}: {}", d.code, d.message))
+            .chain(self.rule_errors.iter().map(|e| match &e.resource {
+                Some(r) => format!("{} on {r}: {}", e.rule, e.message),
+                None => format!("{}: {}", e.rule, e.message),
+            }))
+            .collect()
+    }
+}
+
+/// Directories to treat as root modules.
+pub fn discover_roots(path: &Path, recursive: bool) -> Vec<PathBuf> {
+    discover_roots_checked(path, recursive).unwrap_or_default()
+}
+
+/// Root discovery that does not hide directory read failures.
+pub fn discover_roots_checked(path: &Path, recursive: bool) -> std::io::Result<Vec<PathBuf>> {
+    if !recursive {
+        return Ok(vec![path.to_path_buf()]);
+    }
+    let mut out = Vec::new();
+    walk(path, &mut out)?;
+    Ok(out)
+}
+
+fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
+    let rd = std::fs::read_dir(dir)?;
     // The entry type comes with the listing; a stat per entry would triple
     // the syscalls of a recursive scan. A symlink is never followed into
     // (one pointing at an ancestor would recurse until the path length
     // limit) but one pointing at a `.tf` file still makes a root.
     let mut entries: Vec<(PathBuf, std::fs::FileType)> = rd
-        .filter_map(|e| e.ok())
-        .filter_map(|e| Some((e.path(), e.file_type().ok()?)))
-        .collect();
+        .map(|e| {
+            let e = e?;
+            Ok((e.path(), e.file_type()?))
+        })
+        .collect::<std::io::Result<_>>()?;
     entries.sort_by(|a, b| a.0.cmp(&b.0));
     if entries.iter().any(|(p, t)| {
-        p.extension().is_some_and(|x| x == "tf") && (t.is_file() || (t.is_symlink() && p.is_file()))
+        tf_semantic::module::is_config(p) && (t.is_file() || (t.is_symlink() && p.is_file()))
     }) {
         out.push(dir.to_path_buf());
     }
@@ -132,9 +208,10 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
             .file_name()
             .is_some_and(|n| n.to_string_lossy().starts_with('.'));
         if t.is_dir() && !hidden {
-            walk(&p, out);
+            walk(&p, out)?;
         }
     }
+    Ok(())
 }
 
 /// Scan `path` with the seed rules. A convenience for tests and examples;
@@ -155,6 +232,33 @@ pub fn scan_with(
     roots: &[PathBuf],
     opts: &ScanOptions,
 ) -> (ScanResult, Vec<Analysis>) {
+    // Discovery can include overlay-only directories or a custom data
+    // directory without a leading dot. Installed packages are reached through
+    // their calls, never added as independent roots by a recursive scan.
+    let caches: std::collections::HashSet<_> = roots
+        .iter()
+        .map(|root| {
+            let path =
+                tf_semantic::installed::data_dir(root, opts.data_dir.as_deref()).join("modules");
+            tf_semantic::source::normalize(&std::path::absolute(&path).unwrap_or(path))
+        })
+        .collect();
+    let filtered: Vec<_> = roots
+        .iter()
+        .filter(|candidate| {
+            !opts.recursive
+                || (!candidate
+                    .components()
+                    .any(|c| c.as_os_str() == ".terraform")
+                    && !std::path::absolute(candidate).ok().is_some_and(|p| {
+                        tf_semantic::source::normalize(&p)
+                            .ancestors()
+                            .any(|a| caches.contains(a))
+                    }))
+        })
+        .cloned()
+        .collect();
+    let roots = filtered.as_slice();
     let start = Instant::now();
     let files = Arc::new(FileTable::with_overlay(opts.overlay.iter().cloned()));
     // Parsed modules shared by every root: a recursive scan reaches most
@@ -162,6 +266,7 @@ pub fn scan_with(
     let store = ModuleStore::new();
     let aopts = AnalyzeOptions {
         var_files: opts.var_files.clone(),
+        data_dir: opts.data_dir.clone(),
         whole_files: linter.needs_files(),
         ..AnalyzeOptions::default()
     };
@@ -226,6 +331,14 @@ pub fn scan_with(
     let mut rule_errors = Vec::new();
     let mut suppressed = Vec::new();
     let mut diagnostics = Vec::new();
+    if roots.is_empty() {
+        diagnostics.push(Diagnostic {
+            severity: DiagSeverity::Warning,
+            code: "coverage-no-input",
+            message: "no Terraform module roots found".into(),
+            at: None,
+        });
+    }
     let mut analyses = Vec::new();
     let mut module_instances = 0;
     let mut resources = 0;

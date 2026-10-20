@@ -74,6 +74,7 @@
         "resources": 3,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/baseline/transformed/plan.json": {
@@ -154,6 +155,7 @@
         "resources": 3,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/fail_dynamic_statements.json": {
@@ -264,6 +266,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/fail_heredoc_json.json": {
@@ -361,6 +364,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/fail_jsonencode_inline.json": {
@@ -458,6 +462,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/fail_jsonencode_via_local_and_list.json": {
@@ -568,6 +573,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/fail_policy_document_data_source.json": {
@@ -678,6 +684,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/pass_policy_document_deny.json": {
@@ -698,6 +705,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/pass_scoped.json": {
@@ -718,6 +726,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-rds-unencrypted/conditional_unconstrained_variable__fail.json": {
@@ -848,6 +857,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-rds-unencrypted/conditional_unconstrained_variable__pass.json": {
@@ -868,6 +878,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-rds-unencrypted/fail_absent_uses_default.json": {
@@ -985,6 +996,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-rds-unencrypted/fail_explicit_false.json": {
@@ -1102,6 +1114,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-rds-unencrypted/fail_variable_default_false.json": {
@@ -1232,6 +1245,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-rds-unencrypted/pass_encrypted.json": {
@@ -1252,6 +1266,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/conditional_unconstrained_variable__fail.json": {
@@ -1374,6 +1389,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/conditional_unconstrained_variable__pass.json": {
@@ -1394,6 +1410,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/fail_block_attrs_absent_default_false.json": {
@@ -1503,6 +1520,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/fail_block_for_other_bucket.json": {
@@ -1578,6 +1596,7 @@
         "resources": 3,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/fail_missing_block.json": {
@@ -1653,6 +1672,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/fail_permissive_block.json": {
@@ -1762,6 +1782,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/pass_block_via_variable.json": {
@@ -1782,6 +1803,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/pass_full_block.json": {
@@ -1802,6 +1824,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/conditional_unconstrained_variable__fail.json": {
@@ -1940,6 +1963,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/conditional_unconstrained_variable__pass.json": {
@@ -1960,6 +1984,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/fail_dynamic_block.json": {
@@ -2111,6 +2136,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/fail_inline_literal.json": {
@@ -2238,6 +2264,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/fail_port_range_and_all_protocols.json": {
@@ -2451,6 +2478,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/fail_tfvars_through_local.json": {
@@ -2589,6 +2617,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/fail_vpc_ingress_rule.json": {
@@ -2686,6 +2715,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/pass_dynamic_restricted.json": {
@@ -2706,6 +2736,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/pass_restricted.json": {
@@ -2726,6 +2757,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/pass_tfvars_overrides_open_default.json": {
@@ -2746,6 +2778,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/gcp-storage-uniform-access/fail_absent.json": {
@@ -2855,6 +2888,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/gcp-storage-uniform-access/fail_false_via_local.json": {
@@ -2987,6 +3021,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "plan:fixtures/plans/gcp-storage-uniform-access/pass_enabled.json": {
@@ -3007,6 +3042,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/baseline/computed": {
@@ -3082,6 +3118,7 @@
         "resources": 3,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/baseline/local": {
@@ -3157,6 +3194,7 @@
         "resources": 3,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/baseline/sibling": {
@@ -3232,6 +3270,7 @@
         "resources": 3,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/baseline/transformed": {
@@ -3312,6 +3351,7 @@
         "resources": 3,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/fail_dynamic_statements": {
@@ -3466,6 +3506,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/fail_heredoc_json": {
@@ -3563,6 +3604,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_inline": {
@@ -3678,6 +3720,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_via_local_and_list": {
@@ -3816,6 +3859,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_data_source": {
@@ -3985,6 +4029,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_dynamic_statement": {
@@ -4178,6 +4223,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/pass_policy_document_deny": {
@@ -4198,6 +4244,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/pass_scoped": {
@@ -4218,6 +4265,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-rds-unencrypted/conditional_count_tainted_alternative": {
@@ -4335,6 +4383,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable": {
@@ -4465,6 +4514,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default": {
@@ -4572,6 +4622,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-rds-unencrypted/fail_explicit_false": {
@@ -4689,6 +4740,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-rds-unencrypted/fail_variable_default_false": {
@@ -4826,6 +4878,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-rds-unencrypted/pass_encrypted": {
@@ -4846,6 +4899,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/conditional_unconstrained_variable": {
@@ -4968,6 +5022,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/fail_block_attrs_absent_default_false": {
@@ -5071,6 +5126,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/fail_block_for_other_bucket": {
@@ -5146,6 +5202,7 @@
         "resources": 3,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/fail_missing_block": {
@@ -5221,6 +5278,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/fail_permissive_block": {
@@ -5330,6 +5388,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/pass_block_via_variable": {
@@ -5350,6 +5409,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/pass_escaped_instance_key": {
@@ -5370,6 +5430,7 @@
         "resources": 4,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/pass_full_block": {
@@ -5390,6 +5451,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/conditional_unconstrained_variable": {
@@ -5500,6 +5562,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/fail_dynamic_block": {
@@ -5657,6 +5720,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/fail_inline_literal": {
@@ -5774,6 +5838,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/fail_port_range_and_all_protocols": {
@@ -5967,6 +6032,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local": {
@@ -6121,6 +6187,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/fail_vpc_ingress_rule": {
@@ -6218,6 +6285,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/pass_dynamic_restricted": {
@@ -6238,6 +6306,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/pass_restricted": {
@@ -6258,6 +6327,7 @@
         "resources": 2,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/pass_tfvars_overrides_open_default": {
@@ -6278,6 +6348,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/gcp-storage-uniform-access/conditional_unconstrained_variable": {
@@ -6410,6 +6481,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/gcp-storage-uniform-access/fail_absent": {
@@ -6519,6 +6591,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/gcp-storage-uniform-access/fail_false_via_local": {
@@ -6651,6 +6724,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/gcp-storage-uniform-access/fail_tfvars_variable": {
@@ -6796,6 +6870,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     },
     "source:fixtures/rules/gcp-storage-uniform-access/pass_enabled": {
@@ -6816,6 +6891,7 @@
         "resources": 1,
         "roots": 1
       },
+      "status": "complete",
       "suppressed": []
     }
   },

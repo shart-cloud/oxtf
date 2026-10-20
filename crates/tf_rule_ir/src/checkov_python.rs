@@ -21,8 +21,8 @@
 //!
 //! `FAILED` is a finding; `PASSED` and `UNKNOWN` are not. A Python
 //! exception that escapes the check, an operation outside the subset or an
-//! exhausted step budget is `Unknown`: Checkov reports no result for a
-//! check that raises. A finding is located by the check's
+//! exhausted step budget is a rule error, separate from an unknown input.
+//! A finding is located by the check's
 //! `evaluated_keys` (the paths Checkov reports), else the resource.
 
 use rustc_hash::FxHashMap as HashMap;
@@ -42,7 +42,7 @@ use crate::{py, pyre};
 /// The program format this build reads (`version` in the program).
 pub const PROGRAM_VERSION: u32 = 1;
 
-/// Statements executed per resource before giving up (`Unknown`).
+/// Statements executed per resource before reporting a rule error.
 const STEP_BUDGET: u32 = 200_000;
 /// Runs per resource when forking over `OneOf` alternatives.
 const RUN_BUDGET: usize = 64;
@@ -4460,7 +4460,7 @@ impl Check {
     }
 
     /// Run the check on `resource`.
-    pub fn evaluate(&self, resource: &Resource) -> Verdict {
+    pub fn evaluate(&self, resource: &Resource) -> Result<Verdict, String> {
         evaluate(self, resource)
     }
 }
@@ -4504,7 +4504,7 @@ fn input(resource: &Resource, conf: &Value) -> (Py, Rc<Paths>) {
     (py_conf, Rc::new(converter.paths))
 }
 
-fn run(check: &Check, resource: &Resource, conf: &Value) -> Verdict {
+fn run(check: &Check, resource: &Resource, conf: &Value) -> Result<Verdict, String> {
     let fresh = CACHE.with(|c| c.borrow().uid != resource.uid);
     if fresh {
         CACHE.with(|c| {
@@ -4518,7 +4518,7 @@ fn run(check: &Check, resource: &Resource, conf: &Value) -> Verdict {
     run_with(check, resource, conf, &mut HashMap::default(), &mut 0)
 }
 
-fn evaluate(check: &Check, resource: &Resource) -> Verdict {
+fn evaluate(check: &Check, resource: &Resource) -> Result<Verdict, String> {
     let conf = crate::checkov::resource_configuration(resource);
     let timer = (debug() == "time").then(std::time::Instant::now);
     let v = run(check, resource, conf);
@@ -4539,11 +4539,11 @@ fn run_with(
     conf: &Value,
     choices: &mut HashMap<usize, usize>,
     runs: &mut usize,
-) -> Verdict {
+) -> Result<Verdict, String> {
     let program = &*check.program;
     *runs += 1;
     if *runs > RUN_BUDGET {
-        return Verdict::new(Truth::Unknown, None);
+        return Err("checkov_python: alternative run budget exhausted".into());
     }
     let (py_conf, paths) = if check.shares_input {
         CACHE.with(|c| {
@@ -4601,7 +4601,7 @@ fn run_with(
             program.entry, resource.address
         );
     }
-    match outcome {
+    Ok(match outcome {
         Ok(Py::Result(r)) if &*r == "FAILED" => {
             Verdict::new(Truth::True, Some(witness(&mut interp, program, conf)))
         }
@@ -4623,7 +4623,7 @@ fn run_with(
                     choices.remove(&id);
                     v
                 })
-                .collect();
+                .collect::<Result<_, _>>()?;
             truth::combine_one_of(verdicts, tainted)
         }
         Err(Flow::Unsupported(why)) => {
@@ -4633,7 +4633,7 @@ fn run_with(
                     program.entry, resource.address
                 );
             }
-            Verdict::new(Truth::Unknown, None)
+            return Err(format!("checkov_python {}: {why}", program.entry));
         }
         Err(Flow::Exc(name)) => {
             if !debug().is_empty() {
@@ -4642,10 +4642,15 @@ fn run_with(
                     program.entry, resource.address
                 );
             }
-            Verdict::new(Truth::Unknown, None)
+            return Err(format!("checkov_python {}: raised {name}", program.entry));
         }
-        Err(_) => Verdict::new(Truth::Unknown, None),
-    }
+        Err(_) => {
+            return Err(format!(
+                "checkov_python {}: control flow escaped",
+                program.entry
+            ));
+        }
+    })
 }
 
 /// Whether the `OneOf` with traversal id `id` is tainted.

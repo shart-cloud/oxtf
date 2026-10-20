@@ -18,8 +18,8 @@ fn keys(v: &serde_json::Value) -> Vec<String> {
     v.as_object().unwrap().keys().cloned().collect()
 }
 
-/// Adding, removing or renaming a field here is a schema change: bump
-/// `SCHEMA` and `docs/FINDING_SCHEMA.md` together with this list.
+/// Breaking changes bump `SCHEMA`; additive fields update this list and
+/// `docs/FINDING_SCHEMA.md`.
 #[test]
 fn schema_3_field_set_is_pinned() {
     assert_eq!(SCHEMA, 3);
@@ -34,6 +34,7 @@ fn schema_3_field_set_is_pinned() {
             "rules",
             "schema",
             "stats",
+            "status",
             "suppressed"
         ]
     );

@@ -37,6 +37,10 @@ pub fn corpus_files() -> Vec<PathBuf> {
     }
     walk(&corpus_dir(), &mut out);
     out.sort();
+    assert!(
+        !out.is_empty() || std::env::var_os("OXTF_REQUIRE_CORPUS").is_none(),
+        "required corpus is absent; run bash corpus/fetch.sh"
+    );
     out
 }
 

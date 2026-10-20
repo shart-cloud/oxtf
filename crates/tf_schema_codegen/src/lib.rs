@@ -8,6 +8,8 @@
 //! * `index.rs`: per-entry byte ranges plus `phf` maps name -> entry id.
 //! * `views.rs`: typed views for allowlisted resources.
 //! * `defaults.rs`: the validated defaults overlay as a `phf` map.
+//! * `providers.rs`, `providers.postcard`, `provider_symbols.postcard`:
+//!   provider configuration bodies, separate from resource/data-source indices.
 //!
 //! Errors (missing allowlisted resource, allowlist `uses` path that no longer
 //! exists, a default for an unknown attribute or of the wrong type) abort
@@ -37,6 +39,8 @@ pub struct SchemaFile {
 
 #[derive(Debug, Deserialize)]
 pub struct ProviderSchema {
+    #[serde(default)]
+    pub provider: Option<JSchema>,
     #[serde(default)]
     pub resource_schemas: BTreeMap<String, JSchema>,
     #[serde(default)]
@@ -338,6 +342,42 @@ pub fn build_entries(loaded: &[Loaded]) -> Result<Vec<Entry<'_>>> {
         }
     }
     Ok(out)
+}
+
+/// Configuration schemas use a separate blob, so resource indices and the
+/// resource/data-source API remain stable.
+fn build_provider_entries(loaded: &[Loaded]) -> Result<Vec<Entry<'_>>> {
+    loaded
+        .iter()
+        .filter_map(|l| l.schema.provider.as_ref().map(|json| (l, json)))
+        .map(|(l, json)| {
+            Ok(Entry {
+                name: l.provider.name(),
+                kind: SchemaKind::Resource,
+                provider: l.provider,
+                json,
+                body: SchemaBody {
+                    version: json.version,
+                    block: convert_block(&json.block)?,
+                },
+            })
+        })
+        .collect()
+}
+
+fn provider_index_source(entries: &[Entry<'_>], blob: &BlobOut) -> String {
+    let mut source = String::from(HEADER);
+    source.push_str("pub(crate) static BLOB: &[u8] = include_bytes!(\"providers.postcard\");\n");
+    source.push_str(
+        "pub(crate) static SYMBOLS: &[u8] = include_bytes!(\"provider_symbols.postcard\");\n",
+    );
+    let _ = writeln!(source, "pub(crate) const N: usize = {};", entries.len());
+    source.push_str("pub(crate) static ENTRIES: [(&str, usize, usize); N] = [\n");
+    for (entry, (start, end)) in entries.iter().zip(&blob.ranges) {
+        let _ = writeln!(source, "    ({:?}, {start}, {end}),", entry.name);
+    }
+    source.push_str("];\n");
+    source
 }
 
 pub fn find_entry<'e, 'a>(
@@ -1187,6 +1227,9 @@ pub fn generate(
     let index = index_source(&entries, &blob)?;
     let views = views_source(&entries, &allow.view)?;
     let defs = defaults_source(defaults);
+    let providers = build_provider_entries(loaded)?;
+    let provider_blob = build_blob(&providers)?;
+    let provider_index = provider_index_source(&providers, &provider_blob);
     Ok(Generated {
         files: vec![
             ("schema.postcard".into(), blob.blob),
@@ -1194,6 +1237,9 @@ pub fn generate(
             ("index.rs".into(), index.into_bytes()),
             ("views.rs".into(), views.into_bytes()),
             ("defaults.rs".into(), defs.into_bytes()),
+            ("providers.postcard".into(), provider_blob.blob),
+            ("provider_symbols.postcard".into(), provider_blob.symbols),
+            ("providers.rs".into(), provider_index.into_bytes()),
         ],
         entry_count: entries.len(),
         default_count: defaults.len(),

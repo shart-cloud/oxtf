@@ -1,6 +1,6 @@
 //! Module assembly and the symbol table.
 //!
-//! A module is every `.tf` file in one directory. Its symbol table holds the
+//! A module composes the `.tf` and `.tf.json` files in one directory. Its symbol table holds the
 //! declared `variable`, `locals` entries, `resource`, `data`, `module` and
 //! `output` blocks, plus a reference edge for every traversal root found in
 //! their expressions (lexical names bound by `for`, `dynamic` iterators,
@@ -27,6 +27,8 @@ pub struct VarDecl<'a> {
     pub block: &'a Block<'a>,
     pub file: FileId,
     pub default: Option<&'a Attribute<'a>>,
+    /// Default converted through each stage of override composition.
+    pub default_value: Option<tf_eval::Value>,
     pub ty: Option<&'a Expression<'a>>,
     /// `nullable = false`: a null argument means "use the default".
     pub non_nullable: bool,
@@ -51,7 +53,8 @@ pub struct ResourceDecl<'a> {
 pub enum ModuleSource {
     /// `./x` or `../x`, resolved against the calling module's directory.
     Local(PathBuf),
-    /// Registry, git, http, s3, ...: not fetched; outputs are Unknown.
+    /// Registry, git, http, s3, ...: resolved from installed modules only.
+    /// Unavailable sources produce Unknown outputs and coverage diagnostics.
     Remote(String),
     /// `source` missing or not a literal string.
     Invalid,
@@ -115,7 +118,11 @@ pub struct Reference {
 /// A parsed module directory. Borrows the arena.
 pub struct ModuleDef<'a> {
     pub dir: PathBuf,
+    /// Original source paired with the effective AST anchored in that file.
+    /// After composition, individual nodes may belong to other source files.
     pub files: Vec<(Arc<SourceFile>, &'a tf_ast::File<'a>)>,
+    /// Effective bodies can contain nodes from several original files.
+    pub origins: crate::compose::Origins,
     pub variables: Vec<VarDecl<'a>>,
     pub locals: Vec<LocalDecl<'a>>,
     pub resources: Vec<ResourceDecl<'a>>,
@@ -124,6 +131,7 @@ pub struct ModuleDef<'a> {
     /// Shared with every module instance built from this definition.
     pub references: Arc<Vec<Reference>>,
     pub parse_errors: Vec<(FileSpan, String)>,
+    pub load_errors: Vec<String>,
     var_index: HashMap<&'a str, usize>,
     local_index: HashMap<&'a str, usize>,
     res_index: HashMap<(Mode, &'a str, &'a str), usize>,
@@ -149,34 +157,50 @@ impl<'a> ModuleDef<'a> {
     }
 }
 
-/// The `.tf` files of a directory, sorted by name, as the file table sees
-/// it (overlay included). (`.tf.json` and override files are not handled
-/// specially: see W3 scope cuts.)
+/// HCL and JSON configuration, including overrides, in lexical filename order
+/// as the file table sees it (overlay included).
 pub fn module_files(files: &FileTable, dir: &Path) -> Vec<PathBuf> {
     files
         .read_dir(dir)
         .iter()
-        .filter(|p| p.extension().is_some_and(|x| x == "tf"))
+        .filter(|p| is_config(p))
         .cloned()
         .collect()
 }
 
-/// `terraform.tfvars` then `*.auto.tfvars` (lexical order), as Terraform
-/// loads them; later files win.
+pub fn is_override(path: &Path) -> bool {
+    path.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
+        matches!(n, "override.tf" | "override.tf.json")
+            || n.ends_with("_override.tf")
+            || n.ends_with("_override.tf.json")
+    })
+}
+
+pub fn is_config(path: &Path) -> bool {
+    path.extension().is_some_and(|x| x == "tf")
+        || path
+            .file_name()
+            .is_some_and(|n| n.to_string_lossy().ends_with(".tf.json"))
+}
+
+/// Default HCL then JSON variable files, then both auto-file formats in
+/// lexical order, as Terraform loads them; later files win.
 pub fn auto_tfvars(files: &FileTable, dir: &Path) -> Vec<PathBuf> {
     let mut v = Vec::new();
-    let t = dir.join("terraform.tfvars");
-    if files.is_file(&t) {
-        v.push(t);
+    for name in ["terraform.tfvars", "terraform.tfvars.json"] {
+        let t = dir.join(name);
+        if files.is_file(&t) {
+            v.push(t);
+        }
     }
     v.extend(
         files
             .read_dir(dir)
             .iter()
             .filter(|p| {
-                p.file_name()
-                    .and_then(|n| n.to_str())
-                    .is_some_and(|n| n.ends_with(".auto.tfvars"))
+                p.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
+                    n.ends_with(".auto.tfvars") || n.ends_with(".auto.tfvars.json")
+                })
             })
             .cloned(),
     );
@@ -189,12 +213,33 @@ pub fn parse_file<'a>(
     sf: &Arc<SourceFile>,
     errors: &mut Vec<(FileSpan, String)>,
 ) -> &'a tf_ast::File<'a> {
+    alloc.alloc(parse_config(alloc, sf, errors))
+}
+
+fn parse_config<'a>(
+    alloc: &'a Allocator,
+    sf: &Arc<SourceFile>,
+    errors: &mut Vec<(FileSpan, String)>,
+) -> tf_ast::File<'a> {
+    parse_config_with_providers(alloc, sf, errors, &HashMap::default())
+}
+
+fn parse_config_with_providers<'a>(
+    alloc: &'a Allocator,
+    sf: &Arc<SourceFile>,
+    errors: &mut Vec<(FileSpan, String)>,
+    providers: &HashMap<String, String>,
+) -> tf_ast::File<'a> {
     let text: &'a str = alloc.alloc_str(&sf.text);
-    let ret = tf_parser::parse(alloc, text);
+    let ret = if sf.path.to_string_lossy().ends_with(".tf.json") {
+        crate::json_config::parse(alloc, text, providers)
+    } else {
+        tf_parser::parse(alloc, text)
+    };
     for e in ret.errors {
         errors.push((FileSpan::new(sf.id, e.span), e.message));
     }
-    alloc.alloc(ret.file)
+    ret.file
 }
 
 /// Load and index a module directory.
@@ -203,6 +248,7 @@ pub fn load_module<'a>(alloc: &'a Allocator, files: &FileTable, dir: &Path) -> M
     let mut def = ModuleDef {
         dir: dir.clone(),
         files: Vec::new(),
+        origins: crate::compose::Origins::default(),
         variables: Vec::new(),
         locals: Vec::new(),
         resources: Vec::new(),
@@ -210,16 +256,45 @@ pub fn load_module<'a>(alloc: &'a Allocator, files: &FileTable, dir: &Path) -> M
         outputs: Vec::new(),
         references: Arc::new(Vec::new()),
         parse_errors: Vec::new(),
+        load_errors: Vec::new(),
         var_index: HashMap::default(),
         local_index: HashMap::default(),
         res_index: HashMap::default(),
         call_index: HashMap::default(),
         output_index: HashMap::default(),
     };
+    let mut parsed = Vec::new();
     for p in module_files(files, &dir) {
-        let Ok(sf) = files.load(&p) else { continue };
-        let f = parse_file(alloc, &sf, &mut def.parse_errors);
-        def.files.push((sf, f));
+        let sf = match files.load(&p) {
+            Ok(sf) => sf,
+            Err(e) => {
+                def.load_errors.push(format!("{}: {e}", p.display()));
+                continue;
+            }
+        };
+        let f = parse_config(alloc, &sf, &mut def.parse_errors);
+        parsed.push((sf, f));
+    }
+    if parsed
+        .iter()
+        .any(|(sf, _)| sf.path.extension().is_some_and(|e| e == "json"))
+    {
+        let providers = provider_names(&parsed);
+        if !providers.is_empty() {
+            // Requirements can come from another file or an override. Resolve
+            // them before assigning provider-specific JSON block structure.
+            for (sf, ast) in &mut parsed {
+                if sf.path.extension().is_some_and(|e| e == "json") {
+                    def.parse_errors.retain(|(at, _)| at.file != sf.id);
+                    *ast =
+                        parse_config_with_providers(alloc, sf, &mut def.parse_errors, &providers);
+                }
+            }
+        }
+    }
+    def.origins = crate::compose::compose(alloc, &mut parsed, &mut def.parse_errors);
+    for (sf, f) in parsed {
+        def.files.push((sf, alloc.alloc(f)));
     }
     let file_list: Vec<(FileId, &'a tf_ast::File<'a>)> =
         def.files.iter().map(|(s, f)| (s.id, *f)).collect();
@@ -232,7 +307,75 @@ pub fn load_module<'a>(alloc: &'a Allocator, files: &FileTable, dir: &Path) -> M
     def
 }
 
+fn provider_names(files: &[(Arc<SourceFile>, tf_ast::File<'_>)]) -> HashMap<String, String> {
+    let mut names = HashMap::default();
+    for overriding in [false, true] {
+        for (_, ast) in files
+            .iter()
+            .filter(|(sf, _)| is_override(&sf.path) == overriding)
+        {
+            for requirements in ast
+                .body
+                .blocks()
+                .filter(|b| b.block_type() == "terraform")
+                .flat_map(|b| b.body.blocks())
+                .filter(|b| b.block_type() == "required_providers")
+            {
+                for attr in requirements.body.attributes() {
+                    let source = match &attr.value {
+                        Expression::Object(o) => o
+                            .items
+                            .iter()
+                            .find(|i| i.key.as_static_str() == Some("source"))
+                            .and_then(|i| i.value.as_string_literal()),
+                        _ => None,
+                    };
+                    let canonical = source
+                        .map(|s| s.strip_prefix("registry.terraform.io/").unwrap_or(s))
+                        .map(|source| {
+                            tf_schema::Provider::ALL
+                                .into_iter()
+                                .find(|p| p.source() == source)
+                                .map(|p| p.name())
+                                .unwrap_or("")
+                        })
+                        .unwrap_or(attr.key.name.as_str());
+                    if canonical == attr.key.name.as_str() {
+                        names.remove(attr.key.name.as_str());
+                    } else {
+                        names.insert(attr.key.name.to_string(), canonical.to_owned());
+                    }
+                }
+            }
+        }
+    }
+    names
+}
+
 fn index_block<'a>(def: &mut ModuleDef<'a>, file: FileId, b: &'a Block<'a>) {
+    let duplicate = match (b.block_type(), b.label(0), b.label(1)) {
+        ("variable", Some(n), _) => def.var_index.contains_key(n),
+        ("module", Some(n), _) => def.call_index.contains_key(n),
+        ("output", Some(n), _) => def.output_index.contains_key(n),
+        ("resource", Some(t), Some(n)) => def.res_index.contains_key(&(Mode::Managed, t, n)),
+        ("data", Some(t), Some(n)) => def.res_index.contains_key(&(Mode::Data, t, n)),
+        _ => false,
+    };
+    if duplicate {
+        def.parse_errors.push((
+            FileSpan::new(file, b.span),
+            "duplicate declaration in ordinary configuration".into(),
+        ));
+    }
+    if matches!(b.block_type(), "resource" | "data" | "module")
+        && b.body.find_attribute("count").is_some()
+        && let Some(each) = b.body.find_attribute("for_each")
+    {
+        def.parse_errors.push((
+            FileSpan::new(def.origins.file(each, file), each.span),
+            "count and for_each cannot both be set".into(),
+        ));
+    }
     match b.block_type() {
         "variable" => {
             if let Some(name) = b.label(0) {
@@ -242,6 +385,7 @@ fn index_block<'a>(def: &mut ModuleDef<'a>, file: FileId, b: &'a Block<'a>) {
                     block: b,
                     file,
                     default: b.body.find_attribute("default"),
+                    default_value: def.origins.default_value(b).cloned(),
                     ty: b.body.find_attribute("type").map(|a| &a.value),
                     non_nullable: b
                         .body
@@ -253,11 +397,17 @@ fn index_block<'a>(def: &mut ModuleDef<'a>, file: FileId, b: &'a Block<'a>) {
         "locals" => {
             for a in b.body.attributes() {
                 let name = a.key.name.as_str();
+                if def.local_index.contains_key(name) {
+                    def.parse_errors.push((
+                        FileSpan::new(def.origins.file(a, file), a.span),
+                        "duplicate local value in ordinary configuration".into(),
+                    ));
+                }
                 def.local_index.entry(name).or_insert(def.locals.len());
                 def.locals.push(LocalDecl {
                     name,
                     attr: a,
-                    file,
+                    file: def.origins.file(a, file),
                 });
             }
         }
@@ -330,6 +480,7 @@ const IMPLICIT: &[&str] = &["count", "each", "self", "path", "terraform"];
 
 struct RefCollector<'m, 'd> {
     file: FileId,
+    origins: &'m crate::compose::Origins,
     from: SymbolRef,
     bound: Vec<&'d str>,
     out: Vec<Reference>,
@@ -475,10 +626,13 @@ impl<'d> RefCollector<'_, 'd> {
     }
 
     fn body(&mut self, b: &'d Body<'d>) {
+        let file = self.file;
         for a in b.attributes() {
+            self.file = self.origins.file(a, file);
             self.expr(&a.value);
         }
         for blk in b.blocks() {
+            self.file = self.origins.file(blk, file);
             if blk.block_type() == "dynamic" {
                 let it = blk
                     .body
@@ -501,6 +655,7 @@ impl<'d> RefCollector<'_, 'd> {
                 self.body(&blk.body);
             }
         }
+        self.file = file;
     }
 }
 
@@ -510,6 +665,7 @@ fn collect_references<'a>(def: &mut ModuleDef<'a>) {
         let d: &ModuleDef<'a> = def;
         let mut c = RefCollector {
             file: FileId(0),
+            origins: &d.origins,
             from: SymbolRef::Unresolved(String::new()),
             bound: Vec::new(),
             out: Vec::new(),
@@ -522,6 +678,7 @@ fn collect_references<'a>(def: &mut ModuleDef<'a>) {
             c.file = v.file;
             c.from = SymbolRef::Variable(v.name.into());
             if let Some(a) = v.default {
+                c.file = d.origins.file(a, v.file);
                 c.expr(&a.value);
             }
         }

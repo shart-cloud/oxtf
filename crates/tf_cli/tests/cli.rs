@@ -4,6 +4,130 @@
 
 use std::process::Command;
 
+#[test]
+fn json_configuration_and_override_fixes_share_the_cli_pipeline() {
+    let dir = std::env::temp_dir().join(format!("oxtf-cli-json-overrides-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("main.tf.json"),
+        r#"{"resource":{"aws_db_instance":{"db":{"storage_encrypted":false}}}}"#,
+    )
+    .unwrap();
+    let scan = || {
+        let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+            .args(["scan", "--no-bundled", "-f", "json"])
+            .arg(&dir)
+            .output()
+            .unwrap();
+        assert_eq!(
+            out.status.code(),
+            Some(1),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let record: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(record["status"], "complete");
+        record
+    };
+    let json = scan();
+    assert!(json["findings"][0]["fix_hint"].is_null());
+    std::fs::write(
+        dir.join("override.tf"),
+        r#"resource "aws_db_instance" "db" { storage_encrypted = false }"#,
+    )
+    .unwrap();
+    let merged = scan();
+    let finding = &merged["findings"][0];
+    assert!(
+        finding["location"]["file"]
+            .as_str()
+            .unwrap()
+            .ends_with("override.tf")
+    );
+    let fixed = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .args([
+            "fix",
+            finding["fingerprint"].as_str().unwrap(),
+            "--no-bundled",
+            "-f",
+            "json",
+        ])
+        .arg(&dir)
+        .output()
+        .unwrap();
+    assert!(
+        fixed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&fixed.stderr)
+    );
+    let fixed: serde_json::Value = serde_json::from_slice(&fixed.stdout).unwrap();
+    assert_eq!(fixed["verified"], true);
+    assert!(fixed["file"].as_str().unwrap().ends_with("override.tf"));
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn installed_modules_and_json_vars_work_from_disk_with_custom_data_dir() {
+    let dir = std::env::temp_dir().join(format!("oxtf-cli-installed-{}", std::process::id()));
+    let cache = dir.join("cache/modules/db");
+    std::fs::create_dir_all(&cache).unwrap();
+    std::fs::write(
+        dir.join("main.tf"),
+        r#"
+variable "encrypted" { default = true }
+module "db" {
+  source = "acme/db/aws"
+  encrypted = var.encrypted
+}
+"#,
+    )
+    .unwrap();
+    std::fs::write(dir.join("terraform.tfvars.json"), r#"{"encrypted":false}"#).unwrap();
+    std::fs::write(cache.join("main.tf"), "variable \"encrypted\" {}\nresource \"aws_db_instance\" \"db\" { storage_encrypted = var.encrypted }\n").unwrap();
+    let manifest = dir.join("cache/modules/modules.json");
+    std::fs::write(&manifest, r#"{"Modules":[{"Key":"db","Source":"acme/db/aws","Version":"1.2.3","Dir":"cache/modules/db"}]}"#).unwrap();
+    for path in [".", dir.to_str().unwrap()] {
+        let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+            .current_dir(&dir)
+            .args([
+                "scan",
+                path,
+                "--recursive",
+                "--data-dir",
+                "cache",
+                "--no-bundled",
+                "--format",
+                "json",
+            ])
+            .output()
+            .unwrap();
+        let record: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(out.status.code(), Some(1), "{record}");
+        assert_eq!(record["status"], "complete");
+        assert_eq!(record["stats"]["roots"], 1);
+        assert_eq!(record["findings"][0]["package"]["file"], "main.tf");
+        assert!(record["findings"][0]["fix_hint"].is_null());
+    }
+    std::fs::remove_file(manifest).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .current_dir(&dir)
+        .args([
+            "scan",
+            ".",
+            "--data-dir",
+            "cache",
+            "--no-bundled",
+            "--format",
+            "json",
+            "--fail-on",
+            "never",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(3));
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
 fn fixture(p: &str) -> String {
     format!("{}/../../fixtures/rules/{p}", env!("CARGO_MANIFEST_DIR"))
 }
@@ -495,6 +619,41 @@ fn fail_on_sets_the_exit_code() {
     assert_eq!(code(definite, &["--fail-on", "bogus"]), Some(2));
 }
 
+#[test]
+fn parse_errors_fail_even_when_findings_are_disabled_or_diagnostics_hidden() {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .args([
+            "scan",
+            "/nonexistent/oxtf-cli-parse",
+            "--no-builtin",
+            "--overlay",
+            "/nonexistent/oxtf-cli-parse/main.tf=-",
+            "--fail-on",
+            "never",
+            "--no-diagnostics",
+            "--format",
+            "json",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"broken = )\n")
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert_eq!(out.status.code(), Some(3));
+    let record: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(record["status"], "failed");
+    assert_eq!(record["findings"], serde_json::json!([]));
+}
+
 /// NDJSON: a line per finding and a closing summary; SARIF: one run whose
 /// results carry the record's fingerprints.
 #[test]
@@ -645,4 +804,84 @@ fn profiles_pick_the_shipped_rules() {
         ["CKV_AWS_126"]
     );
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn explicit_fetch_enables_offline_counted_module_scans() {
+    let base = std::env::temp_dir().join(format!("oxtf-cli-fetch-{}", std::process::id()));
+    let package = base.join("package");
+    let root = base.join("root");
+    std::fs::create_dir_all(&package).unwrap();
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(
+        package.join("main.tf"),
+        "resource \"aws_db_instance\" \"db\" { storage_encrypted = false }\n",
+    )
+    .unwrap();
+    for args in [
+        vec!["init", "-q"],
+        vec!["add", "."],
+        vec![
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.test",
+            "commit",
+            "-qm",
+            "fixture",
+        ],
+    ] {
+        let status = Command::new("git")
+            .arg("-C")
+            .arg(&package)
+            .args(args)
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+    std::fs::write(
+        root.join("main.tf"),
+        format!(
+            "module \"m\" {{\nsource = \"git::file://{}\"\ncount = 2\n}}\n",
+            package.display()
+        ),
+    )
+    .unwrap();
+    let scan = || {
+        Command::new(env!("CARGO_BIN_EXE_oxtf"))
+            .args(["scan", "--no-bundled", "-f", "json", "--data-dir", ".data"])
+            .arg(&root)
+            .output()
+            .unwrap()
+    };
+    assert_eq!(scan().status.code(), Some(3));
+    let fetched = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .arg("fetch")
+        .arg(&root)
+        .args(["--data-dir", ".data"])
+        .output()
+        .unwrap();
+    assert!(
+        fetched.status.success(),
+        "{}",
+        String::from_utf8_lossy(&fetched.stderr)
+    );
+    std::fs::rename(&package, base.join("offline-package")).unwrap();
+    let result = scan();
+    assert_eq!(result.status.code(), Some(1));
+    let record: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(record["status"], "complete");
+    assert_eq!(
+        record["findings"][0]["occurrences"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert!(
+        record["findings"][0]["package"]["revision"]
+            .as_str()
+            .is_some()
+    );
+    assert!(record["findings"][0]["fix_hint"].is_null());
 }

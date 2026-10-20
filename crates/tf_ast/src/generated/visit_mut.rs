@@ -6,6 +6,11 @@ use crate::ast::*;
 use crate::generated::ast_kind::AstType;
 pub use walk_mut::*;
 pub trait VisitMut<'a>: Sized {
+    /// Transform original byte locations, including leaf nodes.
+    #[inline]
+    fn visit_span(&mut self, span: &mut tf_span::Span) {
+        let _ = span;
+    }
     #[inline]
     fn enter_node(&mut self, ty: AstType) {
         let _ = ty;
@@ -176,12 +181,14 @@ pub mod walk_mut {
     #[inline]
     pub fn walk_file_mut<'a, V: VisitMut<'a>>(visitor: &mut V, it: &mut File<'a>) {
         visitor.enter_node(AstType::File);
+        visitor.visit_span(&mut it.span);
         visitor.visit_body(&mut it.body);
         visitor.leave_node(AstType::File);
     }
     #[inline]
     pub fn walk_body_mut<'a, V: VisitMut<'a>>(visitor: &mut V, it: &mut Body<'a>) {
         visitor.enter_node(AstType::Body);
+        visitor.visit_span(&mut it.span);
         for el in it.items.iter_mut() {
             visitor.visit_body_item(el);
         }
@@ -193,6 +200,7 @@ pub mod walk_mut {
         it: &mut Attribute<'a>,
     ) {
         visitor.enter_node(AstType::Attribute);
+        visitor.visit_span(&mut it.span);
         visitor.visit_identifier(&mut it.key);
         visitor.visit_expression(&mut it.value);
         visitor.leave_node(AstType::Attribute);
@@ -200,6 +208,7 @@ pub mod walk_mut {
     #[inline]
     pub fn walk_block_mut<'a, V: VisitMut<'a>>(visitor: &mut V, it: &mut Block<'a>) {
         visitor.enter_node(AstType::Block);
+        visitor.visit_span(&mut it.span);
         visitor.visit_identifier(&mut it.ident);
         for el in it.labels.iter_mut() {
             visitor.visit_block_label(el);
@@ -213,6 +222,7 @@ pub mod walk_mut {
         it: &mut BlockLabel<'a>,
     ) {
         visitor.enter_node(AstType::BlockLabel);
+        visitor.visit_span(&mut it.span);
         let _ = it;
         visitor.leave_node(AstType::BlockLabel);
     }
@@ -222,6 +232,7 @@ pub mod walk_mut {
         it: &mut Identifier<'a>,
     ) {
         visitor.enter_node(AstType::Identifier);
+        visitor.visit_span(&mut it.span);
         let _ = it;
         visitor.leave_node(AstType::Identifier);
     }
@@ -231,6 +242,7 @@ pub mod walk_mut {
         it: &mut NullLiteral,
     ) {
         visitor.enter_node(AstType::NullLiteral);
+        visitor.visit_span(&mut it.span);
         let _ = it;
         visitor.leave_node(AstType::NullLiteral);
     }
@@ -240,6 +252,7 @@ pub mod walk_mut {
         it: &mut BooleanLiteral,
     ) {
         visitor.enter_node(AstType::BooleanLiteral);
+        visitor.visit_span(&mut it.span);
         let _ = it;
         visitor.leave_node(AstType::BooleanLiteral);
     }
@@ -249,6 +262,7 @@ pub mod walk_mut {
         it: &mut NumberLiteral<'a>,
     ) {
         visitor.enter_node(AstType::NumberLiteral);
+        visitor.visit_span(&mut it.span);
         let _ = it;
         visitor.leave_node(AstType::NumberLiteral);
     }
@@ -258,6 +272,7 @@ pub mod walk_mut {
         it: &mut StringLiteral<'a>,
     ) {
         visitor.enter_node(AstType::StringLiteral);
+        visitor.visit_span(&mut it.span);
         let _ = it;
         visitor.leave_node(AstType::StringLiteral);
     }
@@ -267,6 +282,7 @@ pub mod walk_mut {
         it: &mut TemplateExpr<'a>,
     ) {
         visitor.enter_node(AstType::TemplateExpr);
+        visitor.visit_span(&mut it.span);
         visitor.visit_template(&mut it.template);
         visitor.leave_node(AstType::TemplateExpr);
     }
@@ -276,6 +292,7 @@ pub mod walk_mut {
         it: &mut HeredocExpr<'a>,
     ) {
         visitor.enter_node(AstType::HeredocExpr);
+        visitor.visit_span(&mut it.span);
         visitor.visit_template(&mut it.template);
         visitor.leave_node(AstType::HeredocExpr);
     }
@@ -285,6 +302,7 @@ pub mod walk_mut {
         it: &mut Template<'a>,
     ) {
         visitor.enter_node(AstType::Template);
+        visitor.visit_span(&mut it.span);
         for el in it.elements.iter_mut() {
             visitor.visit_template_element(el);
         }
@@ -296,6 +314,7 @@ pub mod walk_mut {
         it: &mut TemplateLiteral<'a>,
     ) {
         visitor.enter_node(AstType::TemplateLiteral);
+        visitor.visit_span(&mut it.span);
         let _ = it;
         visitor.leave_node(AstType::TemplateLiteral);
     }
@@ -305,6 +324,7 @@ pub mod walk_mut {
         it: &mut TemplateInterpolation<'a>,
     ) {
         visitor.enter_node(AstType::TemplateInterpolation);
+        visitor.visit_span(&mut it.span);
         visitor.visit_expression(&mut it.expression);
         visitor.leave_node(AstType::TemplateInterpolation);
     }
@@ -314,6 +334,7 @@ pub mod walk_mut {
         it: &mut TemplateIf<'a>,
     ) {
         visitor.enter_node(AstType::TemplateIf);
+        visitor.visit_span(&mut it.span);
         visitor.visit_expression(&mut it.condition);
         visitor.visit_template(&mut it.then_template);
         if let Some(el) = &mut it.else_template {
@@ -327,6 +348,7 @@ pub mod walk_mut {
         it: &mut TemplateFor<'a>,
     ) {
         visitor.enter_node(AstType::TemplateFor);
+        visitor.visit_span(&mut it.span);
         if let Some(el) = &mut it.key_var {
             visitor.visit_identifier(el);
         }
@@ -341,6 +363,7 @@ pub mod walk_mut {
         it: &mut VariableExpr<'a>,
     ) {
         visitor.enter_node(AstType::VariableExpr);
+        visitor.visit_span(&mut it.span);
         let _ = it;
         visitor.leave_node(AstType::VariableExpr);
     }
@@ -350,6 +373,7 @@ pub mod walk_mut {
         it: &mut Traversal<'a>,
     ) {
         visitor.enter_node(AstType::Traversal);
+        visitor.visit_span(&mut it.span);
         visitor.visit_expression(&mut it.object);
         for el in it.operators.iter_mut() {
             visitor.visit_traversal_operator(el);
@@ -362,6 +386,7 @@ pub mod walk_mut {
         it: &mut GetAttr<'a>,
     ) {
         visitor.enter_node(AstType::GetAttr);
+        visitor.visit_span(&mut it.span);
         visitor.visit_identifier(&mut it.name);
         visitor.leave_node(AstType::GetAttr);
     }
@@ -371,6 +396,7 @@ pub mod walk_mut {
         it: &mut IndexOp<'a>,
     ) {
         visitor.enter_node(AstType::IndexOp);
+        visitor.visit_span(&mut it.span);
         visitor.visit_expression(&mut it.index);
         visitor.leave_node(AstType::IndexOp);
     }
@@ -380,6 +406,7 @@ pub mod walk_mut {
         it: &mut LegacyIndex,
     ) {
         visitor.enter_node(AstType::LegacyIndex);
+        visitor.visit_span(&mut it.span);
         let _ = it;
         visitor.leave_node(AstType::LegacyIndex);
     }
@@ -389,6 +416,7 @@ pub mod walk_mut {
         it: &mut AttrSplat,
     ) {
         visitor.enter_node(AstType::AttrSplat);
+        visitor.visit_span(&mut it.span);
         let _ = it;
         visitor.leave_node(AstType::AttrSplat);
     }
@@ -398,6 +426,7 @@ pub mod walk_mut {
         it: &mut FullSplat,
     ) {
         visitor.enter_node(AstType::FullSplat);
+        visitor.visit_span(&mut it.span);
         let _ = it;
         visitor.leave_node(AstType::FullSplat);
     }
@@ -407,6 +436,7 @@ pub mod walk_mut {
         it: &mut FunctionCall<'a>,
     ) {
         visitor.enter_node(AstType::FunctionCall);
+        visitor.visit_span(&mut it.span);
         for el in it.namespace.iter_mut() {
             visitor.visit_identifier(el);
         }
@@ -419,6 +449,7 @@ pub mod walk_mut {
     #[inline]
     pub fn walk_tuple_mut<'a, V: VisitMut<'a>>(visitor: &mut V, it: &mut Tuple<'a>) {
         visitor.enter_node(AstType::Tuple);
+        visitor.visit_span(&mut it.span);
         for el in it.elements.iter_mut() {
             visitor.visit_expression(el);
         }
@@ -427,6 +458,7 @@ pub mod walk_mut {
     #[inline]
     pub fn walk_object_mut<'a, V: VisitMut<'a>>(visitor: &mut V, it: &mut Object<'a>) {
         visitor.enter_node(AstType::Object);
+        visitor.visit_span(&mut it.span);
         for el in it.items.iter_mut() {
             visitor.visit_object_item(el);
         }
@@ -438,6 +470,7 @@ pub mod walk_mut {
         it: &mut ObjectItem<'a>,
     ) {
         visitor.enter_node(AstType::ObjectItem);
+        visitor.visit_span(&mut it.span);
         visitor.visit_object_key(&mut it.key);
         visitor.visit_expression(&mut it.value);
         visitor.leave_node(AstType::ObjectItem);
@@ -448,6 +481,7 @@ pub mod walk_mut {
         it: &mut ForExpr<'a>,
     ) {
         visitor.enter_node(AstType::ForExpr);
+        visitor.visit_span(&mut it.span);
         if let Some(el) = &mut it.key_var {
             visitor.visit_identifier(el);
         }
@@ -468,6 +502,7 @@ pub mod walk_mut {
         it: &mut Conditional<'a>,
     ) {
         visitor.enter_node(AstType::Conditional);
+        visitor.visit_span(&mut it.span);
         visitor.visit_expression(&mut it.condition);
         visitor.visit_expression(&mut it.true_expr);
         visitor.visit_expression(&mut it.false_expr);
@@ -479,6 +514,7 @@ pub mod walk_mut {
         it: &mut UnaryExpr<'a>,
     ) {
         visitor.enter_node(AstType::UnaryExpr);
+        visitor.visit_span(&mut it.span);
         visitor.visit_expression(&mut it.operand);
         visitor.leave_node(AstType::UnaryExpr);
     }
@@ -488,6 +524,7 @@ pub mod walk_mut {
         it: &mut BinaryExpr<'a>,
     ) {
         visitor.enter_node(AstType::BinaryExpr);
+        visitor.visit_span(&mut it.span);
         visitor.visit_expression(&mut it.left);
         visitor.visit_expression(&mut it.right);
         visitor.leave_node(AstType::BinaryExpr);
@@ -498,6 +535,7 @@ pub mod walk_mut {
         it: &mut ParenthesizedExpr<'a>,
     ) {
         visitor.enter_node(AstType::ParenthesizedExpr);
+        visitor.visit_span(&mut it.span);
         visitor.visit_expression(&mut it.expression);
         visitor.leave_node(AstType::ParenthesizedExpr);
     }
@@ -507,6 +545,7 @@ pub mod walk_mut {
         it: &mut ErrorExpr,
     ) {
         visitor.enter_node(AstType::ErrorExpr);
+        visitor.visit_span(&mut it.span);
         let _ = it;
         visitor.leave_node(AstType::ErrorExpr);
     }

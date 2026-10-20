@@ -110,6 +110,7 @@ fn plan_fixtures_match_source() {
             &linter,
             plan,
             &PlanOptions {
+                data_dir: None,
                 source: Some(case_dir.clone()),
             },
         )
@@ -312,7 +313,7 @@ fn plan_case_module_count_sensitive() {
         .map(|s| s.label.to_string())
         .collect();
     assert!(
-        labels.iter().any(|l| l.ends_with("password (sensitive)")),
+        labels.iter().any(|l| l == "attribute (sensitive)"),
         "{labels:?}"
     );
     assert!(

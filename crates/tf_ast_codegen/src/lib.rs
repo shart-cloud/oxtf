@@ -321,7 +321,7 @@ fn gen_visit(s: &Schema, mutable: bool) -> TokenStream {
             .collect();
         let (enter, leave) = if mutable {
             (
-                quote!(visitor.enter_node(AstType::#v);),
+                quote!(visitor.enter_node(AstType::#v); visitor.visit_span(&mut it.span);),
                 quote!(visitor.leave_node(AstType::#v);),
             )
         } else {
@@ -372,6 +372,9 @@ fn gen_visit(s: &Schema, mutable: bool) -> TokenStream {
     let (hooks, kind_import) = if mutable {
         (
             quote! {
+                /// Transform original byte locations, including leaf nodes.
+                #[inline]
+                fn visit_span(&mut self, span: &mut tf_span::Span) { let _ = span; }
                 #[inline]
                 fn enter_node(&mut self, ty: AstType) { let _ = ty; }
                 #[inline]

@@ -13,7 +13,10 @@ fn edges(files: &[(&str, &str)]) -> Vec<(String, String, Truth)> {
     );
     let analysis = analyze_module(Path::new("graph-test"), &AnalyzeOptions::default(), &files);
     assert!(
-        analysis.diagnostics.is_empty(),
+        analysis
+            .diagnostics
+            .iter()
+            .all(|d| d.code == "coverage-count"),
         "{:?}",
         analysis.diagnostics
     );
@@ -163,7 +166,7 @@ resource "test_link" "all" { ids = values(local.cfg) }
 }
 
 #[test]
-fn indexed_reference_to_unexpanded_count_is_uncertain_not_absent() {
+fn indexed_reference_to_count_selects_the_exact_instance() {
     let result = edges(&[(
         "main.tf",
         r#"
@@ -172,5 +175,6 @@ resource "test_link" "l" { target = test_node.n[0].id }
 "#,
     )]);
     assert_eq!(result.len(), 1);
-    assert_eq!(result[0].2, Truth::Unknown);
+    assert_eq!(result[0].0, "test_node.n[0]");
+    assert_eq!(result[0].2, Truth::True);
 }

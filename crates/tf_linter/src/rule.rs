@@ -27,6 +27,7 @@ use tf_span::{FileSpan, Span};
 /// whole configuration files (Conftest policies).
 pub struct ConfigFile<'a> {
     pub module: &'a Module,
+    pub definition: &'a tf_semantic::module::ModuleDef<'a>,
     pub source: Arc<SourceFile>,
     pub ast: &'a tf_ast::File<'a>,
     /// Unique per [`crate::Linter::run_with`] call: the files of one root
@@ -634,6 +635,8 @@ impl FindingSubject {
 /// A finding.
 #[derive(Clone, Debug)]
 pub struct Finding {
+    /// Installed source provenance, including the call chain from this root.
+    pub package: Option<tf_semantic::installed::InstalledPackage>,
     pub rule: Arc<str>,
     pub category: Category,
     pub description: Arc<str>,
@@ -768,6 +771,7 @@ impl Finding {
         let effective = top.as_deref().and_then(|t| resource.value_or_default(t));
         let message = certainty_suffix(message, certainty, witness.as_ref(), downgraded);
         Some(Finding {
+            package: None,
             rule: info.name.clone(),
             category: info.category,
             description: info.description.clone(),
@@ -822,6 +826,7 @@ impl Finding {
             });
         let message = certainty_suffix(message, certainty, witness.as_ref(), false);
         Finding {
+            package: module.package.clone(),
             rule: info.name.clone(),
             category: info.category,
             description: info.description.clone(),

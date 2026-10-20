@@ -14,12 +14,16 @@
 
 pub mod address;
 pub mod analyze;
+pub mod compose;
 pub mod graph;
+pub mod installed;
+mod json_config;
 pub mod model;
 pub mod module;
 pub mod references;
 pub mod source;
 pub mod store;
+mod variable_defaults;
 
 pub use address::{Address, AddressError, InstanceKey};
 pub use analyze::{

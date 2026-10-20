@@ -10,7 +10,8 @@
 //!
 //! Exit codes: 0 no finding at or above `--fail-on` (default: definite),
 //! 1 some finding is, 2 the scan could not run, 3 some rule failed on some
-//! resource (output is still printed; see `rule_errors`). 3 wins over 1:
+//! resource, analysis failed, or coverage is incomplete (output is still
+//! printed; see `status`, `diagnostics` and `rule_errors`). 3 wins over 1:
 //! an incomplete scan is reported as such even when it found something.
 
 use std::io::{IsTerminal, Read, Write};
@@ -36,11 +37,14 @@ use tf_linter::render::{location, render_finding};
 use tf_scan::{Catalog, ScanInput, ScanRequest};
 
 const USAGE: &str = "usage:
+  oxtf fetch [PATH] [--data-dir DIR] [--refresh] [--registry HOST=URL]
+                                  fetch module dependencies explicitly; prints JSON.
+                                  Reuses pinned cached packages unless --refresh is set.
   oxtf scan [PATH...] [options]   scan Terraform module directories (default: .)
   oxtf scan --plan PLAN.json [--source DIR] [options]
                                   scan `terraform show -json` output; findings are mapped
-                                  back to .tf spans in DIR (default: the plan's directory
-                                  if it has .tf files, else locations point into the JSON)
+                                  back to .tf/.tf.json spans in DIR (default: the plan's directory
+                                  if it has configuration, else locations point into the plan JSON)
   oxtf fix FINGERPRINT [PATH...] [scan options] [--at default|attribute] [--write] [-f diff|json]
                                   apply the fix hint of the finding with FINGERPRINT in
                                   memory, rescan to check the finding is gone, and print
@@ -59,12 +63,13 @@ Built in are the seed rules and the bundled Checkov catalog: Checkov 3.2.328's T
 value checks, graph policies and Python resource checks (1079 rules), run natively.
 
 scan options:
-  -r, --recursive         every directory under PATH containing .tf files is a root module
+  -r, --recursive         every directory under PATH containing .tf/.tf.json files is a root module
   -f, --format FMT        text (default), json (the finding record, docs/FINDING_SCHEMA.md),
                           ndjson (one line per finding, then a summary line) or sarif
       --fail-on C         exit 1 when a finding is at least this certain: definite
                           (default), conditional, indeterminate, or never
-      --var-file FILE     extra .tfvars for the root module(s) (repeatable)
+      --var-file FILE     extra HCL/JSON variable file (repeatable)
+      --data-dir DIR      installed modules data directory (default: .terraform; relative to each root)
       --rule ID           only run this rule (repeatable); ids come from the whole
                           catalog: bundled Checkov rules, seed rules, --rule-file rules
                           and Rego policies
@@ -102,7 +107,8 @@ A finding is one rule failing at one source location; the roots and resource
 instances it was reached from are its occurrences.
 
 exit codes: 0 no finding at or above --fail-on, 1 some finding is, 2 the scan
-could not run, 3 a rule failed on some resource (wins over 1)";
+could not run, 3 analysis is incomplete or failed (wins over 1, even with
+--fail-on never)";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Format {
@@ -131,6 +137,7 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut catalog = Catalog::standard();
     let mut selection: Option<Vec<String>> = None;
     let mut var_files = Vec::new();
+    let mut data_dir = None;
     let mut threads = None;
     let mut overlay = Vec::new();
     let mut a = Args {
@@ -162,6 +169,7 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
                     other => return Err(format!("unknown --fail-on {other:?}")),
                 }
             }
+            "--data-dir" => data_dir = Some(it.next().ok_or("--data-dir needs a value")?.into()),
             "--var-file" => var_files.push(it.next().ok_or("--var-file needs a value")?.into()),
             "--rule" => selection
                 .get_or_insert_with(Vec::new)
@@ -265,6 +273,7 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
         catalog,
         selection,
         var_files,
+        data_dir,
         threads,
         overlay,
         // The CLI prints findings; it never reads the models.
@@ -284,6 +293,7 @@ fn main() -> ExitCode {
             }
         },
         Some("fix") => fix(args),
+        Some("fetch") => fetch(args),
         Some("rules") => {
             let mut args = args.peekable();
             if args.peek().map(String::as_str) == Some("test") {
@@ -366,6 +376,46 @@ fn main() -> ExitCode {
         }
         _ => {
             eprintln!("{USAGE}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+fn fetch(mut args: impl Iterator<Item = String>) -> ExitCode {
+    let mut run = || -> Result<tf_scan::FetchReport, String> {
+        let mut request = tf_scan::FetchRequest::new(".");
+        let mut root = false;
+        while let Some(arg) = args.next() {
+            match arg.as_str() {
+                "--refresh" => request.refresh = true,
+                "--data-dir" => {
+                    request.data_dir = Some(args.next().ok_or("--data-dir needs a value")?.into())
+                }
+                "--registry" => {
+                    let value = args.next().ok_or("--registry needs HOST=URL")?;
+                    let (host, origin) =
+                        value.split_once('=').ok_or("--registry needs HOST=URL")?;
+                    request.registry_origins.insert(host.into(), origin.into());
+                }
+                _ if !arg.starts_with('-') && !root => {
+                    request.root = arg.into();
+                    root = true;
+                }
+                _ => return Err("unsupported fetch argument".into()),
+            }
+        }
+        tf_scan::fetch(request)
+    };
+    match run() {
+        Ok(report) => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&report).expect("fetch report serializes")
+            );
+            ExitCode::SUCCESS
+        }
+        Err(message) => {
+            eprintln!("error: {message}");
             ExitCode::from(2)
         }
     }
@@ -461,7 +511,7 @@ fn fix(mut args: impl Iterator<Item = String>) -> ExitCode {
         Ok(o) => o,
         Err(e) => return fail(e.to_string()),
     };
-    let diff = tf_scan::unified_diff(&outcome.edit.file, &outcome.original, &outcome.edit.text);
+    let diff = &outcome.diff;
     let written = write && outcome.verified;
     if written && let Err(e) = std::fs::write(&outcome.edit.file, &outcome.edit.text) {
         return fail(format!("{}: {e}", outcome.edit.file.display()));
@@ -480,6 +530,7 @@ fn fix(mut args: impl Iterator<Item = String>) -> ExitCode {
                 "value": hint.value,
                 "site": outcome.site.as_str(),
                 "verified": outcome.verified,
+                "verification_errors": outcome.verification_errors,
                 "written": written,
                 "diff": diff,
             })
@@ -495,6 +546,8 @@ fn fix(mut args: impl Iterator<Item = String>) -> ExitCode {
             },
             if outcome.verified {
                 "the edit removes the finding"
+            } else if !outcome.verification_errors.is_empty() {
+                "the edit could not be verified because analysis did not complete"
             } else {
                 "the finding remains after the edit"
             },
@@ -506,6 +559,9 @@ fn fix(mut args: impl Iterator<Item = String>) -> ExitCode {
                 "(not written; --write to apply)"
             }
         );
+        for error in &outcome.verification_errors {
+            eprintln!("  {error}");
+        }
     }
     if outcome.verified {
         ExitCode::SUCCESS
@@ -563,7 +619,7 @@ fn scan(a: Args) -> ExitCode {
     let record = ScanRecord::from_result(r);
     print_result(r, &record, format, color, diagnostics, quiet);
     let failing = fail_on.is_some_and(|c| record.findings.iter().any(|f| f.certainty <= c));
-    if !r.rule_errors.is_empty() {
+    if r.status() != tf_linter::ScanStatus::Complete {
         ExitCode::from(3)
     } else if failing {
         ExitCode::from(1)
@@ -655,7 +711,7 @@ fn print_result(
         .collect();
     let _ = writeln!(
         out,
-        "{} findings ({} definite, {} conditional, {} indeterminate; {} occurrences) in {} root modules, {} module instances, {} files, {} resources; {} diagnostics; {} rule errors; {:.1} ms{}",
+        "{} findings ({} definite, {} conditional, {} indeterminate; {} occurrences) in {} root modules, {} module instances, {} files, {} resources; {} diagnostics; {} rule errors; {:.1} ms; analysis {}{}",
         s.findings,
         s.definite,
         s.conditional,
@@ -668,6 +724,7 @@ fn print_result(
         r.diagnostics.len(),
         r.rule_errors.len(),
         s.elapsed_ms,
+        record.status.as_str(),
         if by_rule.is_empty() {
             String::new()
         } else {
