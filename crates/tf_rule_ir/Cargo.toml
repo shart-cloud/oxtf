@@ -18,3 +18,4 @@ rustc-hash = "2.1.3"
 
 [build-dependencies]
 serde_json.workspace = true
+toml.workspace = true

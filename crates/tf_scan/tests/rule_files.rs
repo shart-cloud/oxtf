@@ -79,8 +79,8 @@ fn findings_carry_the_rule_source() {
         .iter()
         .map(|f| {
             (
-                f["rule"]["id"].as_str().unwrap().to_string(),
-                f["rule"]["source"]["engine"].clone(),
+                f["rule"].as_str().unwrap().to_string(),
+                record["rules"][f["rule"].as_str().unwrap()]["source"]["engine"].clone(),
             )
         })
         .collect();
@@ -161,7 +161,7 @@ fn checkov_skip_comments_suppress_checkov_rules() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|f| f["resource"]["address"].as_str().unwrap())
+        .map(|f| f["subject"]["address"].as_str().unwrap())
         .collect();
     failed.sort();
     assert_eq!(

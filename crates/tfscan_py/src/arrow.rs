@@ -86,7 +86,7 @@ pub fn findings_schema() -> Schema {
         utf8("rule", false),
         utf8("category", false),
         utf8("level", false),
-        utf8("severity", false),
+        utf8("certainty", false),
         utf8("address", false),
         // Null for a finding on a file (a whole-file policy result).
         utf8("resource_type", true),
@@ -129,16 +129,17 @@ pub fn findings_batch(d: &ScanData) -> Result<RecordBatch, ArrowError> {
         Box::new(StringBuilder::new()),
     ];
     let mut prov = ListBuilder::new(StructBuilder::new(step_fields(), step_builders));
+    let mut repos = tf_linter::record::RepoRoots::new();
     for f in fs {
         let (file, l, c) = loc(files, f.primary);
         let root = f.root.display().to_string();
-        let fingerprint = tf_linter::record::fingerprint(&f.rule, &f.address, f.attribute.as_deref());
+        let fingerprint = tf_linter::record::finding_fingerprint(files, f, &mut repos);
         let vals: [Option<&str>; 11] = [
             Some(&fingerprint),
             Some(&f.rule),
             Some(f.category.as_str()),
             Some(f.level.as_str()),
-            Some(f.severity.as_str()),
+            Some(f.certainty.as_str()),
             Some(&f.address),
             f.resource_type.as_deref(),
             Some(&f.module),

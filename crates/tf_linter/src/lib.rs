@@ -18,9 +18,11 @@
 //! - [`record`]: the resolved, versioned finding record every output is a
 //!   projection of (`docs/FINDING_SCHEMA.md`).
 //! - [`render`]: miette text rendering with provenance, JSON.
+//! - [`formats`]: NDJSON and SARIF projections of the record.
 //! - [`rules`]: the five seed rules.
 
 pub mod engine;
+pub mod formats;
 pub mod record;
 pub mod render;
 pub mod rule;
@@ -31,7 +33,7 @@ pub mod suppress;
 pub use engine::{ANY_TYPE, Linter, RuleSelectionError, RunOutput, Sources, select_rules};
 pub use record::{FindingRecord, RuleError, ScanRecord};
 pub use rule::{
-    Category, ConfigFile, DynRule, Engine, Finding, FindingSubject, FixAction, FixHint, Hidden,
-    Judgement, Level, Rule, RuleFailure, RuleInfo, RuleMeta, RuleSource, Severity, Subject,
+    Category, Certainty, ConfigFile, DynRule, Engine, Finding, FindingSubject, FixAction, FixHint,
+    Hidden, Judgement, Level, Profile, Rule, RuleFailure, RuleInfo, RuleMeta, RuleSource, Subject,
 };
 pub use scan::{ScanOptions, ScanResult, ScanStats, discover_roots, scan_dir, scan_with};

@@ -30,7 +30,7 @@ use regorus::unstable::{Expr, Module, Rule, RuleHead};
 use serde_json::{Map as JsonMap, Value as Json, json};
 use tf_eval::{Kind, Known, Truth, Value};
 use tf_linter::rule::{ConfigFile, DynRule, Hidden, Judgement, RuleFailure, RuleInfo, Subject};
-use tf_linter::{ANY_TYPE, Category, Level, Severity};
+use tf_linter::{ANY_TYPE, Category, Certainty, Level};
 use tf_semantic::{Body, Resource};
 
 use crate::projection::{self, Abstraction, Projection, Shape};
@@ -196,6 +196,7 @@ pub fn rules(opts: &Options) -> Result<Vec<Box<dyn DynRule>>, String> {
                     line: Some(u.line),
                 },
                 aliases: Vec::new(),
+                profile: tf_linter::Profile::Security,
             },
             types: u.meta.resource_types.clone(),
             input,
@@ -1719,7 +1720,7 @@ impl ForeignPolicy {
 
     fn judgement(&self, r: &Resource, v: &Violation, abstractions: &[Abstraction]) -> Judgement {
         let mut j = self.judgement_on(Some(r), v, abstractions);
-        if j.witness.is_none() && j.severity == Severity::Definite {
+        if j.witness.is_none() && j.certainty == Certainty::Definite {
             j.witness = v.path.as_deref().and_then(|path| locate(&r.body, path));
         }
         j
@@ -1735,15 +1736,15 @@ impl ForeignPolicy {
             attributes: JsonMap::new(),
             abstractions: abstractions.to_vec(),
         };
-        let severity = p.certainty();
-        let witness = match (severity, p.deciding()) {
-            (Severity::Definite, _) | (_, None) => {
+        let certainty = p.certainty();
+        let witness = match (certainty, p.deciding()) {
+            (Certainty::Definite, _) | (_, None) => {
                 r.and_then(|r| v.path.as_deref().and_then(|path| locate(&r.body, path)))
             }
             (_, Some(a)) => Some(a.value.clone()),
         };
-        let suffix = match severity {
-            Severity::Indeterminate => {
+        let suffix = match certainty {
+            Certainty::Indeterminate => {
                 let paths: Vec<_> = abstractions.iter().map(|a| a.path.as_str()).collect();
                 format!(
                     " (cannot be confirmed: {} computed at apply time)",
@@ -1753,7 +1754,7 @@ impl ForeignPolicy {
             _ => String::new(),
         };
         Judgement {
-            severity,
+            certainty,
             witness,
             message: format!("{}{suffix}", v.msg),
             hidden: abstractions

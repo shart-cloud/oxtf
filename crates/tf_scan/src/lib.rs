@@ -17,6 +17,7 @@ use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use tf_linter::Profile;
 use tf_linter::rule::DynRule;
 use tf_linter::{Linter, RuleSelectionError, ScanOptions, ScanRecord, ScanResult, discover_roots};
 use tf_plan::{PlanError, PlanOptions};
@@ -95,7 +96,29 @@ pub struct Catalog {
     pub runtime: Vec<Box<dyn DynRule>>,
     /// Rego policies.
     pub policies: Policies,
+    /// Which profiles of the shipped rules (bundled and seed) run; `None`
+    /// is the default, `security`. Unreviewed bundled rules run with
+    /// `security`. Rules from files, documents, callbacks and policies
+    /// always run: the caller chose them. A scan with an explicit
+    /// selection ignores this and selects from every shipped rule.
+    pub profiles: Option<Vec<Profile>>,
 }
+
+/// Whether a shipped rule of `profile` runs under `selected` (`None`: the
+/// default).
+pub fn profile_runs(profile: Profile, selected: Option<&[Profile]>) -> bool {
+    let selected = selected.unwrap_or(&[Profile::Security]);
+    selected.contains(&profile)
+        || (profile == Profile::Unreviewed && selected.contains(&Profile::Security))
+}
+
+/// Every profile, for `--profile all`.
+pub const ALL_PROFILES: &[Profile] = &[
+    Profile::Security,
+    Profile::Audit,
+    Profile::Hygiene,
+    Profile::Unreviewed,
+];
 
 impl Catalog {
     /// The seed rules and nothing else.
@@ -114,6 +137,20 @@ impl Catalog {
             builtin: true,
             ..Catalog::default()
         }
+    }
+
+    /// A copy of this catalog, unless it holds runtime rules (Python
+    /// callbacks), which cannot be copied.
+    pub fn try_clone(&self) -> Option<Catalog> {
+        self.runtime.is_empty().then(|| Catalog {
+            bundled: self.bundled,
+            builtin: self.builtin,
+            rule_files: self.rule_files.clone(),
+            rule_json: self.rule_json.clone(),
+            runtime: Vec::new(),
+            policies: self.policies.clone(),
+            profiles: self.profiles.clone(),
+        })
     }
 
     /// The rules this catalog yields, in order, shadowed by name, and a
@@ -141,11 +178,22 @@ impl Catalog {
                 rules.push(Some(rule));
             }
         };
+        // Shipped rules outside the selected profiles are not in the
+        // catalog at all, so they shadow nothing.
+        let profiles = self.profiles.clone();
+        let shipped = |rules: Vec<Box<dyn DynRule>>| -> Vec<Box<dyn DynRule>> {
+            rules
+                .into_iter()
+                .filter(|r| profile_runs(r.info().profile, profiles.as_deref()))
+                .collect()
+        };
         if self.bundled {
-            add(tf_rule_ir::bundled::rules().map_err(ScanError::Rules)?);
+            add(shipped(
+                tf_rule_ir::bundled::rules().map_err(ScanError::Rules)?,
+            ));
         }
         if self.builtin {
-            add(tf_linter::rules::all());
+            add(shipped(tf_linter::rules::all()));
         }
         for path in &self.rule_files {
             let loaded = tf_rule_ir::load_rules_file(path).map_err(ScanError::Rules)?;
@@ -231,6 +279,19 @@ pub struct ScanRequest {
 }
 
 impl ScanRequest {
+    /// A copy of this request, unless its catalog holds runtime rules.
+    pub fn try_clone(&self) -> Option<ScanRequest> {
+        Some(ScanRequest {
+            input: self.input.clone(),
+            catalog: self.catalog.try_clone()?,
+            selection: self.selection.clone(),
+            var_files: self.var_files.clone(),
+            threads: self.threads,
+            overlay: self.overlay.clone(),
+            keep_models: self.keep_models,
+        })
+    }
+
     /// Seed rules over `paths`, every other knob at its default.
     pub fn dirs(paths: Vec<PathBuf>, recursive: bool) -> ScanRequest {
         ScanRequest {
@@ -325,6 +386,10 @@ pub fn scan(mut req: ScanRequest) -> Result<ScanOutput, ScanError> {
             ScanInput::Plan { .. } => Shape::Plan,
         });
     }
+    // A selection names its rules: every shipped rule is a candidate.
+    if req.selection.is_some() {
+        req.catalog.profiles = Some(ALL_PROFILES.to_vec());
+    }
     let resolved = req.catalog.resolve()?;
     let skipped: Vec<Diagnostic> = resolved.diagnostics().collect();
     let linter = match &req.selection {
@@ -395,6 +460,171 @@ pub fn scan(mut req: ScanRequest) -> Result<ScanOutput, ScanError> {
             output(result, vec![analysis])
         }
     }
+}
+
+/// What [`fix`] did: the edit for a finding's fix hint, and whether the
+/// scan of the edited source still has the finding.
+#[derive(Clone, Debug)]
+pub struct FixOutcome {
+    pub fingerprint: String,
+    /// The rule of the finding.
+    pub rule: String,
+    pub hint: tf_linter::FixHint,
+    /// The file's text before the edit.
+    pub original: String,
+    pub edit: FixEdit,
+    /// The finding is gone from a scan of the same request with the edit
+    /// as an overlay.
+    pub verified: bool,
+}
+
+/// Why [`fix`] produced no edit.
+#[derive(Debug)]
+pub enum FixError {
+    Scan(ScanError),
+    /// No finding has the fingerprint.
+    NotFound(String),
+    /// The finding has no fix hint: no mechanical edit is known.
+    NoHint {
+        fingerprint: String,
+        rule: String,
+    },
+    /// The hint could not be applied to the source.
+    Apply(String),
+    /// The request's catalog holds runtime rules, so it cannot be re-run
+    /// to verify the edit.
+    NotRepeatable,
+}
+
+impl fmt::Display for FixError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FixError::Scan(e) => e.fmt(f),
+            FixError::NotFound(fp) => write!(f, "no finding has fingerprint {fp}"),
+            FixError::NoHint { fingerprint, rule } => write!(
+                f,
+                "finding {fingerprint} ({rule}) has no fix hint: no mechanical edit is known"
+            ),
+            FixError::Apply(m) => f.write_str(m),
+            FixError::NotRepeatable => {
+                f.write_str("a request with runtime rules cannot be re-run to verify a fix")
+            }
+        }
+    }
+}
+
+impl std::error::Error for FixError {}
+
+/// Fix the finding with `fingerprint`: scan `request`, apply the finding's
+/// fix hint to the source in memory ([`apply_fix`]), and scan again with
+/// the edit as an overlay to check the finding is gone. Nothing is written
+/// to disk; the caller decides what to do with a verified (or unverified)
+/// edit.
+pub fn fix(request: ScanRequest, fingerprint: &str) -> Result<FixOutcome, FixError> {
+    let mut verify = request.try_clone().ok_or(FixError::NotRepeatable)?;
+    let mut request = request;
+    request.keep_models = true;
+    let output = scan(request).map_err(FixError::Scan)?;
+    let r = &output.result;
+    let mut repos = tf_linter::record::RepoRoots::new();
+    let group = tf_linter::record::group(&r.files, &r.findings)
+        .into_iter()
+        .find(|g| {
+            tf_linter::record::finding_fingerprint(
+                &r.files,
+                &r.findings[g.representative],
+                &mut repos,
+            ) == fingerprint
+        })
+        .ok_or_else(|| FixError::NotFound(fingerprint.to_string()))?;
+    let rule = r.findings[group.representative].rule.to_string();
+    // The representative's hint, else any occurrence's.
+    let hint = std::iter::once(group.representative)
+        .chain(group.members.iter().copied())
+        .find_map(|i| r.findings[i].fix_hint.clone())
+        .ok_or_else(|| FixError::NoHint {
+            fingerprint: fingerprint.to_string(),
+            rule: rule.clone(),
+        })?;
+    let edit = apply_fix(&output, &hint).map_err(FixError::Apply)?;
+    let original = r
+        .files
+        .load(&edit.file)
+        .map(|sf| sf.text.to_string())
+        .map_err(|e| FixError::Apply(format!("{}: {e}", edit.file.display())))?;
+    verify.keep_models = false;
+    verify
+        .overlay
+        .retain(|(p, _)| normalize(p) != normalize(&edit.file));
+    verify
+        .overlay
+        .push((edit.file.clone(), Arc::from(edit.text.as_str())));
+    let after = scan(verify).map_err(FixError::Scan)?;
+    let mut repos = tf_linter::record::RepoRoots::new();
+    let verified = !after.result.findings.iter().any(|f| {
+        tf_linter::record::finding_fingerprint(&after.result.files, f, &mut repos) == fingerprint
+    });
+    Ok(FixOutcome {
+        fingerprint: fingerprint.to_string(),
+        rule,
+        hint,
+        original,
+        edit,
+        verified,
+    })
+}
+
+/// A unified diff of one file's edit (one hunk around the changed lines,
+/// three lines of context), for showing a [`FixOutcome`].
+pub fn unified_diff(path: &std::path::Path, before: &str, after: &str) -> String {
+    let a: Vec<&str> = before.split_inclusive('\n').collect();
+    let b: Vec<&str> = after.split_inclusive('\n').collect();
+    let prefix = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
+    let suffix = a[prefix..]
+        .iter()
+        .rev()
+        .zip(b[prefix..].iter().rev())
+        .take_while(|(x, y)| x == y)
+        .count();
+    if prefix == a.len() && prefix == b.len() {
+        return String::new();
+    }
+    const CONTEXT: usize = 3;
+    let start = prefix.saturating_sub(CONTEXT);
+    let a_end = (a.len() - suffix + CONTEXT).min(a.len());
+    let b_end = (b.len() - suffix + CONTEXT).min(b.len());
+    let line = |s: &str| {
+        if s.ends_with('\n') {
+            s.to_string()
+        } else {
+            format!("{s}\n\\ No newline at end of file\n")
+        }
+    };
+    let path = path.display();
+    let mut out = format!(
+        "--- a/{path}\n+++ b/{path}\n@@ -{},{} +{},{} @@\n",
+        start + 1,
+        a_end - start,
+        start + 1,
+        b_end - start
+    );
+    for l in &a[start..prefix] {
+        out.push(' ');
+        out.push_str(&line(l));
+    }
+    for l in &a[prefix..a.len() - suffix] {
+        out.push('-');
+        out.push_str(&line(l));
+    }
+    for l in &b[prefix..b.len() - suffix] {
+        out.push('+');
+        out.push_str(&line(l));
+    }
+    for l in &a[a.len() - suffix..a_end] {
+        out.push(' ');
+        out.push_str(&line(l));
+    }
+    out
 }
 
 /// One file's text after applying a fix hint.

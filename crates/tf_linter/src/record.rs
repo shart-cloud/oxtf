@@ -6,19 +6,21 @@
 //! is versioned by [`SCHEMA`]; any breaking change bumps it. The worked
 //! example and field semantics live in `docs/FINDING_SCHEMA.md`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 use tf_eval::{Kind, Known, Step, Truth, Value};
+use tf_semantic::source::normalize;
 use tf_semantic::{Address, Diagnostic, FileTable, InstanceKey, Mode};
 use tf_span::FileSpan;
 
-use crate::rule::{Category, Finding, FindingSubject, FixHint, Hidden, Level, Severity};
+use crate::rule::{Category, Certainty, Finding, FindingSubject, FixHint, Hidden, Level};
 use crate::scan::{ScanResult, ScanStats};
 
 /// Version of the record shape. Bumped on any breaking change.
-pub const SCHEMA: u32 = 2;
+pub const SCHEMA: u32 = 3;
 
 /// A resolved source location.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,27 +86,13 @@ impl From<&Address> for ResourceRef {
     }
 }
 
-/// `{"kind": "resource", "address"}` or `{"kind": "file", "file",
-/// "module"}`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// `{"kind": "resource", ...the resource reference}` or `{"kind": "file",
+/// "file", "module"}`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SubjectRecord {
-    Resource { address: String },
+    Resource(ResourceRef),
     File { file: String, module: String },
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RuleRef {
-    pub id: String,
-    pub category: Category,
-    pub level: Level,
-    pub description: String,
-    /// A page explaining the rule, when it names one.
-    #[serde(default)]
-    pub guideline: Option<String>,
-    /// The front-end the rule came through, and its file and line.
-    #[serde(default)]
-    pub source: SourceRef,
 }
 
 /// `{"engine", "file", "line"}`.
@@ -217,19 +205,78 @@ fn fix_hint_record(files: &FileTable, h: &FixHint) -> FixHintRecord {
     }
 }
 
+/// A rule that produced at least one finding: an entry of the record's
+/// `rules` table, keyed by its ID.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuleRecord {
+    pub category: Category,
+    pub level: Level,
+    pub description: String,
+    /// A page explaining the rule, when it names one.
+    #[serde(default)]
+    pub guideline: Option<String>,
+    /// The front-end the rule came through, and its file and line.
+    #[serde(default)]
+    pub source: SourceRef,
+    /// The rule's other IDs.
+    #[serde(default)]
+    pub aliases: Vec<String>,
+    /// `security`, `audit`, `hygiene` or `unreviewed` (a bundled rule not
+    /// curated yet).
+    #[serde(default)]
+    pub profile: crate::rule::Profile,
+}
+
+impl RuleRecord {
+    fn of(f: &Finding) -> RuleRecord {
+        RuleRecord {
+            category: f.category,
+            level: f.level,
+            description: f.description.to_string(),
+            guideline: f.guideline.as_deref().map(str::to_string),
+            source: SourceRef::from(&f.source),
+            aliases: f.aliases.iter().map(|a| a.to_string()).collect(),
+            profile: f.profile,
+        }
+    }
+}
+
+/// One place a finding was produced: a root module and the resource
+/// instance (or file) the rule judged there.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OccurrenceRecord {
+    pub root: String,
+    /// The resource address in that root, or the file's path for a file
+    /// subject.
+    pub address: String,
+    pub certainty: Certainty,
+    /// Where this occurrence points, when not at the finding's `location`
+    /// (a resource that sets the attribute in alternative `dynamic`
+    /// blocks).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<Location>,
+}
+
+/// A finding: one rule failing on one attribute (or the whole) of one
+/// resource declaration, the identity its [`fingerprint`] hashes. The same
+/// declaration reached from several roots (a module scanned on its own and
+/// from each example that calls it) or as several instances (`count`,
+/// `for_each`) is one finding with several `occurrences`; the remaining
+/// fields describe its representative occurrence, the most certain one
+/// and, among those, the one closest to the code.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FindingRecord {
-    pub schema: u32,
-    /// Stable identity across scans: rule, address and attribute path.
-    /// Excludes locations, message and severity on purpose.
+    /// Stable identity across scans (see [`fingerprint`]).
     pub fingerprint: String,
-    pub rule: RuleRef,
-    pub severity: Severity,
-    /// What the finding is about.
+    /// The rule's ID; its metadata is in the record's `rules` table.
+    pub rule: String,
+    /// The rule's level, repeated here so a finding can be ranked alone.
+    pub level: Level,
+    /// The most certain of the occurrences.
+    pub certainty: Certainty,
+    /// What the representative occurrence is about.
     pub subject: SubjectRecord,
-    /// The resource instance, or `None` when the subject is a file.
-    pub resource: Option<ResourceRef>,
-    /// Root module directory the finding was produced in.
+    /// Root module directory of the representative occurrence.
     pub root: String,
     /// Attribute path of the deciding value within the resource.
     pub attribute: Option<String>,
@@ -245,13 +292,19 @@ pub struct FindingRecord {
     /// Inputs a foreign policy could not see; empty for native rules.
     pub hidden: Vec<HiddenRecord>,
     pub fix_hint: Option<FixHintRecord>,
+    /// Every place this finding was produced, the representative among
+    /// them, ordered by root and address.
+    pub occurrences: Vec<OccurrenceRecord>,
 }
 
-/// FNV-1a 64-bit of `rule`, `address` and `attribute`, hex. Stable across
-/// builds and platforms; not a security hash.
-pub fn fingerprint(rule: &str, address: &str, attribute: Option<&str>) -> String {
+/// FNV-1a 64-bit of the rule ID, the repository-relative path of the
+/// finding's file, the subject's local identity (its address without module
+/// path or instance key, `aws_s3_bucket.this`; for a file subject, the
+/// message) and the attribute path, hex. Stable across builds and
+/// platforms; not a security hash.
+pub fn fingerprint(rule: &str, file: &str, local: &str, attribute: Option<&str>) -> String {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for part in [rule, "\0", address, "\0", attribute.unwrap_or("")] {
+    for part in [rule, "\0", file, "\0", local, "\0", attribute.unwrap_or("")] {
         for b in part.bytes() {
             h ^= u64::from(b);
             h = h.wrapping_mul(0x0100_0000_01b3);
@@ -260,29 +313,178 @@ pub fn fingerprint(rule: &str, address: &str, attribute: Option<&str>) -> String
     format!("{h:016x}")
 }
 
-pub fn finding_record(files: &FileTable, f: &Finding) -> FindingRecord {
+/// Finds the repository a file belongs to (the outermost ancestor holding
+/// `.git`, so a submodule or nested clone stays inside the checkout that
+/// contains it), once per directory, so a fingerprint depends neither on
+/// the directory a scan was started from nor on which root reached the
+/// file.
+#[derive(Default)]
+pub struct RepoRoots(HashMap<PathBuf, Option<PathBuf>>);
+
+impl RepoRoots {
+    pub fn new() -> RepoRoots {
+        RepoRoots::default()
+    }
+
+    /// `path` relative to its repository, `/`-separated; as given when it
+    /// is in none.
+    pub fn relative(&mut self, path: &Path) -> String {
+        let slashed = |p: &Path| {
+            p.components()
+                .map(|c| c.as_os_str().to_string_lossy())
+                .collect::<Vec<_>>()
+                .join("/")
+        };
+        let Ok(abs) = std::path::absolute(path).map(|p| normalize(&p)) else {
+            return slashed(path);
+        };
+        let dir = abs.parent().map(Path::to_path_buf).unwrap_or_default();
+        let repo = self
+            .0
+            .entry(dir)
+            .or_insert_with_key(|dir| {
+                dir.ancestors()
+                    .filter(|a| a.join(".git").exists())
+                    .last()
+                    .map(Path::to_path_buf)
+            })
+            .clone();
+        match repo.as_deref().and_then(|r| abs.strip_prefix(r).ok()) {
+            Some(rel) => slashed(rel),
+            None => slashed(path),
+        }
+    }
+}
+
+/// What identifies a finding's subject within its file: the resource's
+/// local address, or a file finding's message (several results of one
+/// whole-file policy are told apart by what they say).
+fn local_identity(f: &Finding) -> String {
+    match &f.subject {
+        FindingSubject::Resource(a) => a.local(),
+        FindingSubject::File { .. } => f.message.clone(),
+    }
+}
+
+/// The fingerprint of one finding (every occurrence of a finding has the
+/// same one).
+pub fn finding_fingerprint(files: &FileTable, f: &Finding, repos: &mut RepoRoots) -> String {
+    let file = repos.relative(&files.get(f.primary.file).path);
+    fingerprint(&f.rule, &file, &local_identity(f), f.attribute.as_deref())
+}
+
+/// Findings that are one finding: the same rule, file, local identity and
+/// attribute (what [`finding_fingerprint`] hashes). `members` index the
+/// scan's findings, ordered by root and address, without repeats;
+/// `representative` is one of them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Group {
+    pub representative: usize,
+    pub members: Vec<usize>,
+}
+
+/// Group a scan's findings into findings with occurrences, ordered by
+/// file, position and rule.
+pub fn group(files: &FileTable, findings: &[Finding]) -> Vec<Group> {
+    type Key<'f> = (&'f str, tf_span::FileId, String, Option<&'f str>);
+    let mut by_identity: HashMap<Key<'_>, usize> = HashMap::new();
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    for (i, f) in findings.iter().enumerate() {
+        let key = (
+            &*f.rule,
+            f.primary.file,
+            local_identity(f),
+            f.attribute.as_deref(),
+        );
+        match by_identity.entry(key) {
+            std::collections::hash_map::Entry::Occupied(e) => groups[*e.get()].push(i),
+            std::collections::hash_map::Entry::Vacant(e) => {
+                e.insert(groups.len());
+                groups.push(vec![i]);
+            }
+        }
+    }
+    let address = |i: usize| &*findings[i].address;
+    let same = |a: usize, b: usize| {
+        findings[a].root == findings[b].root
+            && address(a) == address(b)
+            && findings[a].primary == findings[b].primary
+    };
+    let mut out: Vec<Group> = groups
+        .into_iter()
+        .map(|mut members| {
+            // Most certain first, then the shallowest module instance (the
+            // module scanned as its own root), then the shortest root.
+            let representative = *members
+                .iter()
+                .min_by_key(|&&i| {
+                    let f = &findings[i];
+                    (
+                        f.certainty,
+                        f.module.matches("module.").count(),
+                        f.root.as_os_str().len(),
+                        &f.root,
+                        address(i),
+                    )
+                })
+                .expect("a group has a member");
+            let site = |i: usize| (findings[i].primary.span.start, findings[i].primary.span.end);
+            members.sort_by(|&a, &b| {
+                (&findings[a].root, address(a), site(a)).cmp(&(
+                    &findings[b].root,
+                    address(b),
+                    site(b),
+                ))
+            });
+            members.dedup_by(|a, b| same(*a, *b));
+            if !members.contains(&representative) {
+                // A repeat of the representative was kept in its place.
+                let twin = members
+                    .iter_mut()
+                    .find(|m| same(**m, representative))
+                    .expect("the representative's twin");
+                *twin = representative;
+            }
+            Group {
+                representative,
+                members,
+            }
+        })
+        .collect();
+    out.sort_by_cached_key(|g| {
+        let f = &findings[g.representative];
+        (
+            files.get(f.primary.file).path.clone(),
+            f.primary.span.start,
+            f.rule.clone(),
+        )
+    });
+    out
+}
+
+fn subject_record(f: &Finding) -> SubjectRecord {
+    match &f.subject {
+        FindingSubject::Resource(a) => SubjectRecord::Resource(ResourceRef::from(a)),
+        FindingSubject::File { path } => SubjectRecord::File {
+            file: path.display().to_string(),
+            module: f.module.to_string(),
+        },
+    }
+}
+
+fn group_record(
+    files: &FileTable,
+    findings: &[Finding],
+    g: &Group,
+    repos: &mut RepoRoots,
+) -> FindingRecord {
+    let f = &findings[g.representative];
     FindingRecord {
-        schema: SCHEMA,
-        fingerprint: fingerprint(&f.rule, &f.address, f.attribute.as_deref()),
-        rule: RuleRef {
-            id: f.rule.to_string(),
-            category: f.category,
-            level: f.level,
-            description: f.description.to_string(),
-            guideline: f.guideline.as_deref().map(str::to_string),
-            source: SourceRef::from(&f.source),
-        },
-        severity: f.severity,
-        subject: match &f.subject {
-            FindingSubject::Resource(a) => SubjectRecord::Resource {
-                address: a.to_string(),
-            },
-            FindingSubject::File { path } => SubjectRecord::File {
-                file: path.display().to_string(),
-                module: f.module.to_string(),
-            },
-        },
-        resource: f.subject.resource().map(ResourceRef::from),
+        fingerprint: finding_fingerprint(files, f, repos),
+        rule: f.rule.to_string(),
+        level: f.level,
+        certainty: f.certainty,
+        subject: subject_record(f),
         root: f.root.display().to_string(),
         attribute: f.attribute.as_deref().map(str::to_string),
         configured: f.configured.as_ref().map(value_record),
@@ -292,7 +494,31 @@ pub fn finding_record(files: &FileTable, f: &Finding) -> FindingRecord {
         message: f.message.clone(),
         hidden: f.hidden.iter().map(HiddenRecord::from).collect(),
         fix_hint: f.fix_hint.as_ref().map(|h| fix_hint_record(files, h)),
+        occurrences: g
+            .members
+            .iter()
+            .map(|&i| OccurrenceRecord {
+                root: findings[i].root.display().to_string(),
+                address: findings[i].address.to_string(),
+                certainty: findings[i].certainty,
+                location: (findings[i].primary != f.primary)
+                    .then(|| location(files, findings[i].primary)),
+            })
+            .collect(),
     }
+}
+
+/// One finding on its own, as a record with one occurrence.
+pub fn finding_record(files: &FileTable, f: &Finding) -> FindingRecord {
+    group_record(
+        files,
+        std::slice::from_ref(f),
+        &Group {
+            representative: 0,
+            members: vec![0],
+        },
+        &mut RepoRoots::new(),
+    )
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -329,7 +555,10 @@ pub struct StatsRecord {
     pub module_instances: usize,
     pub files: usize,
     pub resources: usize,
+    /// Findings, each counted once however many occurrences it has.
     pub findings: usize,
+    /// Occurrences of all findings together.
+    pub occurrences: usize,
     pub definite: usize,
     pub conditional: usize,
     pub indeterminate: usize,
@@ -337,20 +566,30 @@ pub struct StatsRecord {
     pub elapsed_ms: f64,
 }
 
-impl From<&ScanStats> for StatsRecord {
-    fn from(s: &ScanStats) -> Self {
-        StatsRecord {
+impl StatsRecord {
+    fn new(s: &ScanStats, findings: &[FindingRecord]) -> Self {
+        let mut stats = StatsRecord {
             roots: s.roots,
             module_instances: s.module_instances,
             files: s.files,
             resources: s.resources,
-            findings: s.findings,
-            definite: s.definite,
-            conditional: s.conditional,
-            indeterminate: s.indeterminate,
-            findings_by_rule: s.findings_by_rule.clone(),
+            findings: findings.len(),
+            occurrences: findings.iter().map(|f| f.occurrences.len()).sum(),
+            definite: 0,
+            conditional: 0,
+            indeterminate: 0,
+            findings_by_rule: BTreeMap::new(),
             elapsed_ms: s.elapsed.as_secs_f64() * 1000.0,
+        };
+        for f in findings {
+            *stats.findings_by_rule.entry(f.rule.clone()).or_default() += 1;
+            match f.certainty {
+                Certainty::Definite => stats.definite += 1,
+                Certainty::Conditional => stats.conditional += 1,
+                Certainty::Indeterminate => stats.indeterminate += 1,
+            }
         }
+        stats
     }
 }
 
@@ -358,6 +597,8 @@ impl From<&ScanStats> for StatsRecord {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ScanRecord {
     pub schema: u32,
+    /// Metadata of every rule a finding names, by ID.
+    pub rules: BTreeMap<String, RuleRecord>,
     pub findings: Vec<FindingRecord>,
     pub diagnostics: Vec<DiagnosticRecord>,
     pub rule_errors: Vec<RuleError>,
@@ -379,20 +620,30 @@ pub struct SuppressedRecord {
 
 impl ScanRecord {
     pub fn from_result(r: &ScanResult) -> ScanRecord {
+        let mut repos = RepoRoots::new();
+        let groups = group(&r.files, &r.findings);
+        let mut rules = BTreeMap::new();
+        for g in &groups {
+            let f = &r.findings[g.representative];
+            rules
+                .entry(f.rule.to_string())
+                .or_insert_with(|| RuleRecord::of(f));
+        }
+        let findings: Vec<FindingRecord> = groups
+            .iter()
+            .map(|g| group_record(&r.files, &r.findings, g, &mut repos))
+            .collect();
         ScanRecord {
             schema: SCHEMA,
-            findings: r
-                .findings
-                .iter()
-                .map(|f| finding_record(&r.files, f))
-                .collect(),
+            rules,
+            stats: StatsRecord::new(&r.stats, &findings),
+            findings,
             diagnostics: r
                 .diagnostics
                 .iter()
                 .map(|d| diagnostic_record(&r.files, d))
                 .collect(),
             rule_errors: r.rule_errors.clone(),
-            stats: StatsRecord::from(&r.stats),
             suppressed: r
                 .suppressed
                 .iter()
@@ -415,32 +666,45 @@ mod tests {
     fn fingerprint_is_stable_and_ignores_presentation() {
         let a = fingerprint(
             "aws-rds-unencrypted",
-            "module.m.aws_db_instance.db",
+            "modules/db/main.tf",
+            "aws_db_instance.db",
             Some("storage_encrypted"),
-        );
-        assert_eq!(
-            a,
-            fingerprint(
-                "aws-rds-unencrypted",
-                "module.m.aws_db_instance.db",
-                Some("storage_encrypted")
-            )
         );
         assert_eq!(a.len(), 16);
         assert_ne!(
             a,
-            fingerprint("aws-rds-unencrypted", "module.m.aws_db_instance.db", None)
+            fingerprint(
+                "aws-rds-unencrypted",
+                "modules/db/main.tf",
+                "aws_db_instance.db",
+                None
+            )
         );
         assert_ne!(
             a,
             fingerprint(
-                "other",
-                "module.m.aws_db_instance.db",
+                "aws-rds-unencrypted",
+                "modules/other/main.tf",
+                "aws_db_instance.db",
                 Some("storage_encrypted")
             )
         );
+        // Parts are separated: moving bytes between them changes the hash.
+        assert_ne!(
+            fingerprint("ab", "c", "d", None),
+            fingerprint("a", "bc", "d", None)
+        );
         // Pinned: a change here is a change in every backlog's identities.
-        assert_eq!(a, "146d70bdfd611a35");
+        assert_eq!(a, "878e37ed1f4102cc");
+    }
+
+    #[test]
+    fn repository_relative_paths_do_not_depend_on_the_working_directory() {
+        let mut repos = RepoRoots::new();
+        let here = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/record.rs");
+        assert_eq!(repos.relative(&here), "crates/tf_linter/src/record.rs");
+        let dotted = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tf_linter/src/record.rs");
+        assert_eq!(repos.relative(&dotted), "crates/tf_linter/src/record.rs");
     }
 
     #[test]

@@ -11,7 +11,7 @@ use serde_json::Value as J;
 use tf_semantic::FileTable;
 use tf_span::FileSpan;
 
-use crate::rule::{Finding, Severity};
+use crate::rule::{Certainty, Finding};
 use crate::scan::ScanResult;
 
 fn source(files: &FileTable, at: FileSpan) -> NamedSource<Arc<str>> {
@@ -223,12 +223,12 @@ fn report(files: &FileTable, f: &Finding) -> Report {
         ))
     };
     Report {
-        code: format!("{} [{}]", f.rule, f.severity.as_str()),
+        code: format!("{} [{}]", f.rule, f.certainty.as_str()),
         message: format!("{}: {}", f.address, f.message),
-        severity: match f.severity {
-            Severity::Definite => miette::Severity::Error,
-            Severity::Conditional => miette::Severity::Warning,
-            Severity::Indeterminate => miette::Severity::Advice,
+        severity: match f.certainty {
+            Certainty::Definite => miette::Severity::Error,
+            Certainty::Conditional => miette::Severity::Warning,
+            Certainty::Indeterminate => miette::Severity::Advice,
         },
         src: source(files, f.primary),
         labels,

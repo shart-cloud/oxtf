@@ -549,8 +549,8 @@ impl Finding {
     }
     /// `"definite"`, `"conditional"` or `"indeterminate"` (foreign policies only).
     #[getter]
-    fn severity(&self) -> &'static str {
-        self.f().severity.as_str()
+    fn certainty(&self) -> &'static str {
+        self.f().certainty.as_str()
     }
     #[getter]
     fn address(&self) -> &str {
@@ -572,11 +572,15 @@ impl Finding {
     fn root(&self) -> String {
         self.f().root.display().to_string()
     }
-    /// Stable identity across scans (rule, address, attribute path).
+    /// Stable identity across scans (rule, repository-relative file, local
+    /// address, attribute path); shared by every occurrence of a finding.
     #[getter]
     fn fingerprint(&self) -> String {
-        let f = self.f();
-        tf_linter::record::fingerprint(&f.rule, &f.address, f.attribute.as_deref())
+        tf_linter::record::finding_fingerprint(
+            self.data.files(),
+            self.f(),
+            &mut tf_linter::record::RepoRoots::new(),
+        )
     }
     #[getter]
     fn category(&self) -> &'static str {
@@ -658,7 +662,7 @@ impl Finding {
         format!(
             "Finding({} {} {} {:?})",
             f.rule,
-            f.severity.as_str(),
+            f.certainty.as_str(),
             f.address,
             f.message
         )
@@ -954,12 +958,12 @@ impl DynRule for CallbackRule {
             Ok(reports) => Ok(reports
                 .into_iter()
                 .map(|rep| Judgement {
-                    severity: if rep.indeterminate {
-                        tf_linter::Severity::Indeterminate
+                    certainty: if rep.indeterminate {
+                        tf_linter::Certainty::Indeterminate
                     } else if rep.conditional {
-                        tf_linter::Severity::Conditional
+                        tf_linter::Certainty::Conditional
                     } else {
-                        tf_linter::Severity::Definite
+                        tf_linter::Certainty::Definite
                     },
                     witness: rep.witness,
                     message: rep.message,
@@ -1053,6 +1057,7 @@ impl PolicyArgs {
             rule_files: self.rule_files,
             rule_json: ir_rules,
             runtime: Vec::new(),
+            profiles: None,
             policies: tf_rego::Policies {
                 shape,
                 entries: self.entries,
@@ -1093,6 +1098,7 @@ fn build_catalog(
                     line: None,
                 },
                 aliases: Vec::new(),
+                profile: tf_linter::Profile::Security,
             },
             func: cb.getattr("func")?.unbind(),
             error: error.clone(),
@@ -1129,7 +1135,7 @@ fn scan_error(e: tf_scan::ScanError) -> PyErr {
 /// one entry. `overlay`: `(path, text)` pairs that shadow the disk for this
 /// scan.
 #[pyfunction]
-#[pyo3(signature = (paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], callbacks=vec![], policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, _release_gil=true, rule_files=vec![], data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], rego_v0=false, bundled=true))]
+#[pyo3(signature = (paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], callbacks=vec![], policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, _release_gil=true, rule_files=vec![], data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], rego_v0=false, bundled=true, profiles=None))]
 #[allow(clippy::too_many_arguments)]
 fn scan(
     py: Python<'_>,
@@ -1155,6 +1161,7 @@ fn scan(
     policy_entries: Vec<String>,
     rego_v0: bool,
     bundled: bool,
+    profiles: Option<Vec<String>>,
 ) -> PyResult<(ScanResult, u64)> {
     if !_release_gil && !callbacks.is_empty() {
         // Workers would block on the GIL held by this thread.
@@ -1162,48 +1169,30 @@ fn scan(
             "_release_gil=False (test control) cannot run callback rules",
         ));
     }
-    let PyCatalog {
-        catalog,
-        error,
-        calls,
-    } = build_catalog(
+    let (request, error, calls) = scan_request(ScanArgs {
+        paths,
+        recursive,
+        plan,
+        source,
+        var_files,
         builtin,
-        bundled,
+        select,
         ir_rules,
         callbacks,
-        PolicyArgs {
-            rule_files: rule_files.into_iter().chain(policies).collect(),
-            data,
-            namespaces,
-            all_namespaces,
-            entries: policy_entries.into_iter().chain(policy_entry).collect(),
-            shape: policy_shape.map(str::to_string),
-            rego_v0,
-        },
-    )?;
-    let input = match plan {
-        Some(plan) => {
-            if !paths.is_empty() || recursive {
-                return Err(PyValueError::new_err(
-                    "a plan scan takes no paths and is not recursive",
-                ));
-            }
-            ScanInput::Plan { plan, source }
-        }
-        None => ScanInput::Dirs { paths, recursive },
-    };
-    let request = ScanRequest {
-        input,
-        catalog,
-        selection: select,
-        var_files,
+        policies,
+        policy_shape,
+        policy_entry,
+        overlay,
         threads,
-        overlay: overlay
-            .into_iter()
-            .map(|(p, t)| (p, Arc::from(t)))
-            .collect(),
-        keep_models: true,
-    };
+        rule_files,
+        data,
+        namespaces,
+        all_namespaces,
+        policy_entries,
+        rego_v0,
+        bundled,
+        profiles,
+    })?;
     let work = move || tf_scan::scan(request).map(|o| ScanData::new(o.result, o.analyses));
     let data = if _release_gil {
         py.detach(work)
@@ -1219,6 +1208,185 @@ fn scan(
         },
         calls.load(std::sync::atomic::Ordering::Relaxed),
     ))
+}
+
+/// The arguments of [`scan`] and [`fix_finding`], which build the same
+/// request.
+struct ScanArgs<'py, 's> {
+    paths: Vec<PathBuf>,
+    recursive: bool,
+    plan: Option<PathBuf>,
+    source: Option<PathBuf>,
+    var_files: Vec<PathBuf>,
+    builtin: bool,
+    select: Option<Vec<String>>,
+    ir_rules: Vec<String>,
+    callbacks: Vec<Bound<'py, PyAny>>,
+    policies: Vec<PathBuf>,
+    policy_shape: Option<&'s str>,
+    policy_entry: Option<String>,
+    overlay: Vec<(PathBuf, String)>,
+    threads: Option<usize>,
+    rule_files: Vec<PathBuf>,
+    data: Vec<PathBuf>,
+    namespaces: Vec<String>,
+    all_namespaces: bool,
+    policy_entries: Vec<String>,
+    rego_v0: bool,
+    bundled: bool,
+    profiles: Option<Vec<String>>,
+}
+
+fn scan_request(a: ScanArgs<'_, '_>) -> PyResult<(ScanRequest, CallbackError, CallCount)> {
+    let PyCatalog {
+        catalog,
+        error,
+        calls,
+    } = build_catalog(
+        a.builtin,
+        a.bundled,
+        a.ir_rules,
+        a.callbacks,
+        PolicyArgs {
+            rule_files: a.rule_files.into_iter().chain(a.policies).collect(),
+            data: a.data,
+            namespaces: a.namespaces,
+            all_namespaces: a.all_namespaces,
+            entries: a.policy_entries.into_iter().chain(a.policy_entry).collect(),
+            shape: a.policy_shape.map(str::to_string),
+            rego_v0: a.rego_v0,
+        },
+    )?;
+    let mut catalog = catalog;
+    if let Some(names) = a.profiles {
+        let mut profiles = Vec::new();
+        for name in &names {
+            match name.as_str() {
+                "all" => profiles.extend_from_slice(tf_scan::ALL_PROFILES),
+                "security" | "audit" | "hygiene" => {
+                    profiles.push(tf_linter::Profile::parse(name).expect("a profile name"))
+                }
+                other => {
+                    return Err(PyValueError::new_err(format!(
+                        "unknown profile {other:?} (security, audit, hygiene, all)"
+                    )));
+                }
+            }
+        }
+        catalog.profiles = Some(profiles);
+    }
+    let input = match a.plan {
+        Some(plan) => {
+            if !a.paths.is_empty() || a.recursive {
+                return Err(PyValueError::new_err(
+                    "a plan scan takes no paths and is not recursive",
+                ));
+            }
+            ScanInput::Plan {
+                plan,
+                source: a.source,
+            }
+        }
+        None => ScanInput::Dirs {
+            paths: a.paths,
+            recursive: a.recursive,
+        },
+    };
+    let request = ScanRequest {
+        input,
+        catalog,
+        selection: a.select,
+        var_files: a.var_files,
+        threads: a.threads,
+        overlay: a
+            .overlay
+            .into_iter()
+            .map(|(p, t)| (p, Arc::from(t)))
+            .collect(),
+        keep_models: true,
+    };
+    Ok((request, error, calls))
+}
+
+/// Fix the finding with `fingerprint` in the scan the other arguments
+/// describe (as [`scan`]'s, without callback rules): its fix hint applied
+/// in memory and the source rescanned with the edit as an overlay
+/// (`tf_scan::fix`). Returns a dict: `fingerprint`, `rule`, `file`,
+/// `resource`, `attribute`, `action`, `value`, `original` and `text` (the
+/// file before and after), `diff` (unified) and `verified` (the finding is
+/// gone after the edit). Nothing is written. Raises `ValueError` when no
+/// finding has the fingerprint, it has no fix hint, or the scan fails.
+#[pyfunction]
+#[pyo3(signature = (fingerprint, paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, rule_files=vec![], data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], rego_v0=false, bundled=true, profiles=None))]
+#[allow(clippy::too_many_arguments)]
+fn fix_finding<'py>(
+    py: Python<'py>,
+    fingerprint: String,
+    paths: Vec<PathBuf>,
+    recursive: bool,
+    plan: Option<PathBuf>,
+    source: Option<PathBuf>,
+    var_files: Vec<PathBuf>,
+    builtin: bool,
+    select: Option<Vec<String>>,
+    ir_rules: Vec<String>,
+    policies: Vec<PathBuf>,
+    policy_shape: Option<&str>,
+    policy_entry: Option<String>,
+    overlay: Vec<(PathBuf, String)>,
+    threads: Option<usize>,
+    rule_files: Vec<PathBuf>,
+    data: Vec<PathBuf>,
+    namespaces: Vec<String>,
+    all_namespaces: bool,
+    policy_entries: Vec<String>,
+    rego_v0: bool,
+    bundled: bool,
+    profiles: Option<Vec<String>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let (request, _, _) = scan_request(ScanArgs {
+        paths,
+        recursive,
+        plan,
+        source,
+        var_files,
+        builtin,
+        select,
+        ir_rules,
+        callbacks: Vec::new(),
+        policies,
+        policy_shape,
+        policy_entry,
+        overlay,
+        threads,
+        rule_files,
+        data,
+        namespaces,
+        all_namespaces,
+        policy_entries,
+        rego_v0,
+        bundled,
+        profiles,
+    })?;
+    let o = py
+        .detach(move || tf_scan::fix(request, &fingerprint))
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let d = PyDict::new(py);
+    d.set_item("fingerprint", &o.fingerprint)?;
+    d.set_item("rule", &o.rule)?;
+    d.set_item("file", o.edit.file.display().to_string())?;
+    d.set_item("resource", o.hint.resource.to_string())?;
+    d.set_item("attribute", &o.hint.attribute)?;
+    d.set_item("action", o.hint.action.as_str())?;
+    d.set_item("value", json_to_py(py, &o.hint.value)?)?;
+    d.set_item(
+        "diff",
+        tf_scan::unified_diff(&o.edit.file, &o.original, &o.edit.text),
+    )?;
+    d.set_item("original", &o.original)?;
+    d.set_item("text", &o.edit.text)?;
+    d.set_item("verified", o.verified)?;
+    Ok(d)
 }
 
 /// One rule's metadata as a dict: `name`, `level`, `category`,
@@ -1251,6 +1419,7 @@ fn rule_dict<'py>(py: Python<'py>, r: &RuleInfo) -> PyResult<Bound<'py, PyDict>>
         "aliases",
         r.aliases.iter().map(|a| a.as_ref()).collect::<Vec<_>>(),
     )?;
+    d.set_item("profile", r.profile.as_str())?;
     Ok(d)
 }
 
@@ -1284,6 +1453,9 @@ fn rules_info<'py>(
         rego_v0,
     }
     .catalog(builtin, bundled, Vec::new())?;
+    let mut catalog = catalog;
+    // The listing shows every profile.
+    catalog.profiles = Some(tf_scan::ALL_PROFILES.to_vec());
     let resolved = catalog.resolve().map_err(scan_error)?;
     let out = PyList::empty(py);
     for r in Linter::new(resolved.rules).rules() {
@@ -1366,6 +1538,7 @@ fn _tfscan(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<CompiledRule>()?;
     m.add_class::<arrow::ArrowStream>()?;
     m.add_function(wrap_pyfunction!(scan, m)?)?;
+    m.add_function(wrap_pyfunction!(fix_finding, m)?)?;
     m.add_function(wrap_pyfunction!(compile_rules, m)?)?;
     m.add_function(wrap_pyfunction!(builtin_rules, m)?)?;
     m.add_function(wrap_pyfunction!(rules_info, m)?)?;

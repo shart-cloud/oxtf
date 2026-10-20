@@ -22,7 +22,7 @@ def key(rule, address, root, severity, message, file, line, prov):
 
 
 py_set = {
-    key(f.rule, f.address, f.root, f.severity, f.message, f.file, f.line,
+    key(f.rule, f.address, f.root, f.certainty, f.message, f.file, f.line,
         tuple((p["kind"], p["label"], p["file"], p["line"]) for p in f.provenance))
     for f in py.findings
 }

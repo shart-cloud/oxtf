@@ -18,7 +18,7 @@ x: AwsSecurityGroupIngress = {"from_port": 22, "cidr_blocks": ["0.0.0.0/0"]}
 res = tfscan.scan(".", rules=[r, EXPR_RULE])
 for f in res.findings:
     line: int = f.line
-    sev: str = f.severity
+    sev: str = f.certainty
 '''
 
 BAD = '''

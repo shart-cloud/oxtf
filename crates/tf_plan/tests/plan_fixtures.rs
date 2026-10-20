@@ -30,7 +30,7 @@ fn rows(r: &tf_linter::ScanResult, rule: &str) -> BTreeSet<Row> {
             (
                 f.rule.to_string(),
                 f.address.to_string(),
-                f.severity.as_str().to_string(),
+                f.certainty.as_str().to_string(),
             )
         })
         .collect()
@@ -246,7 +246,7 @@ fn plan_case_module_count_sensitive() {
             (
                 f.rule.to_string(),
                 f.address.to_string(),
-                f.severity.as_str().to_string(),
+                f.certainty.as_str().to_string(),
             )
         })
         .collect();

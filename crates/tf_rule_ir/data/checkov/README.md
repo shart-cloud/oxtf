@@ -24,8 +24,16 @@ programs carry translations of that code too:
   ARN. One service per line, after a header line, so a scan parses only
   the services its policies name. MIT, `LICENSE.policy_sentry`.
 
-The two licence files are kept by hand: the generator writes `rules.json`,
-`manifest.json`, `iam.ndjson` and `LICENSE.checkov`.
+The two licence files and `curation.toml` are kept by hand: the generator
+writes `rules.json`, `manifest.json`, `iam.ndjson` and `LICENSE.checkov`.
+
+- `curation.toml`: oxtf's own metadata for bundled rules, applied by
+  `build.rs` over the translated rules: a level (Checkov's open-source
+  checks have none, so every rule is `medium` until curated), optionally a
+  category, a profile (`security`, `audit`, `hygiene`; uncurated rules are
+  `unreviewed` and run with `security`) and a one-line reason. The build
+  fails on an ID that is not bundled or a value it does not know. Every
+  bundled rule's guideline is its Checkov source at the pinned tag.
 
 - `rules.json`: the rules compiled into oxtf (`tf_rule_ir::bundled`).
   `build.rs` turns it into a static table at build time, so a scan reads

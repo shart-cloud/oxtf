@@ -744,6 +744,7 @@ pub fn compile(spec: RuleSpec) -> Result<CompiledRule, String> {
         guideline: spec.guideline.as_deref().map(Arc::from),
         source: spec.origin.0.clone(),
         aliases: Vec::new(),
+        profile: tf_linter::Profile::Security,
     };
     let fix = derive_fix(&spec);
     Ok(CompiledRule {
@@ -759,9 +760,11 @@ pub fn compile(spec: RuleSpec) -> Result<CompiledRule, String> {
 /// The one mechanical fix a Checkov policy's predicate implies, if any:
 /// its definition holds exactly one fixable leaf (beside filters), on a
 /// top-level attribute, and the leaf names the value to write: `equals` a
-/// literal, `is_true`, `is_false`, or `within` a single literal. Every
-/// clause must imply the same fix. `exists` and other operators do not say
-/// what to write, so they derive none.
+/// literal, `is_true`, `is_false`, or `within` a single literal. A Checkov
+/// value check implies one when it expects a single literal of a top-level
+/// attribute ([`checkov::ValueCheck::fix`]). Every clause must imply the
+/// same fix. `exists` and other operators do not say what to write, so
+/// they derive none.
 fn derive_fix(spec: &RuleSpec) -> Option<(String, serde_json::Value)> {
     use checkov::AttributeOp::*;
     fn leaves<'g>(e: &'g graph::GraphExpr, out: &mut Vec<&'g graph::GraphExpr>) -> bool {
@@ -777,8 +780,10 @@ fn derive_fix(spec: &RuleSpec) -> Option<(String, serde_json::Value)> {
     }
     let literal = |v: &serde_json::Value| !v.is_array() && !v.is_object() && !v.is_null();
     let mut fixes = spec.clauses.iter().map(|c| {
-        let Expr::CheckovGraph { definition } = &c.condition else {
-            return None;
+        let definition = match &c.condition {
+            Expr::CheckovGraph { definition } => definition,
+            Expr::CheckovValue { check } if c.for_each.is_none() => return check.fix(),
+            _ => return None,
         };
         let mut found = Vec::new();
         if !leaves(definition, &mut found) {

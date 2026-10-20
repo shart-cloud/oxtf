@@ -57,8 +57,8 @@ pub struct Projection {
 impl Projection {
     /// The one classification rule for foreign findings: Definite only when
     /// every input the policy could have read was Known.
-    pub fn certainty(&self) -> tf_linter::Severity {
-        use tf_linter::Severity::*;
+    pub fn certainty(&self) -> tf_linter::Certainty {
+        use tf_linter::Certainty::*;
         if self.abstractions.iter().any(|a| a.truth == Truth::Tainted) {
             Conditional
         } else if self.abstractions.is_empty() {
@@ -257,20 +257,20 @@ mod tests {
                 ("root.nested.deep", Truth::Tainted),
             ]
         );
-        assert_eq!(p.certainty(), tf_linter::Severity::Conditional);
+        assert_eq!(p.certainty(), tf_linter::Certainty::Conditional);
         assert_eq!(p.deciding().unwrap().path, "root.name");
     }
 
     #[test]
     fn certainty_is_definite_only_when_nothing_was_hidden() {
         let mut p = Projection::default();
-        assert_eq!(p.certainty(), tf_linter::Severity::Definite);
+        assert_eq!(p.certainty(), tf_linter::Certainty::Definite);
         record(&Value::other("x"), "a", &mut p);
-        assert_eq!(p.certainty(), tf_linter::Severity::Indeterminate);
+        assert_eq!(p.certainty(), tf_linter::Certainty::Indeterminate);
         record(&Value::one_of(vec![Value::bool(true)], false), "b", &mut p);
-        assert_eq!(p.certainty(), tf_linter::Severity::Indeterminate);
+        assert_eq!(p.certainty(), tf_linter::Certainty::Indeterminate);
         record(&Value::tainted("t"), "c", &mut p);
-        assert_eq!(p.certainty(), tf_linter::Severity::Conditional);
+        assert_eq!(p.certainty(), tf_linter::Certainty::Conditional);
         assert_eq!(p.deciding().unwrap().path, "c");
     }
 }

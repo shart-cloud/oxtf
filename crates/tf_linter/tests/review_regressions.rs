@@ -119,8 +119,8 @@ fn uncertain_filters_and_try_fallbacks_produce_conditional_findings() {
         assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
         assert_eq!(result.findings.len(), 1, "{expression}");
         assert_eq!(
-            result.findings[0].severity,
-            tf_linter::Severity::Conditional,
+            result.findings[0].certainty,
+            tf_linter::Certainty::Conditional,
             "{expression}"
         );
     }

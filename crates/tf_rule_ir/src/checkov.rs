@@ -335,7 +335,14 @@ impl AttributeCheck {
         let values = attribute_values(body, &self.attribute.split('.').collect::<Vec<_>>());
         let all = self.operator == AttributeOp::NotContains;
         if values.is_empty() {
-            return self.evaluate_value(&Value::null());
+            // Not set: judged as null, witnessed by its absence so a
+            // finding names the attribute (a wildcard path names none).
+            let absent = if self.attribute.contains('*') {
+                Value::null()
+            } else {
+                r.absent(&self.attribute)
+            };
+            return self.evaluate_value(&absent);
         }
         values
             .iter()
@@ -1078,12 +1085,38 @@ impl ValueCheck {
         Ok(())
     }
 
-    fn missing(&self) -> Verdict {
+    /// The verdict on a missing value, witnessed by its absence at the
+    /// checked path so a finding names the attribute.
+    fn missing(&self, resource: &Resource) -> Verdict {
         match self.missing {
             Missing::Pass => Verdict::FALSE,
-            Missing::Fail => Verdict::new(Truth::True, None),
+            Missing::Fail => Verdict::new(Truth::True, Some(resource.absent(&self.dotted()))),
             Missing::Unknown => Verdict::new(Truth::Unknown, None),
         }
+    }
+
+    /// The checked path, dotted, without index segments
+    /// (`versioning.enabled` for `versioning/[0]/enabled`).
+    pub fn dotted(&self) -> String {
+        self.path
+            .iter()
+            .filter(|s| index(s).is_none() || !s.starts_with('['))
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .join(".")
+    }
+
+    /// The mechanical fix a passing value implies: a positive check of a
+    /// top-level attribute against one literal sets it to that literal.
+    pub fn fix(&self) -> Option<(String, Json)> {
+        let [attribute] = self.path.as_slice() else {
+            return None;
+        };
+        let [value] = self.values.as_slice() else {
+            return None;
+        };
+        let literal = !value.is_array() && !value.is_object() && !value.is_null();
+        (!self.negative && !self.any_value && literal).then(|| (attribute.clone(), value.clone()))
     }
 
     pub fn evaluate(&self, resource: &Resource) -> Verdict {
@@ -1094,11 +1127,11 @@ impl ValueCheck {
             .and_then(|m| m.get(self.path[0].as_str()))
             .cloned()
         else {
-            return self.missing();
+            return self.missing(resource);
         };
-        self.walk(&value, &self.path[1..], &|| {
+        self.walk(resource, &value, &self.path[1..], &|| {
             if self.negative {
-                self.missing()
+                self.missing(resource)
             } else {
                 // Checkov's positive base class retries a missing indexed
                 // path ignoring indices. A matching value passes; otherwise
@@ -1111,7 +1144,7 @@ impl ValueCheck {
                 let pass = self.fallback(&value, &named);
                 match pass.truth {
                     Truth::True => Verdict::FALSE,
-                    Truth::False => self.missing(),
+                    Truth::False => self.missing(resource),
                     _ if self.missing == Missing::Pass => Verdict::FALSE,
                     _ => pass,
                 }
@@ -1119,18 +1152,24 @@ impl ValueCheck {
         })
     }
 
-    fn walk(&self, value: &Value, path: &[String], missing: &dyn Fn() -> Verdict) -> Verdict {
+    fn walk(
+        &self,
+        resource: &Resource,
+        value: &Value,
+        path: &[String],
+        missing: &dyn Fn() -> Verdict,
+    ) -> Verdict {
         truth::map(value, &|v| {
             let Some((first, rest)) = path.split_first() else {
-                return self.leaf(v);
+                return self.leaf(resource, v);
             };
             match &v.kind {
                 Kind::Known(Known::Object(m)) => match m.get(first.as_str()) {
-                    Some(child) => self.walk(&child.clone().child_of(v), rest, missing),
+                    Some(child) => self.walk(resource, &child.clone().child_of(v), rest, missing),
                     None => missing(),
                 },
                 Kind::Known(Known::List(l)) => match index(first).and_then(|i| l.get(i)) {
-                    Some(child) => self.walk(&child.clone().child_of(v), rest, missing),
+                    Some(child) => self.walk(resource, &child.clone().child_of(v), rest, missing),
                     None => missing(),
                 },
                 _ => missing(),
@@ -1155,10 +1194,16 @@ impl ValueCheck {
         })
     }
 
-    fn leaf(&self, value: &Value) -> Verdict {
+    fn leaf(&self, resource: &Resource, value: &Value) -> Verdict {
         unbox(value, &|v| {
             if v.is_null() || matches!(&v.kind, Kind::Known(Known::List(l)) if l.is_empty()) {
-                return self.missing();
+                // Written as null or empty: the value itself, where it is
+                // written, is the witness when it has a location.
+                let verdict = self.missing(resource);
+                return match verdict.witness {
+                    Some(_) if !v.prov.is_empty() => Verdict::new(verdict.truth, Some(v.clone())),
+                    _ => verdict,
+                };
             }
             if self.any_value && (self.negative || v.as_str() != Some("")) {
                 return Verdict::new(Truth::from_bool(self.negative), Some(v.clone()));

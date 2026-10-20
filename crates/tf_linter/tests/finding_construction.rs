@@ -6,7 +6,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use tf_eval::{Prov, Step, StepKind, Truth, Value, Verdict};
-use tf_linter::{Category, Finding, Level, RuleInfo, Severity};
+use tf_linter::{Category, Certainty, Finding, Level, RuleInfo};
 use tf_semantic::{Address, Resource};
 use tf_span::{FileId, FileSpan, Span};
 
@@ -21,6 +21,7 @@ fn info() -> RuleInfo {
         guideline: None,
         source: Default::default(),
         aliases: Vec::new(),
+        profile: tf_linter::Profile::Security,
     }
 }
 
@@ -73,12 +74,12 @@ fn truth_times_existence_table() {
     use Truth::*;
     let table = [
         // (verdict truth, resource existence, expected severity)
-        (True, True, Some(Severity::Definite)),
-        (True, Tainted, Some(Severity::Conditional)),
+        (True, True, Some(Certainty::Definite)),
+        (True, Tainted, Some(Certainty::Conditional)),
         (True, Unknown, None),
         (True, False, None),
-        (Tainted, True, Some(Severity::Conditional)),
-        (Tainted, Tainted, Some(Severity::Conditional)),
+        (Tainted, True, Some(Certainty::Conditional)),
+        (Tainted, Tainted, Some(Certainty::Conditional)),
         (Tainted, Unknown, None),
         (Tainted, False, None),
         (Unknown, True, None),
@@ -89,7 +90,7 @@ fn truth_times_existence_table() {
     for (truth, existence, expected) in table {
         let got = build(existence, &Verdict::new(truth, Some(Value::bool(false))));
         assert_eq!(
-            got.as_ref().map(|f| f.severity),
+            got.as_ref().map(|f| f.certainty),
             expected,
             "verdict {truth:?} on existence {existence:?}"
         );
@@ -152,7 +153,7 @@ fn primary_is_newest_step_on_this_resource_else_header() {
 fn conditional_suffix_names_the_variable_when_known() {
     let w = Value::tainted("admin_cidr");
     let f = build(Truth::True, &Verdict::new(Truth::Tainted, Some(w))).unwrap();
-    assert_eq!(f.severity, Severity::Conditional);
+    assert_eq!(f.certainty, Certainty::Conditional);
     assert_eq!(
         f.message,
         "msg (depends on unconstrained variable var.admin_cidr)"
@@ -179,7 +180,7 @@ fn tainted_existence_downgrades_and_says_so() {
         &Verdict::new(Truth::True, Some(Value::bool(false))),
     )
     .unwrap();
-    assert_eq!(f.severity, Severity::Conditional);
+    assert_eq!(f.certainty, Certainty::Conditional);
     assert_eq!(
         f.message,
         "msg (resource exists depending on an unconstrained variable)"
@@ -204,33 +205,35 @@ fn caller_decided_severity_is_gated_and_downgraded_the_same_way() {
         )
     };
     assert_eq!(
-        build(Truth::True, Severity::Indeterminate)
+        build(Truth::True, Certainty::Indeterminate)
             .unwrap()
-            .severity,
-        Severity::Indeterminate
+            .certainty,
+        Certainty::Indeterminate
     );
     // Tainted existence never makes a finding more certain.
     assert_eq!(
-        build(Truth::Tainted, Severity::Indeterminate)
+        build(Truth::Tainted, Certainty::Indeterminate)
             .unwrap()
-            .severity,
-        Severity::Indeterminate
+            .certainty,
+        Certainty::Indeterminate
     );
     assert_eq!(
-        build(Truth::Tainted, Severity::Conditional)
+        build(Truth::Tainted, Certainty::Conditional)
             .unwrap()
             .message,
         "msg (depends on an unconstrained variable)"
     );
     assert_eq!(
-        build(Truth::Tainted, Severity::Definite).unwrap().message,
+        build(Truth::Tainted, Certainty::Definite).unwrap().message,
         "msg (resource exists depending on an unconstrained variable)"
     );
-    assert!(build(Truth::Unknown, Severity::Indeterminate).is_none());
-    assert!(build(Truth::False, Severity::Definite).is_none());
+    assert!(build(Truth::Unknown, Certainty::Indeterminate).is_none());
+    assert!(build(Truth::False, Certainty::Definite).is_none());
     // Indeterminate wording is the adapter's; no suffix is added.
     assert_eq!(
-        build(Truth::True, Severity::Indeterminate).unwrap().message,
+        build(Truth::True, Certainty::Indeterminate)
+            .unwrap()
+            .message,
         "msg"
     );
 }
@@ -242,6 +245,6 @@ fn definite_message_is_untouched() {
         &Verdict::new(Truth::True, Some(Value::bool(false))),
     )
     .unwrap();
-    assert_eq!(f.severity, Severity::Definite);
+    assert_eq!(f.certainty, Certainty::Definite);
     assert_eq!(f.message, "msg");
 }

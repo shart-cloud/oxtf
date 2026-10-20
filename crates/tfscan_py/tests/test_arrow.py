@@ -7,7 +7,7 @@ import tfscan
 from conftest import FIXTURES, SSH_FIXTURES
 
 FINDING_COLUMNS = [
-    "fingerprint", "rule", "category", "level", "severity", "address", "resource_type",
+    "fingerprint", "rule", "category", "level", "certainty", "address", "resource_type",
     "module", "message", "root", "attribute", "file", "line", "column", "provenance",
     "record",
 ]
@@ -32,8 +32,8 @@ def test_findings_table():
     by_addr = {(x["address"], x["root"]): x for x in rows}
     for f in r.findings:
         x = by_addr[(f.address, f.root)]
-        assert (x["rule"], x["severity"], x["message"], x["file"], x["line"]) == (
-            f.rule, f.severity, f.message, f.file, f.line)
+        assert (x["rule"], x["certainty"], x["message"], x["file"], x["line"]) == (
+            f.rule, f.certainty, f.message, f.file, f.line)
         assert [p["label"] for p in x["provenance"]] == [p["label"] for p in f.provenance]
         rec = json.loads(x["record"])
         assert rec["fingerprint"] == x["fingerprint"] == f.fingerprint

@@ -18,7 +18,7 @@ fn keys(l: &Linter, roots: &[PathBuf]) -> BTreeSet<Key> {
             (
                 f.address.to_string(),
                 f.root.display().to_string(),
-                f.severity.as_str().to_string(),
+                f.certainty.as_str().to_string(),
                 f.message.clone(),
             )
         })

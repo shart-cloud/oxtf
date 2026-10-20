@@ -85,7 +85,7 @@ class Finding:
     @property
     def level(self) -> Literal["low", "medium", "high", "critical"]: ...
     @property
-    def severity(self) -> Literal["definite", "conditional", "indeterminate"]: ...
+    def certainty(self) -> Literal["definite", "conditional", "indeterminate"]: ...
     @property
     def address(self) -> str: ...
     @property
@@ -198,7 +198,32 @@ def scan(
     policy_entries: Sequence[str] = ...,
     rego_v0: bool = False,
     bundled: bool = True,
+    profiles: Optional[Sequence[str]] = None,
 ) -> tuple[ScanResult, int]: ...
+def fix_finding(
+    fingerprint: str,
+    paths: Sequence[str | os.PathLike[str]] = ...,
+    recursive: bool = False,
+    plan: Optional[str | os.PathLike[str]] = None,
+    source: Optional[str | os.PathLike[str]] = None,
+    var_files: Sequence[str | os.PathLike[str]] = ...,
+    builtin: bool = True,
+    select: Optional[Sequence[str]] = None,
+    ir_rules: Sequence[str] = ...,
+    policies: Sequence[str | os.PathLike[str]] = ...,
+    policy_shape: Optional[str] = None,
+    policy_entry: Optional[str] = None,
+    overlay: Sequence[tuple[str | os.PathLike[str], str]] = ...,
+    threads: Optional[int] = None,
+    rule_files: Sequence[str | os.PathLike[str]] = ...,
+    data: Sequence[str | os.PathLike[str]] = ...,
+    namespaces: Sequence[str] = ...,
+    all_namespaces: bool = False,
+    policy_entries: Sequence[str] = ...,
+    rego_v0: bool = False,
+    bundled: bool = True,
+    profiles: Optional[Sequence[str]] = None,
+) -> dict[str, Any]: ...
 def compile_rules(json: str) -> list[CompiledRule]: ...
 def builtin_rules() -> list[dict[str, Any]]: ...
 def rules_info(

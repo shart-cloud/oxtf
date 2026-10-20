@@ -116,7 +116,7 @@ def test_basic_jsonpath_matches_checkov_vertex_projection(tmp_path, operator, ex
                          rule_files=[policy(tmp_path, doc)])
     assert not native.diagnostics and not native.rule_errors
     assert {f.address for f in native.findings} == failed
-    assert all(f.severity == "definite" for f in native.findings)
+    assert all(f.certainty == "definite" for f in native.findings)
 
 
 def test_basic_jsonpath_rejects_unsupported_syntax(tmp_path):
@@ -184,7 +184,7 @@ def test_filtered_jsonpath_matches_checkov(tmp_path, operator, expected, path):
     native = tfscan.scan(tmp_path, builtin=False, rule_files=[policy(tmp_path, doc)])
     assert not native.diagnostics and not native.rule_errors
     assert {f.address for f in native.findings} == failed
-    assert all(f.severity == "definite" for f in native.findings)
+    assert all(f.certainty == "definite" for f in native.findings)
 
 
 def test_jsonpath_flattened_key_collisions_preserve_uncertainty(tmp_path):
@@ -205,7 +205,7 @@ resource "test_resource" "last" {
                          rule_files=[policy(tmp_path, doc)])
     assert not native.diagnostics and not native.rule_errors
     assert {f.address for f in native.findings} == {"test_resource.first", "test_resource.last"}
-    assert all(f.severity == "conditional" and f.provenance for f in native.findings)
+    assert all(f.certainty == "conditional" and f.provenance for f in native.findings)
 
 
 @pytest.mark.parametrize("boolean", ["and", "or"])
@@ -234,7 +234,7 @@ def test_attribute_filter_membership_matches_checkov(tmp_path, boolean, expected
     native = tfscan.scan(tmp_path, builtin=False, rule_files=[policy(tmp_path, doc)])
     assert not native.diagnostics and not native.rule_errors
     assert {f.address for f in native.findings} == failed
-    assert all(f.severity == "definite" for f in native.findings)
+    assert all(f.certainty == "definite" for f in native.findings)
 
 
 def test_attribute_filters_reject_unsupported_shapes_and_scope(tmp_path):
@@ -307,7 +307,7 @@ def test_graph_size_and_subset_operators_match_checkov(tmp_path, operator, expec
     native = tfscan.scan(tmp_path, builtin=False, rule_files=[policy(tmp_path, doc)])
     assert not native.diagnostics and not native.rule_errors
     assert {f.address for f in native.findings} == failed
-    assert all(f.severity == "definite" for f in native.findings)
+    assert all(f.certainty == "definite" for f in native.findings)
 
 
 def test_export_refuses_wrong_version_and_existing_destination(pack, tmp_path):
@@ -327,7 +327,7 @@ resource "aws_db_instance" "maybe" { storage_encrypted = var.enabled }
 ''')
     result = tfscan.scan(tmp_path, rules=checkov.load_rules(pack[0]), builtin=False, select=["CKV_AWS_16"])
     assert not result.rule_errors
-    assert {(f.address, f.severity) for f in result.findings} == {
+    assert {(f.address, f.certainty) for f in result.findings} == {
         ("aws_db_instance.bad", "definite"), ("aws_db_instance.maybe", "conditional")}
     assert all(f.provenance for f in result.findings)
 
@@ -365,7 +365,7 @@ resource "aws_db_instance" "maybe" { storage_encrypted = var.enabled }
 resource "aws_db_instance" "computed" { storage_encrypted = aws_db_instance.computed.id }
 ''')
     result = tfscan.scan(tmp_path, builtin=False, rules=checkov.custom_rules(["CKV_AWS_16"]))
-    assert {(f.address, f.severity) for f in result.findings} == {
+    assert {(f.address, f.certainty) for f in result.findings} == {
         ("aws_db_instance.maybe", "conditional"), ("aws_db_instance.computed", "indeterminate")}
     assert all(f.to_dict()["hidden"] for f in result.findings)
 
@@ -433,7 +433,7 @@ resource "aws_flow_log" "log" { vpc_id = module.vpc.id }
 ''')
     result = tfscan.scan(tmp_path, builtin=False, rule_files=[graph_checks], select=['CKV2_AWS_11'])
     assert not result.rule_errors
-    assert [(f.address, f.severity) for f in result.findings] == [('aws_vpc.missing', 'definite')]
+    assert [(f.address, f.certainty) for f in result.findings] == [('aws_vpc.missing', 'definite')]
     assert result.to_arrow().num_rows == 1
 
 
@@ -467,7 +467,7 @@ resource "aws_s3_bucket_public_access_block" "maybe" {
 ''')
     result = tfscan.scan(tmp_path, builtin=False, rule_files=[graph_checks], select=['CKV2_AWS_6'])
     assert not result.rule_errors
-    assert {(f.address, f.severity) for f in result.findings} == {('aws_s3_bucket.bad','definite'),('aws_s3_bucket.maybe','conditional')}
+    assert {(f.address, f.certainty) for f in result.findings} == {('aws_s3_bucket.bad','definite'),('aws_s3_bucket.maybe','conditional')}
     assert all(f.provenance for f in result.findings)
 
 
@@ -810,5 +810,5 @@ resource "aws_db_instance" "missing" {}
 ''')
     result = tfscan.scan(tmp_path, builtin=False, rule_files=[graph_checks], select=['CKV2_AWS_30'])
     assert not result.rule_errors
-    assert [(f.address, f.severity) for f in result.findings] == [('aws_db_instance.maybe', 'conditional')]
+    assert [(f.address, f.certainty) for f in result.findings] == [('aws_db_instance.maybe', 'conditional')]
     assert result.findings[0].provenance

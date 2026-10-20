@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use tf_linter::{Linter, Severity};
+use tf_linter::{Certainty, Linter};
 use tf_semantic::{AnalyzeOptions, FileTable, analyze_module};
 
 fn connection(operator: &str) -> Value {
@@ -18,7 +18,7 @@ fn policy(definition: Value) -> Value {
 fn filtered(definition: Value) -> Value {
     json!({"kind":"and","args":[definition,{"kind":"filter","resource_types":["test_node"]}]})
 }
-fn scan(source: &str, definition: Value) -> Vec<(String, Severity)> {
+fn scan(source: &str, definition: Value) -> Vec<(String, Certainty)> {
     let files = FileTable::with_overlay([(PathBuf::from("graph-rule/main.tf"), Arc::from(source))]);
     let analysis = analyze_module(Path::new("graph-rule"), &AnalyzeOptions::default(), &files);
     assert!(
@@ -38,7 +38,7 @@ fn scan(source: &str, definition: Value) -> Vec<(String, Severity)> {
     result
         .findings
         .into_iter()
-        .map(|f| (f.address.to_string(), f.severity))
+        .map(|f| (f.address.to_string(), f.certainty))
         .collect()
 }
 
@@ -52,11 +52,11 @@ resource "test_link" "orphan" {}
 "#;
     assert_eq!(
         scan(source, filtered(connection("exists"))),
-        vec![("test_node.missing".into(), Severity::Definite)]
+        vec![("test_node.missing".into(), Certainty::Definite)]
     );
     assert_eq!(
         scan(source, filtered(connection("not_exists"))),
-        vec![("test_node.linked".into(), Severity::Definite)]
+        vec![("test_node.linked".into(), Certainty::Definite)]
     );
     assert_eq!(scan(source, connection("exists")).len(), 2);
 }
@@ -73,7 +73,7 @@ resource "test_link" "good" { target = test_node.n.id
     let definition = |op| filtered(json!({"kind":"and", "args":[attribute(),connection(op)]}));
     assert_eq!(
         scan(source, definition("exists")),
-        vec![("test_node.n".into(), Severity::Definite)]
+        vec![("test_node.n".into(), Certainty::Definite)]
     );
     assert!(scan(source, definition("one_exists")).is_empty());
 }
@@ -106,7 +106,7 @@ resource "test_link" "l" { target = test_node.n[var.key].id }
 "#;
     let result = scan(source, filtered(connection("exists")));
     assert_eq!(result.len(), 2);
-    assert!(result.iter().all(|(_, s)| *s == Severity::Conditional));
+    assert!(result.iter().all(|(_, s)| *s == Certainty::Conditional));
 }
 
 #[test]
@@ -127,9 +127,9 @@ resource "test_node" "missing" { origin = {} }
     assert_eq!(
         results,
         vec![
-            ("test_node.block".into(), Severity::Definite),
-            ("test_node.numbered".into(), Severity::Definite),
-            ("test_node.object".into(), Severity::Definite),
+            ("test_node.block".into(), Certainty::Definite),
+            ("test_node.numbered".into(), Certainty::Definite),
+            ("test_node.object".into(), Certainty::Definite),
         ]
     );
 }
@@ -150,7 +150,7 @@ resource "test_link" "l" {
             source,
             filtered(json!({"kind":"and","args":[connection("exists"),attr]}))
         ),
-        vec![("test_node.n".into(), Severity::Definite)]
+        vec![("test_node.n".into(), Certainty::Definite)]
     );
 }
 
@@ -174,7 +174,7 @@ fn data_sources_can_be_the_subject_of_graph_findings() {
     ]});
     assert_eq!(
         scan(r#"data "test_node" "missing" {}"#, definition),
-        vec![("data.test_node.missing".into(), Severity::Definite)]
+        vec![("data.test_node.missing".into(), Certainty::Definite)]
     );
 }
 
@@ -227,7 +227,7 @@ fn filters_exclude_resources_in_attribute_only_policies() {
 resource "test_link" "l" { enabled = false }"#;
     assert_eq!(
         scan(source, definition),
-        vec![("test_node.n".into(), Severity::Definite)]
+        vec![("test_node.n".into(), Certainty::Definite)]
     );
 }
 
@@ -357,7 +357,7 @@ resource "test_link" "l" { target = test_node.connected.id }
         // remove it before the connection is evaluated.
         assert_eq!(
             scan(source, definition),
-            vec![("test_node.included".into(), Severity::Definite)]
+            vec![("test_node.included".into(), Certainty::Definite)]
         );
     }
 }
@@ -416,7 +416,7 @@ resource "test_node" "excluded" { engine = "postgres"
         attribute_filter("engine",json!(["postgres"])),attribute_filter("tier",json!(["prod"]))]});
     assert_eq!(
         scan(source, branch.clone()),
-        vec![("test_node.included".into(), Severity::Definite)]
+        vec![("test_node.included".into(), Certainty::Definite)]
     );
     // A sibling passing branch still passes the included vertex.
     assert!(

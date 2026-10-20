@@ -106,7 +106,7 @@ impl Level {
 /// Certainty of a finding, ordered from most to least certain.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum Severity {
+pub enum Certainty {
     /// Insecure as written (for the configuration with its defaults and
     /// tfvars).
     Definite,
@@ -120,21 +120,21 @@ pub enum Severity {
     Indeterminate,
 }
 
-impl Severity {
+impl Certainty {
     /// `True` → definite, `Tainted` → conditional, anything else → no finding.
-    pub fn from_truth(truth: Truth) -> Option<Severity> {
+    pub fn from_truth(truth: Truth) -> Option<Certainty> {
         match truth {
-            Truth::True => Some(Severity::Definite),
-            Truth::Tainted => Some(Severity::Conditional),
+            Truth::True => Some(Certainty::Definite),
+            Truth::Tainted => Some(Certainty::Conditional),
             Truth::False | Truth::Unknown => None,
         }
     }
 
     pub fn as_str(self) -> &'static str {
         match self {
-            Severity::Definite => "definite",
-            Severity::Conditional => "conditional",
-            Severity::Indeterminate => "indeterminate",
+            Certainty::Definite => "definite",
+            Certainty::Conditional => "conditional",
+            Certainty::Indeterminate => "indeterminate",
         }
     }
 }
@@ -166,7 +166,7 @@ pub trait RuleMeta {
 /// data sources and instances whose existence is `False`, and returns a
 /// verdict per resource instance the rule is about.
 ///
-/// Rules never decide severity, locations or whether a finding exists;
+/// Rules never decide certainty, locations or whether a finding exists;
 /// see [`Finding::from_verdict`].
 pub trait Rule: RuleMeta + Send + Sync {
     /// Verdict for one resource instance, or `None` when the rule does not
@@ -196,7 +196,7 @@ pub trait Rule: RuleMeta + Send + Sync {
 /// from their own evidence (foreign policies) build one directly.
 #[derive(Clone, Debug)]
 pub struct Judgement {
-    pub severity: Severity,
+    pub certainty: Certainty,
     pub witness: Option<tf_eval::Value>,
     pub message: String,
     /// Inputs the rule could not see (foreign policies over a Known-only
@@ -212,10 +212,10 @@ impl Judgement {
         verdict: Verdict,
         message: impl FnOnce(&Verdict) -> String,
     ) -> Option<Self> {
-        let severity = Severity::from_truth(verdict.truth)?;
+        let certainty = Certainty::from_truth(verdict.truth)?;
         let message = message(&verdict);
         Some(Judgement {
-            severity,
+            certainty,
             witness: verdict.witness,
             message,
             hidden: Vec::new(),
@@ -278,6 +278,52 @@ impl FixAction {
     }
 }
 
+/// What kind of problem a rule finds, which decides whether a default scan
+/// runs it ([`Profile::in_default`]).
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum Profile {
+    /// A misconfiguration that exposes, weakens or over-grants: public
+    /// access, missing encryption, broad IAM, credential paths.
+    #[default]
+    Security,
+    /// Visibility rather than exposure: logging, flow logs, retention.
+    Audit,
+    /// Operations, cost, tags, style and reliability.
+    Hygiene,
+    /// Not curated yet (bundled rules not in `curation.toml`): runs with
+    /// the security rules until reviewed.
+    Unreviewed,
+}
+
+impl Profile {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Profile::Security => "security",
+            Profile::Audit => "audit",
+            Profile::Hygiene => "hygiene",
+            Profile::Unreviewed => "unreviewed",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Profile> {
+        Some(match s {
+            "security" => Profile::Security,
+            "audit" => Profile::Audit,
+            "hygiene" => Profile::Hygiene,
+            "unreviewed" => Profile::Unreviewed,
+            _ => return None,
+        })
+    }
+
+    /// Whether a scan that names no profile runs rules of this one.
+    pub fn in_default(self) -> bool {
+        matches!(self, Profile::Security | Profile::Unreviewed)
+    }
+}
+
 /// Owned metadata, for object-safe dispatch and for listing rules.
 #[derive(Clone, Debug)]
 pub struct RuleInfo {
@@ -294,6 +340,7 @@ pub struct RuleInfo {
     pub source: RuleSource,
     /// Other IDs of this rule ([`RuleMeta::ALIASES`]).
     pub aliases: Vec<Arc<str>>,
+    pub profile: Profile,
 }
 
 /// Where a rule comes from.
@@ -395,6 +442,7 @@ impl<T: Rule> DynRule for T {
             guideline: None,
             source: RuleSource::default(),
             aliases: T::ALIASES.iter().map(|s| Arc::from(*s)).collect(),
+            profile: Profile::Security,
         }
     }
     fn judge_resource(&self, resource: &Resource) -> Result<Vec<Judgement>, RuleFailure> {
@@ -418,7 +466,7 @@ impl<T: Rule> DynRule for T {
 
 trait Judge: Rule {
     fn judge(&self, r: &Resource, v: Verdict) -> Option<Judgement> {
-        let fix_hint = Severity::from_truth(v.truth).and_then(|_| self.fix_hint(r, &v));
+        let fix_hint = Certainty::from_truth(v.truth).and_then(|_| self.fix_hint(r, &v));
         Judgement::from_verdict(v, |v| self.message(r, v)).map(|j| Judgement { fix_hint, ..j })
     }
 }
@@ -453,6 +501,7 @@ pub struct Finding {
     pub source: RuleSource,
     /// The rule's other IDs ([`RuleInfo::aliases`]).
     pub aliases: Vec<Arc<str>>,
+    pub profile: Profile,
     /// What the finding is about.
     pub subject: FindingSubject,
     /// Resource address, module path included (`module.m.aws_s3_bucket.b`);
@@ -462,7 +511,7 @@ pub struct Finding {
     pub resource_type: Option<Arc<str>>,
     /// Module instance address (`""` for the root module).
     pub module: Arc<str>,
-    pub severity: Severity,
+    pub certainty: Certainty,
     pub message: String,
     /// Where to point: the attribute that decided the finding, or the
     /// resource header.
@@ -485,7 +534,7 @@ pub struct Finding {
 impl Finding {
     /// Build the finding for `verdict` on `resource`, or `None`.
     ///
-    /// - `True` → [`Severity::Definite`], `Tainted` → [`Severity::Conditional`],
+    /// - `True` → [`Certainty::Definite`], `Tainted` → [`Certainty::Conditional`],
     ///   `False` / `Unknown` → no finding.
     /// - A resource whose existence is `False` or `Unknown` (e.g. `count`
     ///   from a data source) gets no finding, as with any other Unknown
@@ -502,11 +551,11 @@ impl Finding {
         message: &str,
         root: &Path,
     ) -> Option<Finding> {
-        let severity = Severity::from_truth(verdict.truth)?;
+        let certainty = Certainty::from_truth(verdict.truth)?;
         Self::with_severity(
             info,
             resource,
-            severity,
+            certainty,
             verdict.witness.as_ref(),
             message,
             root,
@@ -520,7 +569,7 @@ impl Finding {
     pub fn with_severity(
         info: &RuleInfo,
         resource: &Resource,
-        severity: Severity,
+        certainty: Certainty,
         witness: Option<&tf_eval::Value>,
         message: &str,
         root: &Path,
@@ -529,7 +578,7 @@ impl Finding {
             info,
             resource,
             Judgement {
-                severity,
+                certainty,
                 witness: witness.cloned(),
                 message: message.to_string(),
                 hidden: Vec::new(),
@@ -549,20 +598,20 @@ impl Finding {
         root: &Path,
     ) -> Option<Finding> {
         let Judgement {
-            severity,
+            certainty,
             witness,
             message,
             hidden,
             fix_hint,
         } = judgement;
         let mut downgraded = false;
-        let severity = match resource.existence {
+        let certainty = match resource.existence {
             Truth::False | Truth::Unknown => return None,
             Truth::Tainted => {
-                downgraded = severity == Severity::Definite;
-                severity.max(Severity::Conditional)
+                downgraded = certainty == Certainty::Definite;
+                certainty.max(Certainty::Conditional)
             }
-            Truth::True => severity,
+            Truth::True => certainty,
         };
         let provenance = witness.as_ref().map(|w| w.prov.steps()).unwrap_or_default();
         let deciding = provenance
@@ -576,7 +625,7 @@ impl Finding {
             .map(|p| p.split(['.', '[']).next().unwrap_or(p).to_string());
         let configured = top.as_deref().and_then(|t| resource.value(t));
         let effective = top.as_deref().and_then(|t| resource.value_or_default(t));
-        let message = certainty_suffix(message, severity, witness.as_ref(), downgraded);
+        let message = certainty_suffix(message, certainty, witness.as_ref(), downgraded);
         Some(Finding {
             rule: info.name.clone(),
             category: info.category,
@@ -585,11 +634,12 @@ impl Finding {
             guideline: info.guideline.clone(),
             source: info.source.clone(),
             aliases: info.aliases.clone(),
+            profile: info.profile,
             subject: FindingSubject::Resource(resource.id.clone()),
             address: resource.address.clone(),
             resource_type: Some(resource.ty.clone()),
             module: resource.module.clone(),
-            severity,
+            certainty,
             message,
             primary,
             provenance,
@@ -613,7 +663,7 @@ impl Finding {
         root: &Path,
     ) -> Finding {
         let Judgement {
-            severity,
+            certainty,
             witness,
             message,
             hidden,
@@ -629,7 +679,7 @@ impl Finding {
                 file: file.id,
                 span: Span::new(0, 0),
             });
-        let message = certainty_suffix(message, severity, witness.as_ref(), false);
+        let message = certainty_suffix(message, certainty, witness.as_ref(), false);
         Finding {
             rule: info.name.clone(),
             category: info.category,
@@ -638,13 +688,14 @@ impl Finding {
             guideline: info.guideline.clone(),
             source: info.source.clone(),
             aliases: info.aliases.clone(),
+            profile: info.profile,
             subject: FindingSubject::File {
                 path: file.path.clone(),
             },
             address: file.path.display().to_string().into(),
             resource_type: None,
             module: module.address.clone(),
-            severity,
+            certainty,
             message,
             primary,
             provenance,
@@ -663,21 +714,21 @@ impl Finding {
 /// the resource's own existence when that is what was downgraded.
 fn certainty_suffix(
     message: String,
-    severity: Severity,
+    certainty: Certainty,
     witness: Option<&tf_eval::Value>,
     downgraded: bool,
 ) -> String {
-    match (severity, witness.map(|w| &w.kind)) {
-        (Severity::Conditional, Some(Kind::Tainted(t))) if !t.variable.starts_with('(') => {
+    match (certainty, witness.map(|w| &w.kind)) {
+        (Certainty::Conditional, Some(Kind::Tainted(t))) if !t.variable.starts_with('(') => {
             format!(
                 "{message} (depends on unconstrained variable var.{})",
                 t.variable
             )
         }
-        (Severity::Conditional, _) if downgraded => {
+        (Certainty::Conditional, _) if downgraded => {
             format!("{message} (resource exists depending on an unconstrained variable)")
         }
-        (Severity::Conditional, _) => {
+        (Certainty::Conditional, _) => {
             format!("{message} (depends on an unconstrained variable)")
         }
         _ => message,
