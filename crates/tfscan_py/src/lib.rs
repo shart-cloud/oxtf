@@ -95,6 +95,9 @@ pub(crate) fn truth_str(t: Truth) -> &'static str {
 /// argument is not wholly known is `{"$jsonencode": ...}`.
 pub(crate) fn abstract_json(v: &tf_eval::Value) -> serde_json::Value {
     use serde_json::{Value as J, json};
+    if v.is_sensitive() {
+        return json!({"$sensitive": true});
+    }
     match &v.kind {
         Kind::Known(k) => match k {
             Known::Null => J::Null,
@@ -306,7 +309,18 @@ impl Value {
     /// Why an Unknown value is unknown.
     #[getter]
     fn origin(&self) -> Option<String> {
-        self.v.origin().map(|o| o.to_string())
+        self.v.origin().map(|o| {
+            if self.v.is_sensitive() {
+                "(sensitive)".into()
+            } else {
+                o.to_string()
+            }
+        })
+    }
+    /// Whether presentation/export should redact this value.
+    #[getter]
+    fn sensitive(&self) -> bool {
+        self.v.is_sensitive()
     }
     /// Alternatives of a OneOf (provenance joined), else `[]`.
     #[getter]
@@ -680,6 +694,10 @@ pub struct ScanResult {
 
 #[pymethods]
 impl ScanResult {
+    #[getter]
+    fn status(&self) -> &'static str {
+        self.data.result.status().as_str()
+    }
     #[getter]
     fn findings(&self) -> Vec<Finding> {
         (0..self.data.result.findings.len())
@@ -1135,7 +1153,7 @@ fn scan_error(e: tf_scan::ScanError) -> PyErr {
 /// one entry. `overlay`: `(path, text)` pairs that shadow the disk for this
 /// scan.
 #[pyfunction]
-#[pyo3(signature = (paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], callbacks=vec![], policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, _release_gil=true, rule_files=vec![], data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], rego_v0=false, bundled=true, profiles=None))]
+#[pyo3(signature = (paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], callbacks=vec![], policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, _release_gil=true, rule_files=vec![], data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], rego_v0=false, bundled=true, profiles=None, data_dir=None))]
 #[allow(clippy::too_many_arguments)]
 fn scan(
     py: Python<'_>,
@@ -1162,6 +1180,7 @@ fn scan(
     rego_v0: bool,
     bundled: bool,
     profiles: Option<Vec<String>>,
+    data_dir: Option<PathBuf>,
 ) -> PyResult<(ScanResult, u64)> {
     if !_release_gil && !callbacks.is_empty() {
         // Workers would block on the GIL held by this thread.
@@ -1175,6 +1194,7 @@ fn scan(
         plan,
         source,
         var_files,
+        data_dir,
         builtin,
         select,
         ir_rules,
@@ -1218,6 +1238,7 @@ struct ScanArgs<'py, 's> {
     plan: Option<PathBuf>,
     source: Option<PathBuf>,
     var_files: Vec<PathBuf>,
+    data_dir: Option<PathBuf>,
     builtin: bool,
     select: Option<Vec<String>>,
     ir_rules: Vec<String>,
@@ -1297,6 +1318,7 @@ fn scan_request(a: ScanArgs<'_, '_>) -> PyResult<(ScanRequest, CallbackError, Ca
         catalog,
         selection: a.select,
         var_files: a.var_files,
+        data_dir: a.data_dir,
         threads: a.threads,
         overlay: a
             .overlay
@@ -1319,7 +1341,7 @@ fn scan_request(a: ScanArgs<'_, '_>) -> PyResult<(ScanRequest, CallbackError, Ca
 /// declaration). Nothing is written. Raises `ValueError` when no
 /// finding has the fingerprint, it has no fix hint, or the scan fails.
 #[pyfunction]
-#[pyo3(signature = (fingerprint, paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, rule_files=vec![], data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], rego_v0=false, bundled=true, profiles=None, at=None))]
+#[pyo3(signature = (fingerprint, paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, rule_files=vec![], data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], rego_v0=false, bundled=true, profiles=None, at=None, data_dir=None))]
 #[allow(clippy::too_many_arguments)]
 fn fix_finding<'py>(
     py: Python<'py>,
@@ -1346,6 +1368,7 @@ fn fix_finding<'py>(
     bundled: bool,
     profiles: Option<Vec<String>>,
     at: Option<&str>,
+    data_dir: Option<PathBuf>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let site = match at {
         None => None,
@@ -1363,6 +1386,7 @@ fn fix_finding<'py>(
         plan,
         source,
         var_files,
+        data_dir,
         builtin,
         select,
         ir_rules,
@@ -1393,13 +1417,11 @@ fn fix_finding<'py>(
     d.set_item("action", o.hint.action.as_str())?;
     d.set_item("value", json_to_py(py, &o.hint.value)?)?;
     d.set_item("site", o.site.as_str())?;
-    d.set_item(
-        "diff",
-        tf_scan::unified_diff(&o.edit.file, &o.original, &o.edit.text),
-    )?;
+    d.set_item("diff", &o.diff)?;
     d.set_item("original", &o.original)?;
     d.set_item("text", &o.edit.text)?;
     d.set_item("verified", o.verified)?;
+    d.set_item("verification_errors", &o.verification_errors)?;
     Ok(d)
 }
 
@@ -1543,6 +1565,27 @@ fn builtin_rules<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
     Ok(out)
 }
 
+/// Resolve and cache dependencies explicitly; scan remains offline.
+#[pyfunction]
+#[pyo3(signature = (root, data_dir=None, refresh=false, registry_origins=None))]
+fn fetch(
+    py: Python<'_>,
+    root: PathBuf,
+    data_dir: Option<PathBuf>,
+    refresh: bool,
+    registry_origins: Option<std::collections::BTreeMap<String, String>>,
+) -> PyResult<String> {
+    let mut request = tf_scan::FetchRequest::new(root);
+    request.data_dir = data_dir;
+    request.refresh = refresh;
+    request.registry_origins = registry_origins.unwrap_or_default();
+    let result = py
+        .detach(move || tf_scan::fetch(request))
+        .map_err(pyo3::exceptions::PyValueError::new_err)?;
+    serde_json::to_string(&result)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+}
+
 #[pymodule]
 fn _tfscan(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ScanResult>()?;
@@ -1552,6 +1595,7 @@ fn _tfscan(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<CompiledRule>()?;
     m.add_class::<arrow::ArrowStream>()?;
     m.add_function(wrap_pyfunction!(scan, m)?)?;
+    m.add_function(wrap_pyfunction!(fetch, m)?)?;
     m.add_function(wrap_pyfunction!(fix_finding, m)?)?;
     m.add_function(wrap_pyfunction!(compile_rules, m)?)?;
     m.add_function(wrap_pyfunction!(builtin_rules, m)?)?;

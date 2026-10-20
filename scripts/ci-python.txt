@@ -1,0 +1,8 @@
+# Reference versions are part of the generated catalog's contract.
+checkov==3.2.328
+cloudsplaining==0.7.0
+policy_sentry==0.13.2
+pytest==8.4.2
+pyarrow==21.0.0
+mypy==1.18.2
+maturin==1.15.0

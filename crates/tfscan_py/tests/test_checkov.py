@@ -44,12 +44,16 @@ def blockers(tmp_path, doc):
     return {(path, code) for code, path in re.findall(r"\[(\w+)\] at (\S+)", str(error.value))}
 
 
-def test_export_accounts_for_every_check_and_excludes_overrides(pack):
+def test_export_accounts_for_value_checks_and_python_overrides(pack):
     path, manifest = pack
     inventory = {x["id"]: x for x in manifest["checks"]}
     assert inventory["CKV_AWS_16"]["status"] == "translated"
-    assert inventory["CKV_AWS_134"]["status"] == "unsupported"
-    assert "overridden" in inventory["CKV_AWS_134"]["reason"]
+    assert inventory["CKV_AWS_134"]["status"] == "translated"
+    rules = json.loads((path / "rules.json").read_text())
+    overridden = next(r for r in rules if r["name"] == "CKV_AWS_134")
+    assert overridden["clauses"][0]["condition"]["op"] == "checkov_python"
+    assert inventory["CKV_AWS_115"]["status"] == "unsupported"
+    assert "unevaluated" in inventory["CKV_AWS_115"]["reason"]
     assert all(x.get("reason") for x in manifest["checks"] if x["status"] == "unsupported")
     assert (path / "LICENSE.checkov").read_text()
     assert len(checkov.load_rules(path)) == manifest["translated"]

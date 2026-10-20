@@ -160,29 +160,47 @@ pub fn test_with(v: &Value, pred: &dyn Fn(&Value) -> Truth) -> Verdict {
 /// (alternatives combined as in [`test`]) and mapping Tainted / Unknown to
 /// themselves. `f` sees Known values (including null).
 pub fn map(v: &Value, f: &dyn Fn(&Value) -> Verdict) -> Verdict {
-    match &v.kind {
-        Kind::Known(_) => f(v),
+    match try_map(v, &|v| Ok::<_, std::convert::Infallible>(f(v))) {
+        Ok(v) => v,
+        Err(never) => match never {},
+    }
+}
+
+/// Fallible [`map`]. An evaluator failure is not an abstract truth value,
+/// and must survive lifting over alternatives.
+pub fn try_map<E>(v: &Value, f: &dyn Fn(&Value) -> Result<Verdict, E>) -> Result<Verdict, E> {
+    Ok(match &v.kind {
+        Kind::Known(_) => f(v)?,
         Kind::Tainted(_) => Verdict::new(Truth::Tainted, Some(v.clone())),
         Kind::Unknown(_) => Verdict::new(Truth::Unknown, Some(v.clone())),
         Kind::OneOf(o) => {
             let vs: Vec<Verdict> = o
                 .alternatives
                 .iter()
-                .map(|a| map(&a.child_of(v), f))
-                .collect();
+                .map(|a| try_map(&a.child_of(v), f))
+                .collect::<Result<_, _>>()?;
             combine_one_of(vs, o.tainted)
         }
-    }
+    })
 }
 
 /// "Some element of the list `v` satisfies `pred`" (`pred` sees each element,
 /// which may itself be abstract; use [`test`] inside it for scalars).
 pub fn exists(v: &Value, pred: &dyn Fn(&Value) -> Verdict) -> Verdict {
-    match &v.kind {
+    match try_exists(v, &|v| Ok::<_, std::convert::Infallible>(pred(v))) {
+        Ok(v) => v,
+        Err(never) => match never {},
+    }
+}
+
+/// Fallible [`exists`], with the same short-circuiting and uncertainty
+/// semantics, but without turning evaluation failures into Unknown.
+pub fn try_exists<E>(v: &Value, pred: &dyn Fn(&Value) -> Result<Verdict, E>) -> Result<Verdict, E> {
+    Ok(match &v.kind {
         Kind::Known(Known::List(l)) => {
             let mut acc = Verdict::FALSE;
             for e in l.iter() {
-                acc = acc.or(pred(&e.child_of(v)));
+                acc = acc.or(pred(&e.child_of(v))?);
                 if acc.truth == Truth::True {
                     break;
                 }
@@ -190,18 +208,18 @@ pub fn exists(v: &Value, pred: &dyn Fn(&Value) -> Verdict) -> Verdict {
             acc
         }
         Kind::Known(Known::Null) => Verdict::FALSE,
-        Kind::Known(_) => pred(v),
+        Kind::Known(_) => pred(v)?,
         Kind::Tainted(_) => Verdict::new(Truth::Tainted, Some(v.clone())),
         Kind::Unknown(_) => Verdict::new(Truth::Unknown, Some(v.clone())),
         Kind::OneOf(o) => {
             let vs: Vec<Verdict> = o
                 .alternatives
                 .iter()
-                .map(|a| exists(&a.child_of(v), pred))
-                .collect();
+                .map(|a| try_exists(&a.child_of(v), pred))
+                .collect::<Result<_, _>>()?;
             combine_one_of(vs, o.tainted)
         }
-    }
+    })
 }
 
 /// "Every element of the list `v` satisfies `pred`"; the dual of [`exists`].

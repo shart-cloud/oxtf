@@ -122,6 +122,8 @@ pub struct ValueRecord {
     pub value: Option<Json>,
     /// Human rendering (strings quoted; abstract values described).
     pub display: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sensitive: bool,
 }
 
 pub fn value_record(v: &Value) -> ValueRecord {
@@ -131,14 +133,19 @@ pub fn value_record(v: &Value) -> ValueRecord {
         Kind::Tainted(_) => "tainted",
         Kind::OneOf(_) => "one_of",
     };
-    let value = match &v.kind {
-        Kind::Known(Known::Json(inner)) => tf_eval::value::to_json(inner),
-        _ => tf_eval::value::to_json(v),
+    let value = if v.is_sensitive() {
+        None
+    } else {
+        match &v.kind {
+            Kind::Known(Known::Json(inner)) => tf_eval::value::to_json(inner),
+            _ => tf_eval::value::to_json(v),
+        }
     };
     ValueRecord {
         kind: kind.into(),
         value,
         display: v.to_string(),
+        sensitive: v.is_sensitive(),
     }
 }
 
@@ -247,10 +254,36 @@ impl RuleRecord {
     }
 }
 
+/// Installed source metadata. `version` is what the manifest records, not
+/// a lock or proof of the current Git revision. `revision` is recorded by
+/// explicit fetching; ordinary scans do not rehash the installed contents.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PackageRecord {
+    pub source: String,
+    pub version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
+    pub file: String,
+    pub calls: Vec<Location>,
+}
+
+fn package_record(files: &FileTable, f: &Finding) -> Option<PackageRecord> {
+    let p = f.package.as_ref()?;
+    Some(PackageRecord {
+        source: p.source.clone(),
+        version: p.version.clone(),
+        revision: p.revision.clone(),
+        file: p.relative_file(&files.get(f.primary.file).path),
+        calls: p.calls.iter().map(|at| location(files, *at)).collect(),
+    })
+}
+
 /// One place a finding was produced: a root module and the resource
 /// instance (or file) the rule judged there.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OccurrenceRecord {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package: Option<PackageRecord>,
     pub root: String,
     /// The resource address in that root, or the file's path for a file
     /// subject.
@@ -272,6 +305,8 @@ pub struct OccurrenceRecord {
 /// and, among those, the one closest to the code.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FindingRecord {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package: Option<PackageRecord>,
     /// Stable identity across scans (see [`fingerprint`]).
     pub fingerprint: String,
     /// The rule's ID; its metadata is in the record's `rules` table.
@@ -375,8 +410,16 @@ fn local_identity(f: &Finding) -> String {
 /// The fingerprint of one finding (every occurrence of a finding has the
 /// same one).
 pub fn finding_fingerprint(files: &FileTable, f: &Finding, repos: &mut RepoRoots) -> String {
-    let file = repos.relative(&files.get(f.primary.file).path);
+    let file = finding_file_identity(files, f, repos);
     fingerprint(&f.rule, &file, &local_identity(f), f.attribute.as_deref())
+}
+
+fn finding_file_identity(files: &FileTable, f: &Finding, repos: &mut RepoRoots) -> String {
+    let path = &files.get(f.primary.file).path;
+    f.package
+        .as_ref()
+        .map(|p| p.file_identity(path))
+        .unwrap_or_else(|| repos.relative(path))
 }
 
 /// What a fix must make go away: the rule on the declaration (its
@@ -385,7 +428,12 @@ pub fn finding_fingerprint(files: &FileTable, f: &Finding, repos: &mut RepoRoots
 /// rule failing on the same declaration.
 pub fn finding_subject_key(files: &FileTable, f: &Finding, repos: &mut RepoRoots) -> String {
     let path = &files.get(f.primary.file).path;
-    let dir = repos.relative(path.parent().unwrap_or(path));
+    let parent = path.parent().unwrap_or(path);
+    let dir = f
+        .package
+        .as_ref()
+        .map(|p| p.file_identity(parent))
+        .unwrap_or_else(|| repos.relative(parent));
     fingerprint(&f.rule, &dir, &local_identity(f), None)
 }
 
@@ -402,16 +450,22 @@ pub struct Group {
 /// Group a scan's findings into findings with occurrences, ordered by
 /// file, position and rule.
 pub fn group(files: &FileTable, findings: &[Finding]) -> Vec<Group> {
-    type Key<'f> = (&'f str, tf_span::FileId, String, Option<&'f str>);
+    #[derive(PartialEq, Eq, Hash)]
+    enum FileKey {
+        Source(tf_span::FileId),
+        Installed(String),
+    }
+    type Key<'f> = (&'f str, FileKey, String, Option<&'f str>);
     let mut by_identity: HashMap<Key<'_>, usize> = HashMap::new();
     let mut groups: Vec<Vec<usize>> = Vec::new();
     for (i, f) in findings.iter().enumerate() {
-        let key = (
-            &*f.rule,
-            f.primary.file,
-            local_identity(f),
-            f.attribute.as_deref(),
-        );
+        let file = match &f.package {
+            Some(package) => {
+                FileKey::Installed(package.file_identity(&files.get(f.primary.file).path))
+            }
+            None => FileKey::Source(f.primary.file),
+        };
+        let key = (&*f.rule, file, local_identity(f), f.attribute.as_deref());
         match by_identity.entry(key) {
             std::collections::hash_map::Entry::Occupied(e) => groups[*e.get()].push(i),
             std::collections::hash_map::Entry::Vacant(e) => {
@@ -496,6 +550,7 @@ fn group_record(
 ) -> FindingRecord {
     let f = &findings[g.representative];
     FindingRecord {
+        package: package_record(files, f),
         fingerprint: finding_fingerprint(files, f, repos),
         rule: f.rule.to_string(),
         level: f.level,
@@ -514,6 +569,7 @@ fn group_record(
             .members
             .iter()
             .map(|&i| OccurrenceRecord {
+                package: package_record(files, &findings[i]),
                 root: findings[i].root.display().to_string(),
                 address: findings[i].address.to_string(),
                 certainty: findings[i].certainty,
@@ -613,6 +669,9 @@ impl StatsRecord {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ScanRecord {
     pub schema: u32,
+    /// Analysis completion, independent of the finding count.
+    #[serde(default)]
+    pub status: crate::ScanStatus,
     /// Metadata of every rule a finding names, by ID.
     pub rules: BTreeMap<String, RuleRecord>,
     pub findings: Vec<FindingRecord>,
@@ -651,6 +710,7 @@ impl ScanRecord {
             .collect();
         ScanRecord {
             schema: SCHEMA,
+            status: r.status(),
             rules,
             stats: StatsRecord::new(&r.stats, &findings),
             findings,

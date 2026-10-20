@@ -77,6 +77,41 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub fn parse_expression(mut self) -> (Expression<'a>, std::vec::Vec<Diagnostic>) {
+        self.push_mode(true);
+        let expression = self.parse_expr();
+        if self.tok.kind != Kind::Eof {
+            self.error_at_tok("unexpected tokens after expression");
+        }
+        (expression, self.errors)
+    }
+
+    pub fn parse_raw_template(mut self) -> (Expression<'a>, std::vec::Vec<Diagnostic>) {
+        self.lexer.pos = 0;
+        self.comments.clear();
+        let (template, _) = self.parse_template_top(TemplateCtx::Raw, false, 0);
+        let span = Span::new(0, self.src.len() as u32);
+        let expression = if template.elements.is_empty() {
+            Expression::String(self.boxed(StringLiteral {
+                span,
+                value: Atom::EMPTY,
+            }))
+        } else if template.elements.len() == 1
+            && matches!(template.elements[0], TemplateElement::Literal(_))
+        {
+            let TemplateElement::Literal(l) = &template.elements[0] else {
+                unreachable!()
+            };
+            Expression::String(self.boxed(StringLiteral {
+                span,
+                value: l.value,
+            }))
+        } else {
+            Expression::Template(self.boxed(TemplateExpr { span, template }))
+        };
+        (expression, self.errors)
+    }
+
     // ------------------------------------------------------------------
     // Token plumbing
     // ------------------------------------------------------------------

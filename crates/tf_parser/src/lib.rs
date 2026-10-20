@@ -17,6 +17,7 @@
 //!   `Expression::Error` placeholders where an expression was expected.
 
 pub mod dump;
+mod json_vars;
 pub mod lexer;
 mod parser;
 
@@ -54,4 +55,25 @@ pub struct ParseResult<'a> {
 /// `let file = allocator.alloc(ret.file);`.
 pub fn parse<'a>(allocator: &'a Allocator, source: &'a str) -> ParseResult<'a> {
     parser::Parser::new(allocator, source).parse_file()
+}
+
+/// Parse a JSON variable file into literal attributes. Strings and object
+/// keys are never interpreted as templates. Spans refer to the JSON bytes.
+pub use json_vars::{parse_json_value, parse_json_vars};
+
+/// Parse a standalone native expression (for JSON type/reference contexts).
+pub fn parse_expression<'a>(
+    allocator: &'a Allocator,
+    source: &'a str,
+) -> (tf_ast::Expression<'a>, Vec<Diagnostic>) {
+    parser::Parser::new(allocator, source).parse_expression()
+}
+
+/// Parse decoded template text. JSON decoding has already consumed escapes;
+/// quotes, newlines and backslashes in literal text have no special meaning.
+pub fn parse_template<'a>(
+    allocator: &'a Allocator,
+    source: &'a str,
+) -> (tf_ast::Expression<'a>, Vec<Diagnostic>) {
+    parser::Parser::new(allocator, source).parse_raw_template()
 }

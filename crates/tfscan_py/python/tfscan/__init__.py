@@ -36,6 +36,7 @@ from .expr import Expr, Rule, all_of, any_of, col, element, lit, load_rules, rul
 __version__ = "0.0.1"
 
 __all__ = [
+    "fetch",
     "scan",
     "scan_plan",
     "fix",
@@ -70,6 +71,27 @@ __all__ = [
 ]
 
 PathLike = Union[str, "os.PathLike[str]"]
+
+
+def fetch(
+    root: PathLike = ".",
+    *,
+    data_dir: Optional[PathLike] = None,
+    refresh: bool = False,
+    registry_origins: Optional[Mapping[str, str]] = None,
+) -> dict[str, Any]:
+    """Fetch module dependencies for subsequent offline scans.
+
+    Cached revisions are reused unless ``refresh=True``. Git uses the user's
+    credential helpers or SSH agent; registries use ``TF_TOKEN_<hostname>``.
+    """
+    import json
+    return json.loads(_tfscan.fetch(
+        os.fspath(root),
+        data_dir=None if data_dir is None else os.fspath(data_dir),
+        refresh=refresh,
+        registry_origins=None if registry_origins is None else dict(registry_origins),
+    ))
 
 
 class Report(NamedTuple):
@@ -211,6 +233,12 @@ class ScanResult:
         return self._inner.rule_errors
 
     @property
+    def status(self) -> str:
+        """Analysis completion: ``complete``, ``incomplete`` or ``failed``.
+        Independent of whether findings were reported."""
+        return self._inner.status
+
+    @property
     def suppressed(self) -> list[dict]:
         """Findings a ``checkov:skip`` line suppressed (``rule``,
         ``resource``, ``comment``, ``file``, ``line``)."""
@@ -262,6 +290,7 @@ def _run(
     plan: Optional[str] = None,
     source: Optional[str] = None,
     var_files: Sequence[PathLike] = (),
+    data_dir: PathLike | None = None,
     rules: Sequence[Union[Rule, CallbackRule, CompiledRule]] = (),
     builtin: bool = True,
     bundled: bool = True,
@@ -286,6 +315,7 @@ def _run(
         plan=plan,
         source=source,
         var_files=[os.fspath(v) for v in var_files],
+        data_dir=os.fspath(data_dir) if data_dir is not None else None,
         builtin=builtin,
         bundled=bundled,
         select=None if select is None else list(select),
@@ -312,6 +342,7 @@ def scan(
     *,
     recursive: bool = False,
     var_files: Sequence[PathLike] = (),
+    data_dir: PathLike | None = None,
     rules: Sequence[Union[Rule, CallbackRule, CompiledRule]] = (),
     builtin: bool = True,
     bundled: bool = True,
@@ -331,7 +362,13 @@ def scan(
 ) -> ScanResult:
     """Scan Terraform root module directories.
 
-    ``recursive``: every directory under ``path`` containing ``.tf`` files is
+    HCL/JSON configuration and ordered overrides share one source loader.
+    HCL and JSON variable files share Terraform's file precedence. Installed
+    remote modules are resolved offline; ``data_dir`` defaults to ``.terraform``
+    and is relative to each root unless absolute. Pass a custom Terraform
+    data directory explicitly, including when your workflow uses ``TF_DATA_DIR``.
+
+    ``recursive``: every directory under ``path`` containing ``.tf`` or ``.tf.json`` files is
     a root module. The rule catalog is the shipped rules (unless
     ``builtin`` is false): the seed rules and, unless ``bundled`` is false,
     the bundled Checkov catalog (Checkov 3.2.328's Terraform value checks
@@ -360,6 +397,7 @@ def scan(
         paths=_paths(path),
         recursive=recursive,
         var_files=var_files,
+        data_dir=data_dir,
         rules=rules,
         builtin=builtin,
         bundled=bundled,
@@ -385,6 +423,7 @@ def fix(
     *,
     recursive: bool = False,
     var_files: Sequence[PathLike] = (),
+    data_dir: PathLike | None = None,
     rules: Sequence[Union[Rule, CompiledRule]] = (),
     builtin: bool = True,
     bundled: bool = True,
@@ -415,8 +454,10 @@ def fix(
     Returns a dict: ``fingerprint``, ``rule``, ``file``, ``resource``,
     ``attribute``, ``action``, ``value``, ``site`` (where the literal
     went), ``original`` and ``text`` (the file before and after the edit),
-    ``diff`` (unified) and ``verified`` (the rule no longer fails on the
-    declaration in the rescan). Nothing is written: write
+    ``diff`` (unified, sensitive context masked), ``verification_errors``,
+    and ``verified`` (both scans complete and the rule no longer fails on
+    the declaration in the rescan). ``original`` and ``text`` contain raw
+    source, including secrets. Nothing is written: write
     ``text`` to ``file`` when ``verified`` is what you need. Raises
     ``ValueError`` when no finding has the fingerprint, the finding has no
     fix hint, or the scan fails."""
@@ -428,6 +469,7 @@ def fix(
         _paths(path),
         recursive=recursive,
         var_files=[os.fspath(v) for v in var_files],
+        data_dir=os.fspath(data_dir) if data_dir is not None else None,
         builtin=builtin,
         bundled=bundled,
         select=None if select is None else list(select),
@@ -452,6 +494,7 @@ def scan_plan(
     plan: PathLike,
     *,
     source: Optional[PathLike] = None,
+    data_dir: PathLike | None = None,
     rules: Sequence[Union[Rule, CallbackRule, CompiledRule]] = (),
     builtin: bool = True,
     bundled: bool = True,
@@ -472,10 +515,12 @@ def scan_plan(
     """Scan ``terraform show -json`` output. Findings are mapped back to
     ``.tf`` spans in ``source`` (default: the plan's directory when it has
     ``.tf`` files, else locations point into the JSON). The rule catalog
-    and ``select`` work as in :func:`scan`."""
+    and ``select`` work as in :func:`scan`. ``data_dir`` selects installed
+    modules for the source mapping, as in :func:`scan`."""
     return _run(
         plan=os.fspath(plan),
         source=None if source is None else os.fspath(source),
+        data_dir=data_dir,
         rules=rules,
         builtin=builtin,
         bundled=bundled,
@@ -500,10 +545,11 @@ def analyze(
     *,
     recursive: bool = False,
     var_files: Sequence[PathLike] = (),
+    data_dir: PathLike | None = None,
     threads: Optional[int] = None,
 ) -> ScanResult:
     """Build the evaluated model only (no rules); use ``.resources``."""
-    return scan(path, recursive=recursive, var_files=var_files, builtin=False, threads=threads)
+    return scan(path, recursive=recursive, var_files=var_files, data_dir=data_dir, builtin=False, threads=threads)
 
 
 def parse(source: str) -> Document:

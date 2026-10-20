@@ -113,14 +113,17 @@ impl Step {
     }
 }
 
+#[derive(Clone)]
 struct Node {
     step: Option<Step>,
     dependencies: Option<Arc<Vec<ResourceDependency>>>,
     len: u32,
+    sensitive: bool,
     prev: Option<Arc<Node>>,
 }
 
-/// A provenance chain. `Clone` is a refcount bump.
+/// A provenance chain and a sensitivity mark. The mark survives even when
+/// the bounded explanation is empty or truncated.
 #[derive(Clone, Default)]
 pub struct Prov(Option<Arc<Node>>);
 
@@ -137,6 +140,26 @@ pub struct ResourceDependency {
 impl Prov {
     pub const EMPTY: Prov = Prov(None);
 
+    pub fn is_sensitive(&self) -> bool {
+        self.0.as_ref().is_some_and(|n| n.sensitive)
+    }
+
+    pub fn with_sensitive(mut self, sensitive: bool) -> Self {
+        if self.is_sensitive() != sensitive {
+            let n = self.0.get_or_insert_with(|| {
+                Arc::new(Node {
+                    step: None,
+                    dependencies: None,
+                    len: 0,
+                    sensitive: false,
+                    prev: None,
+                })
+            });
+            Arc::make_mut(n).sensitive = sensitive;
+        }
+        self
+    }
+
     pub fn dependencies(&self) -> &[ResourceDependency] {
         self.0
             .as_ref()
@@ -151,11 +174,15 @@ impl Prov {
             step: None,
             len: self.len() as u32,
             dependencies: (!dependencies.is_empty()).then(|| Arc::new(dependencies)),
+            sensitive: self.is_sensitive(),
             prev: self.0,
         })))
     }
 
     pub(crate) fn join_dependencies(&mut self, other: &Prov) {
+        if other.is_sensitive() {
+            *self = self.clone().with_sensitive(true);
+        }
         if other.dependencies().is_empty() {
             return;
         }
@@ -176,13 +203,16 @@ impl Prov {
     }
 
     /// `self` with the dependency list of `other` (shared, not copied).
-    fn inheriting(self, other: &Prov) -> Prov {
+    fn inheriting(mut self, other: &Prov) -> Prov {
+        let sensitive = self.is_sensitive() || other.is_sensitive();
+        self = self.with_sensitive(sensitive);
         match other.0.as_ref().and_then(|n| n.dependencies.clone()) {
             None => self,
             Some(dependencies) => Prov(Some(Arc::new(Node {
                 step: None,
                 len: self.len() as u32,
                 dependencies: Some(dependencies),
+                sensitive: self.is_sensitive(),
                 prev: self.0,
             }))),
         }
@@ -194,7 +224,9 @@ impl Prov {
         let mut refs: Vec<ResourceDependency> = Vec::new();
         let mut first: Option<&'a Prov> = None;
         let mut single = true;
+        let mut sensitive = false;
         for part in parts {
+            sensitive |= part.is_sensitive();
             let deps = part.dependencies();
             if deps.is_empty() {
                 continue;
@@ -215,11 +247,12 @@ impl Prov {
                 }
             }
         }
-        match first {
+        let p = match first {
             None => Prov::EMPTY,
             Some(f) if single => Prov::EMPTY.inheriting(f),
             Some(_) => Prov::EMPTY.referencing(refs),
-        }
+        };
+        p.with_sensitive(sensitive)
     }
 
     pub fn single(step: Step) -> Prov {
@@ -253,6 +286,7 @@ impl Prov {
             step: Some(step),
             dependencies: self.0.as_ref().and_then(|n| n.dependencies.clone()),
             len,
+            sensitive: self.is_sensitive(),
             prev: self.0.clone(),
         })))
     }
@@ -276,6 +310,11 @@ impl Prov {
     pub fn steps(&self) -> Vec<Step> {
         let mut v: Vec<Step> = self.iter_newest_first().cloned().collect();
         v.reverse();
+        if self.is_sensitive() {
+            for step in &mut v {
+                step.label = format!("{} (sensitive)", step.kind.as_str()).into();
+            }
+        }
         v
     }
 
@@ -292,16 +331,21 @@ impl Prov {
         // A chain with no steps may still carry dependencies, so test the
         // node, not the step count.
         let (Some(inner), Some(container)) = (&self.0, &outer.0) else {
-            return if self.0.is_none() {
+            return (if self.0.is_none() {
                 outer.clone()
             } else {
                 self.clone()
-            };
+            })
+            .with_sensitive(self.is_sensitive() || outer.is_sensitive());
         };
         if Arc::ptr_eq(inner, container) {
-            return self.clone();
+            return self
+                .clone()
+                .with_sensitive(self.is_sensitive() || outer.is_sensitive());
         }
-        let mut r = self.clone();
+        let mut r = self
+            .clone()
+            .with_sensitive(self.is_sensitive() || outer.is_sensitive());
         if r.dependencies().is_empty() {
             r = r.inheriting(outer);
         }

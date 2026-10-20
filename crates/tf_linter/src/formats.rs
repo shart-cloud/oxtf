@@ -43,6 +43,7 @@ pub fn ndjson(r: &ScanRecord) -> String {
     line(json!({
         "type": "summary",
         "schema": r.schema,
+        "status": r.status,
         "findings": s.findings,
         "occurrences": s.occurrences,
         "definite": s.definite,
@@ -73,6 +74,9 @@ fn finding_line(f: &FindingRecord) -> J {
         "message": f.message,
         "occurrences": f.occurrences.len(),
     });
+    if let Some(package) = &f.package {
+        v["package"] = json!(package);
+    }
     if let Some(h) = &f.fix_hint {
         v["fix_hint"] = json!({
             "resource": h.resource.address,
@@ -159,6 +163,9 @@ pub fn sarif(r: &ScanRecord) -> J {
                 "certainty": f.certainty,
                 "occurrences": f.occurrences.len(),
             });
+            if let Some(package) = &f.package {
+                properties["package"] = json!(package);
+            }
             if let Some(a) = &f.attribute {
                 properties["attribute"] = J::from(a.as_str());
             }
@@ -196,6 +203,24 @@ pub fn sarif(r: &ScanRecord) -> J {
                 "associatedRule": {"id": e.rule},
             })
         })
+        .chain(r.diagnostics.iter().map(|d| {
+            let mut notification = json!({
+                "level": match d.severity.as_str() {
+                    "error" => "error",
+                    "warning" => "warning",
+                    _ => "note",
+                },
+                "descriptor": {"id": d.code},
+                "message": {"text": d.message},
+            });
+            if let Some(l) = &d.location {
+                notification["locations"] = json!([{"physicalLocation": {
+                    "artifactLocation": {"uri": uri(&l.file)},
+                    "region": region(l),
+                }}]);
+            }
+            notification
+        }))
         .collect();
     json!({
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
@@ -204,7 +229,7 @@ pub fn sarif(r: &ScanRecord) -> J {
             "tool": {"driver": {"name": "oxtf", "rules": rules}},
             "results": results,
             "invocations": [{
-                "executionSuccessful": r.rule_errors.is_empty(),
+                "executionSuccessful": r.status == crate::ScanStatus::Complete,
                 "toolExecutionNotifications": notifications,
             }],
         }],

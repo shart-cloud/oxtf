@@ -245,6 +245,7 @@ impl<'r, 'a> Evaluator<'r, 'a> {
             }
             Expression::Object(o) => {
                 let mut m = Map::new();
+                let mut keys = Prov::EMPTY;
                 for item in o.items.iter() {
                     let key: Arc<str> = match &item.key {
                         ObjectKey::Identifier(i) => Arc::from(i.name.as_str()),
@@ -253,6 +254,7 @@ impl<'r, 'a> Evaluator<'r, 'a> {
                             // text in Terraform only for provider maps; treat
                             // parenthesised / other keys as expressions.
                             let kv = self.eval(k, sc);
+                            keys = keys.joined(&kv.prov);
                             match kv.to_str() {
                                 Some(s) => s,
                                 None => return non_known_or(&kv, "object key is not a string"),
@@ -261,7 +263,7 @@ impl<'r, 'a> Evaluator<'r, 'a> {
                     };
                     m.insert(key, self.eval(&item.value, sc));
                 }
-                Value::object(m)
+                Value::object(m).with_prov(keys)
             }
             Expression::For(f) => self.eval_for(f, sc),
             Expression::Conditional(c) => {
@@ -289,14 +291,26 @@ impl<'r, 'a> Evaluator<'r, 'a> {
                 let l = self.eval(&b.left, sc);
                 // Kleene short-circuit for && / ||.
                 match (b.operator, l.as_bool()) {
-                    (BinaryOperator::And, Some(false)) => return Value::bool(false),
-                    (BinaryOperator::Or, Some(true)) => return Value::bool(true),
+                    (BinaryOperator::And, Some(false)) => {
+                        return Value::bool(false).inherit_sensitive(&l);
+                    }
+                    (BinaryOperator::Or, Some(true)) => {
+                        return Value::bool(true).inherit_sensitive(&l);
+                    }
                     _ => {}
                 }
                 let r = self.eval(&b.right, sc);
                 match (b.operator, r.as_bool()) {
-                    (BinaryOperator::And, Some(false)) => return Value::bool(false),
-                    (BinaryOperator::Or, Some(true)) => return Value::bool(true),
+                    (BinaryOperator::And, Some(false)) => {
+                        return Value::bool(false)
+                            .inherit_sensitive(&l)
+                            .inherit_sensitive(&r);
+                    }
+                    (BinaryOperator::Or, Some(true)) => {
+                        return Value::bool(true)
+                            .inherit_sensitive(&l)
+                            .inherit_sensitive(&r);
+                    }
                     _ => {}
                 }
                 binary(b.operator, &l, &r)
@@ -314,7 +328,7 @@ impl<'r, 'a> Evaluator<'r, 'a> {
         t: impl FnOnce() -> Value,
         f: impl FnOnce() -> Value,
     ) -> Value {
-        match &cond.kind {
+        let value = match &cond.kind {
             Kind::Known(_) => match cond.as_bool() {
                 Some(true) => t(),
                 Some(false) => f(),
@@ -333,7 +347,8 @@ impl<'r, 'a> Evaluator<'r, 'a> {
             }
             Kind::Unknown(_) if cond.is_error() => cond.clone(),
             Kind::Unknown(_) => Value::one_of(vec![t(), f()], false),
-        }
+        };
+        value.inherit_sensitive(cond)
     }
 
     /// Apply traversal operators to a value.
@@ -380,7 +395,8 @@ impl<'r, 'a> Evaluator<'r, 'a> {
     }
 
     fn splat(&self, v: Value, rest: &'a [TraversalOperator<'a>], sc: Scope<'_>) -> Value {
-        match &v.kind {
+        let sensitive = v.is_sensitive();
+        let result = match &v.kind {
             Kind::Known(Known::Null) => Value::list(vec![]),
             Kind::Known(Known::List(items)) => Value::list(
                 items
@@ -397,6 +413,11 @@ impl<'r, 'a> Evaluator<'r, 'a> {
                 o.tainted,
             ),
             Kind::Unknown(_) | Kind::Tainted(_) => v,
+        };
+        if sensitive {
+            result.sensitive()
+        } else {
+            result
         }
     }
 
@@ -404,20 +425,35 @@ impl<'r, 'a> Evaluator<'r, 'a> {
         let mut last = Value::error("try: no arguments succeeded");
         let mut successes = Vec::new();
         let mut tainted = false;
+        let mut sensitive = false;
         for a in args {
-            let outcome = try_outcome(&self.eval(a, sc));
+            let value = self.eval(a, sc);
+            sensitive |= value.is_sensitive();
+            let outcome = try_outcome(&value);
             if let Some(value) = outcome.value {
                 successes.push(value);
                 tainted |= outcome.tainted;
             }
             match outcome.error {
                 // No failing alternatives remain: do not evaluate any fallback.
-                None => return Value::one_of(successes, tainted),
+                None => {
+                    let result = Value::one_of(successes, tainted);
+                    return if sensitive {
+                        result.sensitive()
+                    } else {
+                        result
+                    };
+                }
                 Some(error) => last = error,
             }
         }
         successes.push(last);
-        Value::one_of(successes, tainted)
+        let result = Value::one_of(successes, tainted);
+        if sensitive {
+            result.sensitive()
+        } else {
+            result
+        }
     }
 
     fn eval_can(&self, args: &'a [Expression<'a>], sc: Scope<'_>) -> Value {
@@ -425,16 +461,16 @@ impl<'r, 'a> Evaluator<'r, 'a> {
             return Value::error("can: missing argument");
         };
         let v = self.eval(a, sc);
-        if contains_error(&v) {
+        let result = if contains_error(&v) {
             Value::bool(false)
         } else if v.is_wholly_known() {
             Value::bool(true)
-        } else if v.is_tainted() {
-            v
         } else {
-            // Approximation: partially-unknown values are assumed valid.
-            Value::bool(true)
-        }
+            // Unknown results (including analysis limits) do not establish
+            // whether evaluation will succeed once their inputs are known.
+            v.clone()
+        };
+        result.inherit_sensitive(&v)
     }
 
     fn eval_for(&self, f: &'a ForExpr<'a>, sc: Scope<'_>) -> Value {
@@ -462,7 +498,7 @@ impl<'r, 'a> Evaluator<'r, 'a> {
             }
             Kind::Unknown(_) | Kind::Tainted(_) => return coll,
         };
-        self.eval_for_items(f, items, sc)
+        self.eval_for_items(f, items, sc).inherit_sensitive(&coll)
     }
 
     fn eval_for_over(&self, f: &'a ForExpr<'a>, coll: Value, sc: Scope<'_>) -> Value {
@@ -479,7 +515,7 @@ impl<'r, 'a> Evaluator<'r, 'a> {
             Kind::Known(_) => return Value::error("for: collection is not iterable"),
             _ => return coll,
         };
-        self.eval_for_items(f, items, sc)
+        self.eval_for_items(f, items, sc).inherit_sensitive(&coll)
     }
 
     fn eval_for_items(
@@ -502,6 +538,9 @@ impl<'r, 'a> Evaluator<'r, 'a> {
                     .condition
                     .as_ref()
                     .map_or_else(|| Value::bool(true), |c| self.eval(c, s));
+                prov = prov
+                    .clone()
+                    .with_sensitive(prov.is_sensitive() || condition.is_sensitive());
                 if condition.is_error() {
                     return Err(condition);
                 }
@@ -515,6 +554,9 @@ impl<'r, 'a> Evaluator<'r, 'a> {
                 let key = match &f.key_expr {
                     Some(ke) => {
                         let kv = self.eval(ke, s);
+                        prov = prov
+                            .clone()
+                            .with_sensitive(prov.is_sensitive() || kv.is_sensitive());
                         match kv.to_str() {
                             Some(x) => Some(x),
                             None => return Err(non_known_or(&kv, "for: key is not a string")),
@@ -538,7 +580,7 @@ impl<'r, 'a> Evaluator<'r, 'a> {
                             return if tainted {
                                 Value::tainted("(conditional for filter)")
                             } else {
-                                Value::other("for: too many filter alternatives")
+                                Value::limit("for: too many filter alternatives")
                             }
                             .with_prov(prov);
                         }
@@ -699,7 +741,7 @@ fn concat_parts(parts: &[Part]) -> Value {
                     _ => (vec![v.clone()], false),
                 };
                 if alts.len() * choices.len() > MAX_ALTERNATIVES {
-                    return Value::other("template: too many alternatives");
+                    return Value::limit("template: too many alternatives");
                 }
                 let mut next = Vec::with_capacity(alts.len() * choices.len());
                 for a in &alts {
@@ -855,7 +897,7 @@ pub fn dominant_non_known<'v>(vals: impl IntoIterator<Item = &'v Value>) -> Opti
 
 /// Lift a unary operation over OneOf / non-Known values.
 pub fn lift1(v: &Value, f: &dyn Fn(&Value) -> Value) -> Value {
-    match &v.kind {
+    let result = match &v.kind {
         Kind::Known(_) => f(v),
         Kind::OneOf(o) => Value::one_of(
             o.alternatives
@@ -865,15 +907,16 @@ pub fn lift1(v: &Value, f: &dyn Fn(&Value) -> Value) -> Value {
             o.tainted,
         ),
         _ => v.clone(),
-    }
+    };
+    result.inherit_sensitive(v)
 }
 
 /// Lift a binary operation.
 pub fn lift2(a: &Value, b: &Value, f: &dyn Fn(&Value, &Value) -> Value) -> Value {
     if let Some(nk) = dominant_non_known([a, b]) {
-        return nk;
+        return nk.inherit_sensitive(a).inherit_sensitive(b);
     }
-    match (&a.kind, &b.kind) {
+    let result = match (&a.kind, &b.kind) {
         (Kind::OneOf(o), _) => Value::one_of(
             o.alternatives
                 .iter()
@@ -889,7 +932,8 @@ pub fn lift2(a: &Value, b: &Value, f: &dyn Fn(&Value, &Value) -> Value) -> Value
             o.tainted,
         ),
         _ => f(a, b),
-    }
+    };
+    result.inherit_sensitive(a).inherit_sensitive(b)
 }
 
 pub fn binary(op: BinaryOperator, l: &Value, r: &Value) -> Value {

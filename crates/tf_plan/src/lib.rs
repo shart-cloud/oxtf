@@ -7,7 +7,7 @@
 //! ```no_run
 //! use tf_plan::{scan_plan, PlanOptions};
 //! let linter = tf_linter::Linter::with_seed_rules();
-//! let opts = PlanOptions { source: Some("infra/".into()) };
+//! let opts = PlanOptions { source: Some("infra/".into()), ..PlanOptions::default() };
 //! let r = scan_plan(&linter, "plan.json".as_ref(), &opts).unwrap();
 //! for f in &r.findings {
 //!     println!("{}", tf_linter::render::render_finding(&r.files, f, false));
@@ -71,6 +71,7 @@ pub struct PlanOptions {
     /// spans. `None`: the plan file's directory if it contains `.tf` files,
     /// else no source (spans point into the plan JSON).
     pub source: Option<PathBuf>,
+    pub data_dir: Option<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -122,11 +123,58 @@ pub fn load_plan(
         };
         has_tf_files(files, dir).then(|| dir.to_path_buf())
     });
-    let source = source_dir
-        .as_ref()
-        .map(|d| analyze_module(d, &AnalyzeOptions::default(), files));
+    let source = source_dir.as_ref().map(|d| {
+        analyze_module(
+            d,
+            &AnalyzeOptions {
+                data_dir: opts.data_dir.clone(),
+                ..AnalyzeOptions::default()
+            },
+            files,
+        )
+    });
     let b = Builder::new(&plan, plan_file.id, &plan_file.text, source.as_ref());
-    Ok(b.build(source_dir.unwrap_or_else(|| path.to_path_buf())))
+    let analysis = b.build(source_dir.unwrap_or_else(|| path.to_path_buf()));
+    fn mark_body(body: &Body, files: &FileTable) {
+        for a in &body.attrs {
+            if a.value.is_sensitive() {
+                files.mark_sensitive(a.span);
+                for step in a.value.prov.steps() {
+                    files.mark_sensitive(step.at);
+                }
+            }
+        }
+        for b in &body.blocks {
+            mark_body(&b.body, files);
+        }
+    }
+    fn has_sensitive_metadata(value: &J) -> bool {
+        match value {
+            J::Object(map) => map.iter().any(|(key, value)| {
+                (matches!(
+                    key.as_str(),
+                    "sensitive" | "sensitive_values" | "after_sensitive" | "before_sensitive"
+                ) && any_true(value))
+                    || has_sensitive_metadata(value)
+            }),
+            J::Array(values) => values.iter().any(has_sensitive_metadata),
+            _ => false,
+        }
+    }
+    if analysis.modules.iter().any(Module::is_sensitive) || has_sensitive_metadata(&plan) {
+        // Plan source locations can refer to whole resource objects. Never
+        // show raw JSON context from a plan containing sensitive values.
+        files.mark_sensitive(FileSpan::new(
+            plan_file.id,
+            Span::new(0, plan_file.text.len() as u32),
+        ));
+    }
+    for m in &analysis.modules {
+        for r in &m.resources {
+            mark_body(&r.body, files);
+        }
+    }
+    Ok(analysis)
 }
 
 /// Read a plan and run `linter` over it.
@@ -149,7 +197,8 @@ pub fn scan_plan_with_model(
 ) -> Result<(ScanResult, Analysis), PlanError> {
     let start = Instant::now();
     let a = load_plan(path, opts, &files)?;
-    let out = linter.run(&a);
+    let mut out = linter.run(&a);
+    tf_linter::engine::protect_fix_hints(&mut out.findings, &a, &files);
     // No parsed modules here: only skips in a resource's own block apply.
     let (findings, suppressed) = tf_linter::suppress::checkov_skips(out.findings, &a, &files, None);
     let stats = ScanStats {
@@ -178,7 +227,7 @@ fn has_tf_files(files: &FileTable, dir: &Path) -> bool {
     files
         .read_dir(dir)
         .iter()
-        .any(|p| p.extension().is_some_and(|x| x == "tf"))
+        .any(|p| tf_semantic::module::is_config(p))
 }
 
 // ---------------------------------------------------------------------------
@@ -224,6 +273,7 @@ struct Builder<'p> {
 
 static NULL: J = J::Null;
 static FALSE: J = J::Bool(false);
+static TRUE: J = J::Bool(true);
 
 impl<'p> Builder<'p> {
     fn new(
@@ -326,6 +376,7 @@ impl<'p> Builder<'p> {
                         .map(|m| m.dir.clone())
                         .unwrap_or_else(|| root_dir.clone()),
                     parent: parent_module(a).and_then(|p| index.get(p.as_str()).copied()),
+                    package: src.and_then(|m| m.package.clone()),
                     resources: Vec::new(),
                     variables: self.variables(a, src),
                     outputs: Vec::new(),
@@ -437,7 +488,8 @@ impl<'p> Builder<'p> {
                 .iter()
                 .map(|v| VariableInfo {
                     name: v.name.clone(),
-                    value: Value::other("module input (not recorded in plan JSON)"),
+                    value: Value::other("module input (not recorded in plan JSON)")
+                        .inherit_sensitive(&v.value),
                     span: v.span,
                 })
                 .collect();
@@ -452,9 +504,22 @@ impl<'p> Builder<'p> {
                     .find(|sv| &*sv.name == name)
                     .map(|sv| sv.span)
                     .unwrap_or_else(|| self.plan_span(&format!("\"{name}\"")));
-                let value = json_value(v.get("value").unwrap_or(&NULL), &FALSE, &FALSE, &|_| {
-                    Origin::Other("unknown".into())
-                })
+                let sensitive = self
+                    .plan
+                    .pointer("/configuration/root_module/variables")
+                    .and_then(|vars| vars.get(name))
+                    .and_then(|v| v.get("sensitive"))
+                    .and_then(J::as_bool)
+                    == Some(true)
+                    || src_vars
+                        .iter()
+                        .any(|v| &*v.name == name && v.value.is_sensitive());
+                let value = json_value(
+                    v.get("value").unwrap_or(&NULL),
+                    &FALSE,
+                    if sensitive { &TRUE } else { &FALSE },
+                    &|_| Origin::Other("unknown".into()),
+                )
                 .with_prov(Prov::single(Step::new(
                     StepKind::Variable,
                     span,
@@ -776,7 +841,15 @@ impl<'p> Builder<'p> {
         for name in names {
             let av = after.get(name).unwrap_or(&NULL);
             let uv = unknown.get(name).unwrap_or(&FALSE);
-            let sv = sensitive.get(name).unwrap_or(&FALSE);
+            let sv = if sensitive.as_bool() == Some(true)
+                || schema
+                    .and_then(|s| s.attribute(name))
+                    .is_some_and(|a| a.is_sensitive())
+            {
+                &TRUE
+            } else {
+                sensitive.get(name).unwrap_or(&FALSE)
+            };
             let expr = exprs.and_then(|e| e.get(name));
             let wholly_unknown = uv.as_bool() == Some(true);
             if top && wholly_unknown && expr.is_none() {
@@ -796,7 +869,17 @@ impl<'p> Builder<'p> {
                     J::Array(a) => a
                         .iter()
                         .enumerate()
-                        .map(|(i, e)| (e, uv.get(i).unwrap_or(&FALSE), sv.get(i).unwrap_or(&FALSE)))
+                        .map(|(i, e)| {
+                            (
+                                e,
+                                uv.get(i).unwrap_or(&FALSE),
+                                if sv.as_bool() == Some(true) {
+                                    sv
+                                } else {
+                                    sv.get(i).unwrap_or(&FALSE)
+                                },
+                            )
+                        })
                         .collect(),
                     J::Object(_) => vec![(av, uv, sv)],
                     _ => Vec::new(),
@@ -1161,9 +1244,14 @@ fn any_true(j: &J) -> bool {
 fn json_value(j: &J, unknown: &J, sensitive: &J, origin: &dyn Fn(&str) -> Origin) -> Value {
     fn go(j: &J, u: &J, s: &J, path: &mut String, origin: &dyn Fn(&str) -> Origin) -> Value {
         if u.as_bool() == Some(true) {
-            return Value::unknown(origin(path));
+            let value = Value::unknown(origin(path));
+            return if s.as_bool() == Some(true) {
+                value.sensitive()
+            } else {
+                value
+            };
         }
-        match j {
+        let value = match j {
             J::Null => Value::null(),
             J::Bool(b) => Value::bool(*b),
             J::Number(n) => Value::number(n.as_f64().unwrap_or(f64::NAN)),
@@ -1209,6 +1297,11 @@ fn json_value(j: &J, unknown: &J, sensitive: &J, origin: &dyn Fn(&str) -> Origin
                 }
                 Value::object(m)
             }
+        };
+        if s.as_bool() == Some(true) {
+            value.sensitive()
+        } else {
+            value
         }
     }
     go(j, unknown, sensitive, &mut String::new(), origin)
@@ -1255,6 +1348,8 @@ mod tests {
         let v = json_value(&after, &unknown, &sens, &|p| Origin::Other(p.into()));
         let m = v.as_object().unwrap();
         assert_eq!(m["a"].as_str(), Some("x"));
+        assert!(m["a"].is_sensitive());
+        assert!(v.is_sensitive());
         let l = m["l"].as_list().unwrap();
         assert_eq!(l[0].as_str(), Some("1"));
         assert!(matches!(l[1].origin(), Some(Origin::Other(p)) if &**p == ".l[1]"));

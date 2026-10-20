@@ -83,6 +83,7 @@ pub enum LitStop {
 #[derive(Debug, Clone, Copy)]
 pub enum TemplateCtx<'d> {
     Quoted,
+    Raw,
     Heredoc { delimiter: &'d str },
 }
 
@@ -462,7 +463,7 @@ impl<'s> Lexer<'s> {
                     TemplateCtx::Quoted => {
                         return finish(self, p, LitStop::Newline, p, decoded, seg, bad_escape);
                     }
-                    TemplateCtx::Heredoc { .. } => {
+                    TemplateCtx::Heredoc { .. } | TemplateCtx::Raw => {
                         p += 1;
                         at_line_start = true;
                     }

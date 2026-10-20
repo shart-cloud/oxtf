@@ -62,7 +62,7 @@ impl LoadedModule {
     }
 }
 
-/// A standalone file (a `.tfvars`) parsed into its own arena.
+/// A standalone HCL or JSON variable file parsed into its own arena.
 pub struct ParsedFile<'a> {
     pub file: &'a tf_ast::File<'a>,
     pub errors: Vec<(FileSpan, String)>,
@@ -81,7 +81,18 @@ impl LoadedFile {
     fn new(sf: &Arc<SourceFile>) -> Self {
         let alloc = Box::new(Allocator::new());
         let mut errors = Vec::new();
-        let file = parse_file(&alloc, sf, &mut errors);
+        let file = if sf.path.extension().is_some_and(|ext| ext == "json") {
+            let text = alloc.alloc_str(&sf.text);
+            let ret = tf_parser::parse_json_vars(&alloc, text);
+            errors.extend(
+                ret.errors
+                    .into_iter()
+                    .map(|e| (FileSpan::new(sf.id, e.span), e.message)),
+            );
+            alloc.alloc(ret.file)
+        } else {
+            parse_file(&alloc, sf, &mut errors)
+        };
         // SAFETY: as for `LoadedModule::new`.
         let parsed: ParsedFile<'static> =
             unsafe { std::mem::transmute(ParsedFile { file, errors }) };
@@ -122,8 +133,9 @@ impl ModuleStore {
         self.modules.insert(dir, Box::new(loaded)).def()
     }
 
-    /// `sf` parsed as a file on its own, loaded on first request.
-    pub fn file(&self, sf: &Arc<SourceFile>) -> &ParsedFile<'_> {
+    /// `sf` parsed as a variable file, loaded on first request. JSON strings
+    /// are literal here; configuration uses the module loader instead.
+    pub fn variable_file(&self, sf: &Arc<SourceFile>) -> &ParsedFile<'_> {
         if let Some(f) = self.files.get(&sf.path) {
             return f.parsed();
         }

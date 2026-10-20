@@ -15,6 +15,7 @@ use tf_schema::Member;
 use tf_span::{FileId, FileSpan, Span};
 
 use crate::address::{Address, InstanceKey};
+use crate::installed::{InstalledModules, InstalledPackage};
 use crate::model::{self, AnalysisStats, Attr, DiagSeverity, Diagnostic};
 use crate::module::{
     Mode, ModuleDef, ModuleSource, ResourceDecl, SymbolRef, auto_tfvars, module_files,
@@ -25,14 +26,19 @@ use crate::store::ModuleStore;
 /// Options for [`analyze_module`].
 #[derive(Clone, Debug)]
 pub struct AnalyzeOptions {
-    /// Extra `-var-file`s, applied after `terraform.tfvars` and
-    /// `*.auto.tfvars` (later wins).
+    /// Extra `-var-file`s, applied after default and auto HCL/JSON
+    /// variable files (later wins).
     pub var_files: Vec<PathBuf>,
-    /// Maximum depth of local child modules followed.
+    /// Terraform data directory, relative to each root unless absolute.
+    pub data_dir: Option<PathBuf>,
+    /// Maximum depth of local and installed child modules followed.
     pub max_module_depth: usize,
-    /// `for_each` / `dynamic` collections larger than this are evaluated as
+    /// `count` / `for_each` / `dynamic` collections larger than this are evaluated as
     /// one abstract instance instead of being expanded.
     pub max_expand: usize,
+    /// Total resource and child-module instances per root. Bounds products of
+    /// nested expansions independently of the per-declaration limit.
+    pub max_instances: usize,
     /// Also evaluate what only whole-file rules read: every `locals`
     /// entry ([`model::Module::locals`]) and every module-call argument
     /// ([`model::ModuleCallInfo::arguments`]). Off by default: unused
@@ -44,8 +50,10 @@ impl Default for AnalyzeOptions {
     fn default() -> Self {
         AnalyzeOptions {
             var_files: Vec::new(),
+            data_dir: None,
             max_module_depth: 10,
             max_expand: 64,
+            max_instances: 16_384,
             whole_files: false,
         }
     }
@@ -67,7 +75,7 @@ pub struct ObservedAttr<'x, 'e> {
 
 pub type Observer<'o> = &'o mut dyn FnMut(&ObservedAttr<'_, '_>);
 
-/// Analyse the root module in `dir` (and every local child module it
+/// Analyse the root module in `dir` (and every available child module it
 /// calls).
 pub fn analyze_module(dir: &Path, opts: &AnalyzeOptions, files: &FileTable) -> model::Analysis {
     analyze_module_observed(dir, opts, files, None)
@@ -109,14 +117,14 @@ enum Slot {
 
 #[derive(Clone)]
 struct InstBind {
-    key: Option<Arc<str>>,
+    key: Option<InstanceKey>,
     binds: Vec<(&'static str, Value)>,
     existence: Truth,
 }
 
-type Children = Option<Rc<Vec<(Option<Arc<str>>, usize)>>>;
-type ResAttrKey = (usize, Option<Arc<str>>, String);
-type Expansion = (Vec<InstBind>, Option<Value>, Option<Value>);
+type Children = Option<Rc<Vec<(Option<InstanceKey>, usize)>>>;
+type ResAttrKey = (usize, Option<InstanceKey>, String);
+type Expansion = (Vec<InstBind>, Option<Value>, Option<Value>, bool);
 
 struct Instance<'a> {
     def: &'a ModuleDef<'a>,
@@ -125,7 +133,9 @@ struct Instance<'a> {
     binds: Vec<(&'static str, Value)>,
     existence: Truth,
     ancestors: Vec<PathBuf>,
+    package: Option<InstalledPackage>,
     children: RefCell<HashMap<usize, Children>>,
+    limited_children: RefCell<Vec<usize>>,
     vars: RefCell<HashMap<String, Slot>>,
     locals: RefCell<HashMap<String, Slot>>,
     outputs: RefCell<HashMap<String, Slot>>,
@@ -154,6 +164,7 @@ struct Analyzer<'a, 'o> {
     files: &'a FileTable,
     opts: &'a AnalyzeOptions,
     root_dir: PathBuf,
+    installed: InstalledModules<'a>,
     /// Definitions this root has taken from the store, by directory; the
     /// store's lookup is a lock and a hash, this one is a hash.
     defs: RefCell<HashMap<PathBuf, &'a ModuleDef<'a>>>,
@@ -163,6 +174,7 @@ struct Analyzer<'a, 'o> {
     depth: Cell<u32>,
     observer: RefCell<Option<Observer<'o>>>,
     attr_count: Cell<usize>,
+    expanded: Cell<usize>,
 }
 
 fn header_span(b: &tf_ast::Block<'_>) -> Span {
@@ -188,6 +200,50 @@ fn snippet(text: &str, span: Span, max: usize) -> String {
     }
 }
 
+fn instance_key(value: &Value, counted: bool) -> Option<InstanceKey> {
+    if counted {
+        let n = value.as_number()?;
+        (n.is_finite() && n >= 0.0 && n.fract() == 0.0 && n < u64::MAX as f64)
+            .then_some(InstanceKey::Index(n as u64))
+    } else {
+        value.to_str().map(InstanceKey::Key)
+    }
+}
+
+fn reference_value(mut value: Value, dependencies: &[tf_eval::prov::ResourceDependency]) -> Value {
+    // A resource traversal refers to this instance even when its configured
+    // attribute was computed from another resource or contains nested values.
+    value.kind = match value.kind {
+        Kind::Known(Known::List(items)) => Kind::Known(Known::List(Arc::new(
+            items
+                .iter()
+                .map(|v| reference_value(v.clone(), dependencies))
+                .collect(),
+        ))),
+        Kind::Known(Known::Object(items)) => Kind::Known(Known::Object(Arc::new(
+            items
+                .iter()
+                .map(|(k, v)| (k.clone(), reference_value(v.clone(), dependencies)))
+                .collect(),
+        ))),
+        Kind::Known(Known::Json(inner)) => Kind::Known(Known::Json(Arc::new(reference_value(
+            (*inner).clone(),
+            dependencies,
+        )))),
+        Kind::OneOf(one) => Kind::OneOf(Arc::new(tf_eval::value::OneOf {
+            alternatives: one
+                .alternatives
+                .iter()
+                .map(|v| reference_value(v.clone(), dependencies))
+                .collect(),
+            tainted: one.tainted,
+        })),
+        other => other,
+    };
+    value.prov = value.prov.referencing(dependencies.to_vec());
+    value
+}
+
 impl<'a, 'o> Analyzer<'a, 'o> {
     fn new(
         store: &'a ModuleStore,
@@ -204,7 +260,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         for p in var_files {
             match files.load(&p) {
                 Ok(sf) => {
-                    let parsed = store.file(&sf);
+                    let parsed = store.variable_file(&sf);
                     for (at, m) in &parsed.errors {
                         diags.push(Diagnostic {
                             severity: DiagSeverity::Error,
@@ -233,6 +289,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
             store,
             files,
             opts,
+            installed: InstalledModules::new(&root_dir, opts.data_dir.as_deref(), files),
             root_dir,
             defs: RefCell::new(HashMap::default()),
             insts: RefCell::new(Vec::new()),
@@ -241,6 +298,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
             depth: Cell::new(0),
             observer: RefCell::new(observer),
             attr_count: Cell::new(0),
+            expanded: Cell::new(0),
         }
     }
 
@@ -267,6 +325,25 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         for (at, m) in &d.parse_errors {
             self.diag(DiagSeverity::Error, "parse-error", m.clone(), Some(*at));
         }
+        for message in &d.load_errors {
+            self.diag(DiagSeverity::Error, "read-error", message.clone(), None);
+        }
+        if d.files.is_empty() {
+            self.diag(
+                DiagSeverity::Warning,
+                "coverage-no-input",
+                format!("no supported Terraform configuration in {}", dir.display()),
+                None,
+            );
+        }
+        if let Some(error) = self.files.listing_error(dir) {
+            self.diag(
+                DiagSeverity::Error,
+                "read-error",
+                format!("{}: {error}", dir.display()),
+                None,
+            );
+        }
         self.defs.borrow_mut().insert(dir.to_path_buf(), d);
         d
     }
@@ -282,6 +359,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         parent: Option<(usize, usize)>,
         bind: InstBind,
         ancestors: Vec<PathBuf>,
+        package: Option<InstalledPackage>,
     ) -> usize {
         let inst = Instance {
             def,
@@ -290,7 +368,9 @@ impl<'a, 'o> Analyzer<'a, 'o> {
             binds: bind.binds,
             existence: bind.existence,
             ancestors,
+            package,
             children: RefCell::new(HashMap::default()),
+            limited_children: RefCell::new(Vec::new()),
             vars: RefCell::new(HashMap::default()),
             locals: RefCell::new(HashMap::default()),
             outputs: RefCell::new(HashMap::default()),
@@ -314,6 +394,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                 existence: Truth::True,
             },
             vec![self.root_dir.clone()],
+            None,
         );
         // Instantiate the whole tree (children are created lazily, so force
         // them breadth-first).
@@ -379,7 +460,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
             };
         }
         if self.depth.get() > MAX_DEPTH {
-            return Value::error(format!("evaluation too deep at {}", what()));
+            return Value::limit(format!("evaluation too deep at {}", what()));
         }
         map.borrow_mut().insert(key(), Slot::Busy);
         self.depth.set(self.depth.get() + 1);
@@ -410,10 +491,14 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                 let var_step = |label: String| Step::new(StepKind::Variable, header, label);
                 let from_default = || -> Option<Value> {
                     let d = decl.default?;
-                    let v = self.eval_const(decl.file, &d.value);
+                    let file = inst.def.origins.file(d, decl.file);
+                    let v = decl
+                        .default_value
+                        .clone()
+                        .unwrap_or_else(|| self.eval_const(file, &d.value));
                     Some(v.push(Step::new(
                         StepKind::VariableDefault,
-                        FileSpan::new(decl.file, d.span),
+                        FileSpan::new(file, d.span),
                         format!("variable {name} default"),
                     )))
                 };
@@ -446,12 +531,13 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                         let call = &parent.def.module_calls[ci];
                         match call.block.body.find_attribute(name) {
                             Some(arg) => {
+                                let file = parent.def.origins.file(arg, call.file);
                                 let v = Scope::EMPTY.with_all(&inst.binds, |sc| {
-                                    self.eval(pid, call.file, &arg.value, sc)
+                                    self.eval(pid, file, &arg.value, sc)
                                 });
                                 v.push(Step::new(
                                     StepKind::ModuleArgument,
-                                    FileSpan::new(call.file, arg.span),
+                                    FileSpan::new(file, arg.span),
                                     format!(
                                         "{}module.{} argument {name}",
                                         parent.prefix(),
@@ -475,7 +561,18 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                 } else {
                     v
                 };
-                convert_to_type(v, decl.ty)
+                // Overrides replace the constraint but retain the original
+                // declaration's optional defaults for all runtime inputs.
+                let mut v = if let Some(defaults) = inst.def.origins.type_defaults(decl.block) {
+                    convert_to_type(defaults.apply(v), decl.ty, false)
+                } else {
+                    convert_to_type(v, decl.ty, true)
+                };
+                if declared_sensitive(&decl.block.body) {
+                    v = v.sensitive();
+                }
+                self.mark_sensitive(&v);
+                v
             },
         )
     }
@@ -492,11 +589,13 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                     return Value::error(format!("reference to undeclared local value \"{name}\""));
                 };
                 let v = self.eval(inst_id, decl.file, &decl.attr.value, Scope::EMPTY);
-                v.push(Step::new(
+                let v = v.push(Step::new(
                     StepKind::Local,
                     FileSpan::new(decl.file, decl.attr.span),
                     format!("local.{name}"),
-                ))
+                ));
+                self.mark_sensitive(&v);
+                v
             },
         )
     }
@@ -515,10 +614,18 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                 let Some(va) = decl.value else {
                     return Value::error("output without value");
                 };
-                let v = self.eval(inst_id, decl.file, &va.value, Scope::EMPTY);
+                let file = inst.def.origins.file(va, decl.file);
+                let mut v = self.eval(inst_id, file, &va.value, Scope::EMPTY);
+                if declared_sensitive(&decl.block.body) {
+                    v = v.sensitive();
+                }
+                if v.is_sensitive() {
+                    self.files.mark_sensitive(FileSpan::new(file, va.span));
+                    self.mark_sensitive(&v);
+                }
                 v.push(Step::new(
                     StepKind::Output,
-                    FileSpan::new(decl.file, va.span),
+                    FileSpan::new(file, va.span),
                     format!(
                         "{}output {name}",
                         if inst.address.is_empty() {
@@ -534,7 +641,27 @@ impl<'a, 'o> Analyzer<'a, 'o> {
 
     // ---- count / for_each -----------------------------------------------
 
-    fn expand(
+    fn expand(&self, inst_id: usize, file: FileId, body: &'a Body<'a>, sc: Scope<'_>) -> Expansion {
+        let (mut binds, count, each) = self.expand_inner(inst_id, file, body, sc);
+        let limited = binds.len() > self.opts.max_instances.saturating_sub(self.expanded.get());
+        if limited {
+            self.diag(
+                DiagSeverity::Warning,
+                "coverage-expansion",
+                format!(
+                    "root exceeds the {} total instance limit",
+                    self.opts.max_instances
+                ),
+                Some(FileSpan::new(file, body.span)),
+            );
+            binds.clear();
+        } else {
+            self.expanded.set(self.expanded.get() + binds.len());
+        }
+        (binds, count, each, limited)
+    }
+
+    fn expand_inner(
         &self,
         inst_id: usize,
         file: FileId,
@@ -547,6 +674,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
             existence: Truth::True,
         };
         if let Some(c) = body.find_attribute("count") {
+            let file = self.inst(inst_id).def.origins.file(c, file);
             let v = self.eval(inst_id, file, &c.value, sc);
             let abstract_count = |existence: Truth| InstBind {
                 key: None,
@@ -561,14 +689,40 @@ impl<'a, 'o> Analyzer<'a, 'o> {
             };
             let r = match &v.kind {
                 Kind::Known(_) => match v.as_number() {
-                    Some(n) if n <= 0.0 => vec![],
-                    Some(1.0) => vec![InstBind {
-                        key: None,
-                        binds: vec![("count", obj1("index", Value::number(0.0)))],
-                        existence: Truth::True,
-                    }],
-                    Some(_) => vec![abstract_count(Truth::True)],
-                    None => vec![abstract_count(Truth::Unknown)],
+                    Some(n) if n.is_finite() && n >= 0.0 && n.fract() == 0.0 => {
+                        if n <= self.opts.max_expand as f64 {
+                            (0..n as u64)
+                                .map(|index| InstBind {
+                                    key: Some(InstanceKey::Index(index)),
+                                    binds: vec![(
+                                        "count",
+                                        obj1("index", Value::number(index as f64)),
+                                    )],
+                                    existence: Truth::True,
+                                })
+                                .collect()
+                        } else {
+                            self.diag(
+                                DiagSeverity::Warning,
+                                "coverage-count",
+                                format!(
+                                    "count exceeds the {} instance limit",
+                                    self.opts.max_expand
+                                ),
+                                Some(FileSpan::new(file, c.span)),
+                            );
+                            vec![abstract_count(Truth::True)]
+                        }
+                    }
+                    _ => {
+                        self.diag(
+                            DiagSeverity::Error,
+                            "invalid-count",
+                            "count must be a nonnegative whole number".into(),
+                            Some(FileSpan::new(file, c.span)),
+                        );
+                        vec![abstract_count(Truth::Unknown)]
+                    }
                 },
                 Kind::Tainted(_) => vec![abstract_count(Truth::Tainted)],
                 Kind::Unknown(_) => vec![abstract_count(Truth::Unknown)],
@@ -584,9 +738,11 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                     }
                 }
             };
+            self.report_limits(&v, FileSpan::new(file, c.span));
             return (r, Some(v), None);
         }
         if let Some(fe) = body.find_attribute("for_each") {
+            let file = self.inst(inst_id).def.origins.file(fe, file);
             let v = self.eval(inst_id, file, &fe.value, sc).push(Step::new(
                 StepKind::Iteration,
                 FileSpan::new(file, fe.span),
@@ -597,6 +753,25 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                 binds: vec![("each", each)],
                 existence,
             };
+            if v.is_sensitive() {
+                self.files.mark_sensitive(FileSpan::new(file, fe.span));
+                self.mark_sensitive(&v);
+                self.diag(
+                    DiagSeverity::Error,
+                    "sensitive-for-each",
+                    "sensitive values cannot determine resource or module instance keys".into(),
+                    Some(FileSpan::new(file, fe.span)),
+                );
+                let unknown = Value::other("sensitive for_each").sensitive();
+                return (
+                    vec![abstract_each(
+                        obj2(unknown.clone(), unknown),
+                        Truth::Unknown,
+                    )],
+                    None,
+                    Some(v),
+                );
+            }
             let items = collection_items(&v);
             let r = match items {
                 Some(items) if items.len() <= self.opts.max_expand => items
@@ -610,13 +785,22 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                         m.insert("key".into(), Value::string(key.clone()));
                         m.insert("value".into(), val);
                         InstBind {
-                            key: Some(key),
+                            key: Some(InstanceKey::Key(key)),
                             binds: vec![("each", Value::object(m))],
                             existence: Truth::True,
                         }
                     })
                     .collect(),
                 Some(_) => {
+                    self.diag(
+                        DiagSeverity::Warning,
+                        "coverage-expansion",
+                        format!(
+                            "for_each exceeds the {} instance limit",
+                            self.opts.max_expand
+                        ),
+                        Some(FileSpan::new(file, fe.span)),
+                    );
                     let u = Value::other("each (for_each too large to expand)");
                     vec![abstract_each(obj2(u.clone(), u), Truth::True)]
                 }
@@ -633,16 +817,13 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                     }
                 },
             };
+            self.report_limits(&v, FileSpan::new(file, fe.span));
             return (r, None, Some(v));
         }
         (vec![single()], None, None)
     }
 
-    fn res_instances(
-        &self,
-        inst_id: usize,
-        ri: usize,
-    ) -> Rc<(Vec<InstBind>, Option<Value>, Option<Value>)> {
+    fn res_instances(&self, inst_id: usize, ri: usize) -> Rc<Expansion> {
         let inst = self.inst(inst_id);
         if let Some(s) = inst.res_insts.borrow().get(&ri) {
             return match s {
@@ -655,6 +836,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                     }],
                     None,
                     None,
+                    false,
                 )),
             };
         }
@@ -665,7 +847,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         r
     }
 
-    fn children_of(&self, inst_id: usize, ci: usize) -> Rc<Vec<(Option<Arc<str>>, usize)>> {
+    fn children_of(&self, inst_id: usize, ci: usize) -> Rc<Vec<(Option<InstanceKey>, usize)>> {
         let inst = self.inst(inst_id);
         if let Some(s) = inst.children.borrow().get(&ci) {
             return s.clone().unwrap_or_default();
@@ -673,59 +855,107 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         inst.children.borrow_mut().insert(ci, None);
         let call = &inst.def.module_calls[ci];
         let mut out = Vec::new();
-        if let ModuleSource::Local(dir) = &call.source {
-            let at = Some(FileSpan::new(call.file, header_span(call.block)));
-            if inst.ancestors.contains(dir) {
-                self.diag(
+        let (binds, _, _, limited) =
+            self.expand(inst_id, call.file, &call.block.body, Scope::EMPTY);
+        if limited {
+            inst.limited_children.borrow_mut().push(ci);
+        }
+        if !binds.is_empty() {
+            let at = FileSpan::new(call.file, header_span(call.block));
+            let resolved = match &call.source {
+                ModuleSource::Local(dir) => {
+                    let mut package = inst.package.clone();
+                    if let Some(p) = &mut package {
+                        p.calls.push(at);
+                        self.files.protect_dir(dir);
+                    }
+                    Ok((dir.clone(), package))
+                }
+                ModuleSource::Remote(_) => {
+                    let mut calls = vec![call];
+                    let mut parent = inst.parent;
+                    while let Some((pid, pci)) = parent {
+                        let p = self.inst(pid);
+                        calls.push(&p.def.module_calls[pci]);
+                        parent = p.parent;
+                    }
+                    calls.reverse();
+                    self.installed
+                        .resolve(&calls)
+                        .map(|p| (p.dir.clone(), Some(p)))
+                }
+                ModuleSource::Invalid => Err("source is missing or not a literal string".into()),
+            };
+            match resolved {
+                Err(message) => self.diag(
                     DiagSeverity::Warning,
-                    "module-cycle",
-                    format!(
-                        "module.{} calls an ancestor module ({})",
-                        call.name,
-                        dir.display()
-                    ),
-                    at,
-                );
-            } else if inst.ancestors.len() > self.opts.max_module_depth {
-                self.diag(
-                    DiagSeverity::Warning,
-                    "module-depth",
-                    format!(
-                        "module.{}: nesting deeper than {}",
-                        call.name, self.opts.max_module_depth
-                    ),
-                    at,
-                );
-            } else if module_files(self.files, dir).is_empty() {
-                self.diag(
-                    DiagSeverity::Warning,
-                    "module-missing",
-                    format!("module.{}: no .tf files in {}", call.name, dir.display()),
-                    at,
-                );
-            } else {
-                let def = self.load_def(dir);
-                let (binds, _, _) = self.expand(inst_id, call.file, &call.block.body, Scope::EMPTY);
-                let mut anc = inst.ancestors.clone();
-                anc.push(dir.clone());
-                for b in binds {
-                    let addr = match &b.key {
-                        Some(k) => format!(
-                            "{}module.{}[{}]",
-                            inst.prefix(),
-                            call.name,
-                            crate::address::quote(k)
-                        ),
-                        None => format!("{}module.{}", inst.prefix(), call.name),
-                    };
-                    let key = b.key.clone();
-                    let b = InstBind {
-                        existence: b.existence.min(inst.existence),
-                        ..b
-                    };
-                    let id =
-                        self.new_instance(def, addr.into(), Some((inst_id, ci)), b, anc.clone());
-                    out.push((key, id));
+                    "coverage-remote-module",
+                    format!("module.{}: {message}; source was not evaluated", call.name),
+                    Some(at),
+                ),
+                Ok((dir, package)) => {
+                    let canonical = self.files.canonical_path(&dir);
+                    if inst
+                        .ancestors
+                        .iter()
+                        .any(|p| self.files.canonical_path(p) == canonical)
+                    {
+                        self.diag(
+                            DiagSeverity::Warning,
+                            "module-cycle",
+                            format!(
+                                "module.{} calls an ancestor module ({})",
+                                call.name,
+                                dir.display()
+                            ),
+                            Some(at),
+                        );
+                    } else if inst.ancestors.len() > self.opts.max_module_depth {
+                        self.diag(
+                            DiagSeverity::Warning,
+                            "module-depth",
+                            format!(
+                                "module.{}: nesting deeper than {}",
+                                call.name, self.opts.max_module_depth
+                            ),
+                            Some(at),
+                        );
+                    } else if module_files(self.files, &dir).is_empty() {
+                        self.diag(
+                            DiagSeverity::Warning,
+                            "module-missing",
+                            format!(
+                                "module.{}: no supported .tf files in {}",
+                                call.name,
+                                dir.display()
+                            ),
+                            Some(at),
+                        );
+                    } else {
+                        let def = self.load_def(&dir);
+                        let mut anc = inst.ancestors.clone();
+                        anc.push(dir);
+                        for b in binds {
+                            let addr = match &b.key {
+                                Some(k) => format!("{}module.{}{}", inst.prefix(), call.name, k),
+                                None => format!("{}module.{}", inst.prefix(), call.name),
+                            };
+                            let key = b.key.clone();
+                            let b = InstBind {
+                                existence: b.existence.min(inst.existence),
+                                ..b
+                            };
+                            let id = self.new_instance(
+                                def,
+                                addr.into(),
+                                Some((inst_id, ci)),
+                                b,
+                                anc.clone(),
+                                package.clone(),
+                            );
+                            out.push((key, id));
+                        }
+                    }
                 }
             }
         }
@@ -761,20 +991,41 @@ impl<'a, 'o> Analyzer<'a, 'o> {
             );
         };
         let mut i = 1;
-        let mut key: Option<Arc<str>> = None;
+        let mut key: Option<InstanceKey> = None;
         let mut certainty = Truth::True;
         let mut splat = false;
+        let selected = match ops.get(1) {
+            Some(TraversalOperator::Index(ix)) => Some(ev.eval(&ix.index, sc)),
+            _ => None,
+        };
+        if let Some(index) = &selected {
+            self.mark_sensitive(index);
+        }
+        let indexed = |value: Value| match &selected {
+            Some(index) => value.inherit_sensitive(index),
+            None => value,
+        };
         match ops.get(1) {
-            Some(TraversalOperator::Index(ix)) => {
-                let index = ev.eval(&ix.index, sc);
-                key = index.to_str();
+            Some(TraversalOperator::Index(_)) => {
+                let index = selected.as_ref().unwrap();
+                key = instance_key(
+                    index,
+                    inst.def.resources[ri]
+                        .block
+                        .body
+                        .find_attribute("count")
+                        .is_some(),
+                );
                 if key.is_none() {
-                    certainty = tf_eval::truth::uncertainty(&index);
+                    if matches!(index.kind, Kind::Known(_)) {
+                        return (indexed(Value::error("invalid resource instance index")), 2);
+                    }
+                    certainty = tf_eval::truth::uncertainty(index);
                 }
                 i = 2;
             }
             Some(TraversalOperator::LegacyIndex(l)) => {
-                key = Some(l.index.to_string().into());
+                key = Some(InstanceKey::Index(l.index));
                 i = 2;
             }
             Some(TraversalOperator::FullSplat(_) | TraversalOperator::AttrSplat(_)) => {
@@ -784,6 +1035,76 @@ impl<'a, 'o> Analyzer<'a, 'o> {
             _ => {}
         }
         let base = Address::new(inst.address.clone(), mode, ty, name, None);
+        let insts = self.res_instances(inst_id, ri);
+        if insts.3 {
+            return (
+                indexed(Value::unknown(Origin::Limit(
+                    "root instance budget exceeded".into(),
+                ))),
+                ops.len(),
+            );
+        }
+        if splat {
+            if insts.0.iter().any(|b| b.key.is_none()) && (insts.1.is_some() || insts.2.is_some()) {
+                return (Value::other("resource instances not expanded"), ops.len());
+            }
+            let attr = ops.get(i).and_then(|op| op.attr_name());
+            let values = insts
+                .0
+                .iter()
+                .map(|b| {
+                    let mut value = if let Some(attr) = attr {
+                        self.resource_attr(inst_id, ri, b.key.clone(), attr, &base)
+                    } else {
+                        self.resource_object(inst_id, ri, b.key.clone(), &base)
+                    };
+                    value = reference_value(
+                        value,
+                        &[tf_eval::prov::ResourceDependency {
+                            resource: base.base_string().into(),
+                            key: b.key.as_ref().map(InstanceKey::as_str),
+                            certainty: b.existence,
+                        }],
+                    );
+                    value
+                })
+                .collect();
+            let rest = &ops[i + usize::from(attr.is_some())..];
+            let result = if matches!(ops.get(1), Some(TraversalOperator::FullSplat(_))) {
+                let value = Value::list(values);
+                // Full splats apply every remaining operator per instance.
+                Value::list(
+                    value
+                        .as_list()
+                        .unwrap()
+                        .iter()
+                        .map(|v| ev.apply_ops(v.clone(), rest, sc))
+                        .collect(),
+                )
+            } else {
+                let n = rest
+                    .iter()
+                    .take_while(|op| {
+                        matches!(
+                            op,
+                            TraversalOperator::GetAttr(_) | TraversalOperator::LegacyIndex(_)
+                        )
+                    })
+                    .count();
+                let values = values
+                    .into_iter()
+                    .map(|v| ev.apply_ops(v, &rest[..n], sc))
+                    .collect();
+                ev.apply_ops(Value::list(values), &rest[n..], sc)
+            };
+            return (result, ops.len());
+        }
+        if i == 2 && key.is_some() && !insts.0.iter().any(|b| b.key == key || b.key.is_none()) {
+            return (
+                indexed(Value::error("resource instance index is out of range")),
+                i,
+            );
+        }
         let whole = ops.get(i).and_then(|o| o.attr_name()).is_none();
         let dependencies = if splat || (whole && key.is_none() && certainty == Truth::True) {
             self.res_instances(inst_id, ri)
@@ -791,46 +1112,128 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                 .iter()
                 .map(|b| tf_eval::prov::ResourceDependency {
                     resource: base.base_string().into(),
-                    key: b.key.clone(),
+                    key: b.key.as_ref().map(InstanceKey::as_str),
                     certainty: b.existence,
                 })
                 .collect()
         } else {
             vec![tf_eval::prov::ResourceDependency {
                 resource: base.base_string().into(),
-                key: key.clone(),
+                key: key.as_ref().map(InstanceKey::as_str),
                 certainty,
             }]
         };
-        let referenced = |mut value: Value| {
-            value.prov = value.prov.referencing(dependencies.clone());
-            value
-        };
+        let referenced = |value: Value| indexed(reference_value(value, &dependencies));
         let Some(attr) = ops.get(i).and_then(|o| o.attr_name()) else {
-            let instance = base.with_key(key.map(InstanceKey::Key));
+            let object = |key| self.resource_object(inst_id, ri, key, &base);
+            if i == 1 && insts.0.iter().all(|b| b.key.is_some()) {
+                let value = if insts.1.is_some() {
+                    Value::list(insts.0.iter().map(|b| object(b.key.clone())).collect())
+                } else {
+                    Value::object(
+                        insts
+                            .0
+                            .iter()
+                            .map(|b| (b.key.as_ref().unwrap().as_str(), object(b.key.clone())))
+                            .collect(),
+                    )
+                };
+                return (value, i);
+            }
+            if insts.0.iter().any(|b| b.key == key)
+                && (key.is_some() || (insts.1.is_none() && insts.2.is_none()))
+            {
+                return (referenced(object(key)), i);
+            }
+            let instance = base.with_key(key);
             return (
                 referenced(Value::unknown(instance.computed("(whole object)"))),
                 i,
             );
         };
-        let v = self.resource_attr(inst_id, ri, key, attr, &base);
+        if i == 1 && (insts.1.is_some() || insts.2.is_some()) {
+            return (Value::error("resource instance key is required"), i + 1);
+        }
+        let v = if key.is_none() && i == 2 && !insts.0.is_empty() {
+            Value::one_of(
+                insts
+                    .0
+                    .iter()
+                    .map(|b| self.resource_attr(inst_id, ri, b.key.clone(), attr, &base))
+                    .collect(),
+                certainty == Truth::Tainted,
+            )
+        } else {
+            self.resource_attr(inst_id, ri, key, attr, &base)
+        };
         (
             referenced(if splat { Value::list(vec![v]) } else { v }),
             i + 1,
         )
     }
 
+    fn resource_object(
+        &self,
+        inst_id: usize,
+        ri: usize,
+        key: Option<InstanceKey>,
+        base: &Address,
+    ) -> Value {
+        let inst = self.inst(inst_id);
+        let decl = &inst.def.resources[ri];
+        let dependency = tf_eval::prov::ResourceDependency {
+            resource: base.base_string().into(),
+            key: key.as_ref().map(InstanceKey::as_str),
+            certainty: Truth::True,
+        };
+        let mut names: Vec<&str> = decl
+            .block
+            .body
+            .attributes()
+            .map(|a| a.key.name.as_str())
+            .filter(|n| !META_ATTRS.contains(n))
+            .collect();
+        names.extend(decl.block.body.blocks().filter_map(|b| {
+            let name = b.block_type();
+            if name == "dynamic" {
+                b.labels.first().map(|label| label.value.as_str())
+            } else if META_BLOCKS.contains(&name) {
+                None
+            } else {
+                Some(name)
+            }
+        }));
+        if let Some(schema) = decl.schema {
+            names.extend(schema.attributes.iter().map(|a| a.name));
+            names.extend(schema.block_types.iter().map(|b| b.name));
+        }
+        names.sort_unstable();
+        names.dedup();
+        let value = Value::object(
+            names
+                .into_iter()
+                .map(|name| {
+                    (
+                        Arc::from(name),
+                        self.resource_attr(inst_id, ri, key.clone(), name, base),
+                    )
+                })
+                .collect(),
+        );
+        reference_value(value, &[dependency])
+    }
+
     fn resource_attr(
         &self,
         inst_id: usize,
         ri: usize,
-        key: Option<Arc<str>>,
+        key: Option<InstanceKey>,
         attr: &str,
         base: &Address,
     ) -> Value {
         let inst = self.inst(inst_id);
         let k = (ri, key.clone(), attr.to_string());
-        let instance = base.clone().with_key(key.clone().map(InstanceKey::Key));
+        let instance = base.clone().with_key(key.clone());
         let base_str = base.base_string();
         self.memo(
             &inst.res_attrs,
@@ -843,7 +1246,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                     && decl.ty == "aws_iam_policy_document"
                     && (attr == "json" || attr == "minified_json")
                 {
-                    return self.iam_policy_document(inst_id, ri, key.as_deref(), &base_str);
+                    return self.iam_policy_document(inst_id, ri, key.as_ref(), &base_str);
                 }
                 if let Some(a) = decl
                     .block
@@ -853,7 +1256,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                 {
                     let insts = self.res_instances(inst_id, ri);
                     let chosen = match &key {
-                        Some(k) => insts.0.iter().find(|b| b.key.as_deref() == Some(&**k)),
+                        Some(k) => insts.0.iter().find(|b| b.key.as_ref() == Some(k)),
                         None => None,
                     }
                     .or(if insts.0.len() == 1 {
@@ -871,8 +1274,18 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                             ("each", Value::other("each (instance not selected)")),
                         ],
                     };
-                    let v = Scope::EMPTY
-                        .with_all(&binds, |sc| self.eval(inst_id, decl.file, &a.value, sc));
+                    let file = inst.def.origins.file(a, decl.file);
+                    let mut v =
+                        Scope::EMPTY.with_all(&binds, |sc| self.eval(inst_id, file, &a.value, sc));
+                    if decl
+                        .schema
+                        .and_then(|s| s.attribute(attr))
+                        .is_some_and(|a| a.is_sensitive())
+                    {
+                        v = v.sensitive();
+                        self.files.mark_sensitive(FileSpan::new(file, a.span));
+                        self.mark_sensitive(&v);
+                    }
                     // A null in configuration leaves a computed attribute to
                     // the provider.
                     let is_computed = decl
@@ -885,7 +1298,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                     return v.push(
                         Step::new(
                             StepKind::Attribute,
-                            FileSpan::new(decl.file, a.span),
+                            FileSpan::new(file, a.span),
                             format!("{base_str} {attr}"),
                         )
                         .with_resource(base_str.clone().into())
@@ -929,70 +1342,115 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                 1,
             );
         };
-        let mut i = 1;
-        let mut key: Option<Value> = None;
-        match ops.get(1) {
-            Some(TraversalOperator::Index(ix)) => {
-                key = Some(ev.eval(&ix.index, sc));
-                i = 2;
-            }
-            Some(TraversalOperator::LegacyIndex(l)) => {
-                key = Some(Value::number(l.index as f64));
-                i = 2;
-            }
-            _ => {}
-        }
-        let out = ops.get(i).and_then(|o| o.attr_name());
         let call = &inst.def.module_calls[ci];
         let maddr = format!("{}module.{name}", inst.prefix());
-        match &call.source {
-            ModuleSource::Remote(_) => {
-                let o = out.unwrap_or("(whole object)");
-                (
-                    Value::unknown(Origin::RemoteModule {
+        let selected = match ops.get(1) {
+            Some(TraversalOperator::Index(ix)) => Some(ev.eval(&ix.index, sc)),
+            Some(TraversalOperator::LegacyIndex(ix)) => Some(Value::number(ix.index as f64)),
+            _ => None,
+        };
+        if let Some(index) = &selected {
+            self.mark_sensitive(index);
+        }
+        let indexed = |value: Value| match &selected {
+            Some(index) => value.inherit_sensitive(index),
+            None => value,
+        };
+        if matches!(call.source, ModuleSource::Invalid) {
+            return (
+                indexed(Value::other(format!(
+                    "{maddr}: module source not a literal"
+                ))),
+                1,
+            );
+        }
+        let kids = self.children_of(inst_id, ci);
+        if inst.limited_children.borrow().contains(&ci) {
+            return (
+                indexed(Value::unknown(Origin::Limit(
+                    "root instance budget exceeded".into(),
+                ))),
+                ops.len(),
+            );
+        }
+        let counted = call.block.body.find_attribute("count").is_some();
+        let repeated = counted || call.block.body.find_attribute("for_each").is_some();
+        // No selected instance is not the same as an unavailable package.
+        if kids.is_empty() && matches!(call.source, ModuleSource::Remote(_)) {
+            let (binds, _, _) =
+                self.expand_inner(inst_id, call.file, &call.block.body, Scope::EMPTY);
+            if !binds.is_empty() {
+                return (
+                    indexed(Value::unknown(Origin::RemoteModule {
                         module: maddr.into(),
-                        output: o.into(),
-                    }),
-                    if out.is_some() { i + 1 } else { i },
-                )
-            }
-            ModuleSource::Invalid => (
-                Value::other(format!("{maddr}: module source not a literal")),
-                i,
-            ),
-            ModuleSource::Local(_) => {
-                let kids = self.children_of(inst_id, ci);
-                let Some(out) = out else {
-                    return (Value::other(format!("{maddr} (whole module object)")), i);
-                };
-                let kid = match key.as_ref().and_then(|k| k.to_str()) {
-                    Some(k) => kids
-                        .iter()
-                        .find(|(kk, _)| kk.as_deref() == Some(&*k))
-                        .or(if kids.len() == 1 { kids.first() } else { None }),
-                    None => {
-                        if kids.len() == 1 {
-                            kids.first()
-                        } else {
-                            None
-                        }
-                    }
-                };
-                let v = match kid {
-                    Some((_, kid)) => self.output_value(*kid, out),
-                    None if kids.is_empty() => {
-                        Value::other(format!("{maddr}: module not instantiated"))
-                    }
-                    None => Value::one_of(
-                        kids.iter()
-                            .map(|(_, k)| self.output_value(*k, out))
-                            .collect(),
-                        false,
-                    ),
-                };
-                (v, i + 1)
+                        output: "(unavailable module)".into(),
+                    })),
+                    ops.len(),
+                );
             }
         }
+        let object = |kid: usize| {
+            let child = self.inst(kid);
+            Value::object(
+                child
+                    .def
+                    .outputs
+                    .iter()
+                    .map(|o| (Arc::from(o.name), self.output_value(kid, o.name)))
+                    .collect(),
+            )
+        };
+        if let Some(index) = &selected {
+            let key = instance_key(index, counted);
+            let kid = key
+                .as_ref()
+                .and_then(|key| kids.iter().find(|(k, _)| k.as_ref() == Some(key)))
+                .or_else(|| kids.iter().find(|(k, _)| k.is_none() && repeated));
+            if let Some((_, kid)) = kid {
+                if let Some(out) = ops.get(2).and_then(|op| op.attr_name()) {
+                    return (indexed(self.output_value(*kid, out)), 3);
+                }
+                return (indexed(object(*kid)), 2);
+            }
+            if matches!(index.kind, Kind::Known(_)) {
+                return (
+                    indexed(Value::error(
+                        "module instance index is out of range or invalid",
+                    )),
+                    2,
+                );
+            }
+            let value = Value::one_of(
+                kids.iter().map(|(_, k)| object(*k)).collect(),
+                tf_eval::truth::uncertainty(index) == Truth::Tainted,
+            );
+            return (indexed(value), 2);
+        }
+        if !repeated {
+            if let Some((_, kid)) = kids.first() {
+                if let Some(out) = ops.get(1).and_then(|op| op.attr_name()) {
+                    return (self.output_value(*kid, out), 2);
+                }
+                return (object(*kid), 1);
+            }
+            return (Value::other(format!("{maddr}: module not instantiated")), 1);
+        }
+        if kids.iter().any(|(k, _)| k.is_none()) {
+            return (
+                Value::other(format!("{maddr}: module instances not expanded")),
+                ops.len(),
+            );
+        }
+        let value = if counted {
+            Value::list(kids.iter().map(|(_, k)| object(*k)).collect())
+        } else {
+            Value::object(
+                kids.iter()
+                    .map(|(key, k)| (key.as_ref().unwrap().as_str(), object(*k)))
+                    .collect(),
+            )
+        };
+        (value, 1)
     }
 
     // ---- data sources evaluated statically ------------------------------
@@ -1006,14 +1464,14 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         &self,
         inst_id: usize,
         ri: usize,
-        key: Option<&str>,
+        key: Option<&InstanceKey>,
         base: &str,
     ) -> Value {
         let inst = self.inst(inst_id);
         let decl = &inst.def.resources[ri];
         let insts = self.res_instances(inst_id, ri);
         let binds: Vec<(&str, Value)> = key
-            .and_then(|k| insts.0.iter().find(|b| b.key.as_deref() == Some(k)))
+            .and_then(|k| insts.0.iter().find(|b| b.key.as_ref() == Some(k)))
             .or(if insts.0.len() == 1 {
                 insts.0.first()
             } else {
@@ -1024,6 +1482,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         let ctx = BodyCtx {
             inst: inst_id,
             file: decl.file,
+            origins: &inst.def.origins,
             addr: base.into(),
             base: base.into(),
             ty: decl.ty,
@@ -1144,13 +1603,12 @@ impl<'a, 'o> Analyzer<'a, 'o> {
             let decl_id = Address::new(inst.address.clone(), decl.mode, decl.ty, decl.name, None);
             let base: Arc<str> = decl_id.base_string().into();
             for b in insts.0.iter() {
-                let id = decl_id
-                    .clone()
-                    .with_key(b.key.clone().map(InstanceKey::Key));
+                let id = decl_id.clone().with_key(b.key.clone());
                 let address: Arc<str> = id.to_string().into();
                 let ctx = BodyCtx {
                     inst: inst_id,
                     file: decl.file,
+                    origins: &def.origins,
                     addr: address.clone(),
                     base: base.clone(),
                     ty: decl.ty,
@@ -1180,8 +1638,9 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                     decl.schema.map(|s| s.provider),
                 );
                 if let Some(a) = decl.block.body.find_attribute("depends_on") {
+                    let file = def.origins.file(a, decl.file);
                     let value = Scope::EMPTY
-                        .with_all(&b.binds, |sc| self.eval(inst_id, decl.file, &a.value, sc));
+                        .with_all(&b.binds, |sc| self.eval(inst_id, file, &a.value, sc));
                     crate::graph::value_dependencies(&value, &mut resource.dependencies);
                 }
                 resources.push(resource);
@@ -1226,7 +1685,8 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                         .attributes()
                         .filter(|a| !matches!(&*a.key.name, "providers" | "depends_on"))
                         .map(|a| {
-                            let v = self.eval(inst_id, c.file, &a.value, Scope::EMPTY);
+                            let file = def.origins.file(a, c.file);
+                            let v = self.eval(inst_id, file, &a.value, Scope::EMPTY);
                             (Arc::from(&*a.key.name), v)
                         })
                         .collect()
@@ -1286,22 +1746,25 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                 }
             }
         }
-        let locals = if self.opts.whole_files {
-            def.locals
-                .iter()
-                .map(|l| model::VariableInfo {
+        // Register sensitive local sources even when no remaining resource
+        // refers to them (for example, after a verified edit).
+        let locals = def
+            .locals
+            .iter()
+            .filter_map(|l| {
+                let value = self.local_value(inst_id, l.name);
+                self.opts.whole_files.then(|| model::VariableInfo {
                     name: l.name.into(),
-                    value: self.local_value(inst_id, l.name),
+                    value,
                     span: FileSpan::new(l.file, l.attr.span),
                 })
-                .collect()
-        } else {
-            Vec::new()
-        };
+            })
+            .collect();
         model::Module {
             address: inst.address.clone(),
             dir: def.dir.clone(),
             parent: inst.parent.map(|p| p.0),
+            package: inst.package.clone(),
             resources,
             variables,
             outputs,
@@ -1321,6 +1784,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         out: &mut std::collections::HashMap<FileSpan, Value>,
     ) {
         for a in body.attributes() {
+            let file = self.inst(inst_id).def.origins.file(a, file);
             let v = self.eval(inst_id, file, &a.value, Scope::EMPTY);
             out.insert(FileSpan::new(file, tf_span::GetSpan::span(&a.value)), v);
         }
@@ -1341,26 +1805,35 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         top: bool,
     ) -> model::Body {
         let mut out = model::Body {
-            span: FileSpan::new(ctx.file, body.span),
+            span: FileSpan::new(ctx.origins.file(body, ctx.file), body.span),
             attrs: Vec::new(),
             blocks: Vec::new(),
         };
         // (name, body, dynamic, existence, span, attribute-as-blocks)
-        let mut raw: Vec<(&'a str, model::Body, bool, Truth, Span, bool)> = Vec::new();
+        let mut raw: Vec<(&'a str, model::Body, bool, Truth, FileSpan, bool)> = Vec::new();
         for a in body.attributes() {
+            let file = ctx.origins.file(a, ctx.file);
             let name = a.key.name.as_str();
             if top && META_ATTRS.contains(&name) {
                 continue;
             }
-            let mut v = self.eval(ctx.inst, ctx.file, &a.value, sc).push(
+            let mut v = self.eval(ctx.inst, file, &a.value, sc).push(
                 Step::new(
                     StepKind::Attribute,
-                    FileSpan::new(ctx.file, a.span),
+                    FileSpan::new(file, a.span),
                     format!("{} {path}{name}", ctx.addr),
                 )
                 .with_resource(ctx.base.clone())
                 .with_attribute(format!("{path}{name}")),
             );
+            if schema
+                .and_then(|s| s.attribute(name))
+                .is_some_and(|a| a.is_sensitive())
+            {
+                v = v.sensitive();
+            }
+            self.mark_sensitive(&v);
+            self.report_limits(&v, FileSpan::new(file, a.span));
             if ctx.strict_bool
                 && let Some(at) = schema.and_then(|s| s.attribute(name))
                 && at.is_bool()
@@ -1370,20 +1843,25 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                 self.diag(
                                     DiagSeverity::Warning,
                                     "strict-bool",
-                                    format!("{} {path}{name}: string \"{s}\" where the AWS provider schema requires a bool; Terraform converts it, but write {s} without quotes", ctx.addr),
-                                    Some(FileSpan::new(ctx.file, a.span)),
+                                    if v.is_sensitive() {
+                                        format!("{} {path}{name}: sensitive string where the AWS provider schema requires a bool", ctx.addr)
+                                    } else {
+                                        format!("{} {path}{name}: string \"{s}\" where the AWS provider schema requires a bool; Terraform converts it, but write {s} without quotes", ctx.addr)
+                                    },
+                                    Some(FileSpan::new(file, a.span)),
                                 );
                 v = Value::bool(s == "true").with_prov(v.prov.clone());
             }
-            self.observe(ctx, path, name, &a.value, &v);
+            self.observe(ctx, file, path, name, &a.value, &v);
             out.attrs.push(Attr {
                 name: name.into(),
                 value: v,
-                span: FileSpan::new(ctx.file, a.span),
+                span: FileSpan::new(file, a.span),
                 from_blocks: false,
             });
         }
         for b in body.blocks() {
+            let at = FileSpan::new(ctx.origins.file(b, ctx.file), b.span);
             let ty = b.block_type();
             if top && META_BLOCKS.contains(&ty) {
                 continue;
@@ -1405,12 +1883,14 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                 let Some(fe) = b.body.find_attribute("for_each") else {
                     continue;
                 };
-                let fv = self.eval(ctx.inst, ctx.file, &fe.value, sc).push(Step::new(
+                let file = ctx.origins.file(fe, ctx.file);
+                let fv = self.eval(ctx.inst, file, &fe.value, sc).push(Step::new(
                     StepKind::Iteration,
-                    FileSpan::new(ctx.file, fe.span),
+                    FileSpan::new(file, fe.span),
                     format!("{} dynamic \"{label}\" for_each", ctx.addr),
                 ));
                 let sub = format!("{path}{label}.");
+                self.report_limits(&fv, FileSpan::new(file, fe.span));
                 match collection_items(&fv) {
                     Some(items) if items.len() <= self.opts.max_expand => {
                         for (k, v) in items {
@@ -1418,10 +1898,21 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                             let bd = sc.with(it_name, &it, |s| {
                                 self.eval_body(ctx, &content.body, nested, s, &sub, false)
                             });
-                            raw.push((label, bd, true, Truth::True, b.span, as_attr));
+                            raw.push((label, bd, true, Truth::True, at, as_attr));
                         }
                     }
                     other => {
+                        if other.is_some() {
+                            self.diag(
+                                DiagSeverity::Warning,
+                                "coverage-expansion",
+                                format!(
+                                    "dynamic block exceeds the {} instance limit",
+                                    self.opts.max_expand
+                                ),
+                                Some(FileSpan::new(file, fe.span)),
+                            );
+                        }
                         if other.is_none() && fv.is_null() {
                             continue;
                         }
@@ -1445,18 +1936,18 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                         let bd = sc.with(it_name, &it, |s| {
                             self.eval_body(ctx, &content.body, nested, s, &sub, false)
                         });
-                        raw.push((label, bd, true, ex, b.span, as_attr));
+                        raw.push((label, bd, true, ex, at, as_attr));
                     }
                 }
             } else {
                 let (nested, as_attr) = nested_schema(schema, ty);
                 let sub = format!("{path}{ty}.");
                 let bd = self.eval_body(ctx, &b.body, nested, sc, &sub, false);
-                raw.push((ty, bd, false, Truth::True, b.span, as_attr));
+                raw.push((ty, bd, false, Truth::True, at, as_attr));
             }
         }
         // Group: attributes written as blocks become list-of-object values.
-        let mut grouped: Vec<(&'a str, Vec<Value>, Span)> = Vec::new();
+        let mut grouped: Vec<(&'a str, Vec<Value>, FileSpan)> = Vec::new();
         for (name, bd, dynamic, existence, span, as_attr) in raw {
             if as_attr {
                 let mut obj = body_to_object(&bd);
@@ -1483,16 +1974,55 @@ impl<'a, 'o> Analyzer<'a, 'o> {
             out.attrs.push(Attr {
                 name: name.into(),
                 value: Value::list(elems),
-                span: FileSpan::new(ctx.file, span),
+                span,
                 from_blocks: true,
             });
         }
         out
     }
 
+    fn report_limits(&self, value: &Value, at: FileSpan) {
+        if let Some(o @ (Origin::UnsupportedFunction(_) | Origin::Limit(_))) = value.origin() {
+            self.diag(
+                DiagSeverity::Warning,
+                "coverage-evaluation",
+                o.to_string(),
+                Some(at),
+            );
+        }
+        match &value.kind {
+            Kind::Known(Known::List(v)) => v.iter().for_each(|v| self.report_limits(v, at)),
+            Kind::Known(Known::Object(v)) => v.values().for_each(|v| self.report_limits(v, at)),
+            Kind::Known(Known::Json(v)) => self.report_limits(v, at),
+            Kind::OneOf(o) => o
+                .alternatives
+                .iter()
+                .for_each(|v| self.report_limits(v, at)),
+            _ => {}
+        }
+    }
+
+    fn mark_sensitive(&self, value: &Value) {
+        if value.is_sensitive() {
+            for step in value.prov.steps() {
+                self.files.mark_sensitive(step.at);
+            }
+        }
+        match &value.kind {
+            Kind::Known(Known::List(items)) => items.iter().for_each(|v| self.mark_sensitive(v)),
+            Kind::Known(Known::Object(items)) => {
+                items.values().for_each(|v| self.mark_sensitive(v))
+            }
+            Kind::Known(Known::Json(inner)) => self.mark_sensitive(inner),
+            Kind::OneOf(o) => o.alternatives.iter().for_each(|v| self.mark_sensitive(v)),
+            _ => {}
+        }
+    }
+
     fn observe(
         &self,
         ctx: &BodyCtx<'a>,
+        file: FileId,
         path: &str,
         name: &str,
         expr: &'a Expression<'a>,
@@ -1509,7 +2039,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
                 resource_type: ctx.ty,
                 path: &full,
                 name,
-                file: ctx.file,
+                file,
                 expr,
                 value: v,
             });
@@ -1517,8 +2047,14 @@ impl<'a, 'o> Analyzer<'a, 'o> {
     }
 }
 
+fn declared_sensitive(body: &Body<'_>) -> bool {
+    body.find_attribute("sensitive")
+        .is_some_and(|a| matches!(a.value.without_parens(), Expression::Bool(b) if b.value))
+}
+
 struct BodyCtx<'a> {
     inst: usize,
+    origins: &'a crate::compose::Origins,
     file: FileId,
     addr: Arc<str>,
     base: Arc<str>,
@@ -1584,7 +2120,7 @@ fn collection_items(v: &Value) -> Option<Vec<(Value, Value)>> {
                     let k = if x.as_str().is_some() {
                         x.clone()
                     } else {
-                        Value::number(i as f64)
+                        Value::number(i as f64).inherit_sensitive(v)
                     };
                     (k, x)
                 })
@@ -1592,7 +2128,7 @@ fn collection_items(v: &Value) -> Option<Vec<(Value, Value)>> {
         ),
         Kind::Known(Known::Object(m)) => Some(
             m.iter()
-                .map(|(k, x)| (Value::string(k.clone()), x.child_of(v)))
+                .map(|(k, x)| (Value::string(k.clone()).inherit_sensitive(v), x.child_of(v)))
                 .collect(),
         ),
         _ => None,
@@ -1604,14 +2140,14 @@ fn collection_items(v: &Value) -> Option<Vec<(Value, Value)>> {
 /// (string <-> bool / number), recursively through `list` / `set` / `map` /
 /// `tuple` / `object`, and `optional(T, default)` object attributes (absent or
 /// null optional attributes become the default, or null).
-fn convert_to_type(v: Value, ty: Option<&Expression<'_>>) -> Value {
+fn convert_to_type(v: Value, ty: Option<&Expression<'_>>, apply_defaults: bool) -> Value {
     match ty {
-        Some(t) => apply_type(v, t),
+        Some(t) => apply_type(v, t, apply_defaults),
         None => v,
     }
 }
 
-fn apply_type(v: Value, ty: &Expression<'_>) -> Value {
+fn apply_type(v: Value, ty: &Expression<'_>, apply_defaults: bool) -> Value {
     let prov = v.prov.clone();
     match ty.without_parens() {
         Expression::Variable(t) => {
@@ -1634,13 +2170,15 @@ fn apply_type(v: Value, ty: &Expression<'_>) -> Value {
             let name = f.name.name.as_str();
             let arg = f.arguments.first();
             match (name, &v.kind, arg) {
-                ("list" | "set", Kind::Known(Known::List(l)), Some(et)) => {
-                    Value::list(l.iter().map(|e| apply_type(e.clone(), et)).collect())
-                        .with_prov(prov)
-                }
+                ("list" | "set", Kind::Known(Known::List(l)), Some(et)) => Value::list(
+                    l.iter()
+                        .map(|e| apply_type(e.clone(), et, apply_defaults))
+                        .collect(),
+                )
+                .with_prov(prov),
                 ("map", Kind::Known(Known::Object(m)), Some(et)) => Value::object(
                     m.iter()
-                        .map(|(k, e)| (k.clone(), apply_type(e.clone(), et)))
+                        .map(|(k, e)| (k.clone(), apply_type(e.clone(), et, apply_defaults)))
                         .collect(),
                 )
                 .with_prov(prov),
@@ -1648,14 +2186,14 @@ fn apply_type(v: Value, ty: &Expression<'_>) -> Value {
                     l.iter()
                         .enumerate()
                         .map(|(i, e)| match ts.elements.get(i) {
-                            Some(t) => apply_type(e.clone(), t),
+                            Some(t) => apply_type(e.clone(), t, apply_defaults),
                             None => e.clone(),
                         })
                         .collect(),
                 )
                 .with_prov(prov),
                 ("object", Kind::Known(Known::Object(m)), Some(Expression::Object(o))) => {
-                    let mut out = (**m).clone();
+                    let mut out = Map::new();
                     for item in o.items.iter() {
                         let Some(k) = item.key.as_static_str() else {
                             continue;
@@ -1666,17 +2204,19 @@ fn apply_type(v: Value, ty: &Expression<'_>) -> Value {
                             }
                             other => (Some(other), None, false),
                         };
-                        let cur = out.get(k).cloned();
+                        let cur = m.get(k).cloned();
                         let val = match cur {
-                            Some(x) if !(optional && x.is_null()) => match inner {
-                                Some(t) => apply_type(x, t),
-                                None => x,
-                            },
-                            _ if optional => match default {
+                            Some(x) if !(optional && x.is_null() && apply_defaults) => {
+                                match inner {
+                                    Some(t) => apply_type(x, t, apply_defaults),
+                                    None => x,
+                                }
+                            }
+                            _ if optional => match default.filter(|_| apply_defaults) {
                                 Some(d) => {
                                     let dv = Evaluator::new(&NoResolver, FileId(0)).eval_static(d);
                                     match inner {
-                                        Some(t) => apply_type(dv, t),
+                                        Some(t) => apply_type(dv, t, apply_defaults),
                                         None => dv,
                                     }
                                 }

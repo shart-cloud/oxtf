@@ -153,16 +153,17 @@ def main():
     elapsed = time.perf_counter() - start
     (args.output / "native.stdout.json").write_text(native.stdout)
     (args.output / "native.stderr.txt").write_text(native.stderr)
-    if native.returncode:
+    if native.returncode not in (0, 1):
         raise RuntimeError(f"oxtf exited {native.returncode}: {native.stderr}")
     result = json.loads(native.stdout)
-    if result["rule_errors"] or any(d["severity"] == "error" for d in result["diagnostics"]):
-        raise RuntimeError("oxtf reported execution or parse errors")
-    findings = {(f["root"], f["rule"]["id"], f["resource"]["address"]): f for f in result["findings"]}
+    if result.get("status") != "complete" or result["rule_errors"]:
+        raise RuntimeError("oxtf did not complete analysis")
+    findings = {(o["root"], f["rule"], o["address"]): o
+                for f in result["findings"] for o in f["occurrences"]}
     disagreements, reference_errors, reference_unresolved = [], [], []
     for row in rows:
         finding = findings.get((row["root"], row["rule"], row["address"]))
-        row["oxtf"] = finding["severity"] if finding else "no_finding"
+        row["oxtf"] = finding["certainty"] if finding else "no_finding"
         if row["checkov"].startswith("ERROR"):
             reference_errors.append(row)
         elif row["checkov"] not in {"PASSED", "FAILED"}:
@@ -179,6 +180,8 @@ def main():
               "comparable_cases": len(rows) - len(reference_errors) - len(reference_unresolved),
               "reference_unresolved": reference_unresolved,
               "rows": rows, "interpretation": "Generated known-value conformance, not full Terraform semantic or security accuracy."}
+    if not report["comparable_cases"]:
+        raise RuntimeError("no reference cases were compared")
     (args.output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps({"cases":len(rows), "comparable_cases":report["comparable_cases"],
                       "disagreements":len(disagreements), "reference_errors":len(reference_errors),

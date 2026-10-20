@@ -183,9 +183,11 @@ def main():
         if v0:
             argv.append('--rego-v0')
         scan = subprocess.run(argv, capture_output=True, text=True, env={**os.environ, 'OXTF_POLICY_TRACE': str(trace)})
-        if scan.returncode not in (0, 1):
+        if scan.returncode not in (0, 1, 3):
             raise SystemExit(f'{s["name"]}: oxtf failed: {scan.stderr[:2000]}')
         record = json.loads(scan.stdout)
+        if record.get('status') == 'failed' or record['rule_errors']:
+            raise SystemExit(f'{s["name"]}: analysis failed: {record["rule_errors"]}')
         evals = {}
         for line in trace.read_text().splitlines() if trace.exists() else []:
             t = json.loads(line)
@@ -234,13 +236,23 @@ def main():
             'entries': len(s['entries']),
             'entries_evaluated': len(by_entry), 'evaluations': len(rows),
             'with_violations': sum(r['violations'] > 0 for r in rows),
-            'findings': sum(1 for f in record['findings'] if f['rule']['id'] not in SEED),
+            'findings': sum(1 for f in record['findings'] if f['rule'] not in SEED),
             'rule_errors': len(record['rule_errors']), **kinds,
+            'status': record['status'], 'diagnostics': record['diagnostics'],
         }
         (out / 'differences.json').write_text(json.dumps(differences, indent=1))
         report['sets'].append(summary)
         print(json.dumps(summary))
     (args.output / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
+    # A conformance job must compare real inputs and fail on differences;
+    # producing a report alone must never turn a regression green.
+    if not report['sets'] or any(
+        s['evaluations'] == 0 or s['entries_evaluated'] != s['entries']
+        or s.get('both_error', 0)
+        or any(s.get(k, 0) for k in ('differ', 'oxtf_error', 'opa_error'))
+        for s in report['sets']
+    ):
+        raise SystemExit(1)
 
 
 if __name__ == '__main__':

@@ -79,15 +79,8 @@ impl<'a> ResourceGraph<'a> {
                     if i == j || (d.key.is_some() && d.key != target.key && !aggregate) {
                         continue;
                     }
-                    let certainty = if d.key.is_some() && aggregate {
-                        if d.key.as_deref() == Some("0")
-                            && target.count.as_ref().and_then(Value::as_number) == Some(1.0)
-                        {
-                            d.certainty
-                        } else {
-                            Truth::Unknown
-                        }
-                    } else if d.key.is_none() && target.key.is_some() && d.certainty == Truth::True
+                    let certainty = if (d.key.is_some() && aggregate)
+                        || (d.key.is_none() && target.key.is_some() && d.certainty == Truth::True)
                     {
                         Truth::Unknown
                     } else {

@@ -17,7 +17,7 @@ use crate::scan::ScanResult;
 fn source(files: &FileTable, at: FileSpan) -> NamedSource<Arc<str>> {
     let f = files.get(at.file);
     // Share the file text instead of copying it per finding and per step.
-    NamedSource::new(f.path.display().to_string(), Arc::clone(&f.text))
+    NamedSource::new(f.path.display().to_string(), files.display_text(f.id))
 }
 
 fn span(at: FileSpan) -> SourceSpan {
@@ -207,6 +207,15 @@ fn report(files: &FileTable, f: &Finding) -> Report {
                 message: format!("provenance step {}/{n}: {}", i + 1, s.label),
                 src: source(files, s.at),
                 label: LabeledSpan::new_with_span(Some(text), span(s.at)),
+            });
+        }
+    }
+    if let Some(package) = &f.package {
+        for at in &package.calls {
+            related.push(Related {
+                message: "installed module called here (cache files are not auto-edited)".into(),
+                src: source(files, *at),
+                label: LabeledSpan::new_with_span(Some("module call".into()), span(*at)),
             });
         }
     }

@@ -52,6 +52,8 @@ pub enum Origin {
     RemoteModule { module: Arc<str>, output: Arc<str> },
     /// A function the evaluator does not implement.
     UnsupportedFunction(Arc<str>),
+    /// Evaluation stopped at a bounded expansion or recursion limit.
+    Limit(Arc<str>),
     /// Evaluation error (type error, missing attribute, bad index...).
     /// `try()` / `can()` treat this differently from other unknowns.
     Error(Arc<str>),
@@ -73,6 +75,7 @@ impl Origin {
             }
             Origin::RemoteModule { .. } => "remote module".to_string(),
             Origin::UnsupportedFunction(f) => format!("unsupported function {f}"),
+            Origin::Limit(m) => format!("analysis limit: {m}"),
             Origin::Error(m) => format!("error: {}", m.split(':').next().unwrap_or(m)),
             Origin::Other(m) => m.to_string(),
         }
@@ -94,6 +97,7 @@ impl fmt::Display for Origin {
                 write!(f, "remote module: {module}.{output}")
             }
             Origin::UnsupportedFunction(n) => write!(f, "unsupported function {n}"),
+            Origin::Limit(m) => write!(f, "analysis limit: {m}"),
             Origin::Error(m) => write!(f, "error: {m}"),
             Origin::Other(m) => f.write_str(m),
         }
@@ -149,6 +153,52 @@ pub struct Value {
 pub type Map = BTreeMap<Arc<str>, Value>;
 
 impl Value {
+    /// Sensitivity is independent of whether the value is known. Evaluators
+    /// still read its real contents; presentation must redact it.
+    pub fn is_sensitive(&self) -> bool {
+        self.prov.is_sensitive()
+    }
+
+    #[must_use]
+    pub fn sensitive(mut self) -> Self {
+        self.prov = self.prov.with_sensitive(true);
+        self
+    }
+
+    /// Explicit Terraform `nonsensitive()` declassification, including
+    /// descendants; ordinary transformations never clear the mark.
+    #[must_use]
+    pub fn nonsensitive(&self) -> Self {
+        let kind = match &self.kind {
+            Kind::Known(Known::List(v)) => Kind::Known(Known::List(Arc::new(
+                v.iter().map(Self::nonsensitive).collect(),
+            ))),
+            Kind::Known(Known::Object(m)) => Kind::Known(Known::Object(Arc::new(
+                m.iter()
+                    .map(|(k, v)| (k.clone(), v.nonsensitive()))
+                    .collect(),
+            ))),
+            Kind::Known(Known::Json(v)) => Kind::Known(Known::Json(Arc::new(v.nonsensitive()))),
+            Kind::OneOf(o) => Kind::OneOf(Arc::new(OneOf {
+                alternatives: o.alternatives.iter().map(Self::nonsensitive).collect(),
+                tainted: o.tainted,
+            })),
+            k => k.clone(),
+        };
+        Value {
+            kind,
+            prov: self.prov.clone().with_sensitive(false),
+        }
+    }
+
+    #[must_use]
+    pub fn inherit_sensitive(mut self, from: &Value) -> Self {
+        if from.is_sensitive() {
+            self.prov = self.prov.with_sensitive(true);
+        }
+        self
+    }
+
     pub fn new(kind: Kind) -> Self {
         Value {
             kind,
@@ -194,6 +244,9 @@ impl Value {
     pub fn other(msg: impl Into<Arc<str>>) -> Self {
         Value::unknown(Origin::Other(msg.into()))
     }
+    pub fn limit(msg: impl Into<Arc<str>>) -> Self {
+        Value::unknown(Origin::Limit(msg.into()))
+    }
     pub fn error(msg: impl Into<Arc<str>>) -> Self {
         Value::unknown(Origin::Error(msg.into()))
     }
@@ -207,6 +260,7 @@ impl Value {
     /// are structurally equal Known values are merged, and a single
     /// alternative collapses to itself.
     pub fn one_of(alts: Vec<Value>, tainted: bool) -> Self {
+        let sensitive = alts.iter().any(Value::is_sensitive);
         // A traversal present in only some alternatives is only a possible
         // graph edge. Compute this before structurally equal values collapse.
         let mut dependencies = Vec::<crate::prov::ResourceDependency>::new();
@@ -259,6 +313,7 @@ impl Value {
             if !dependencies.is_empty() {
                 value.prov = value.prov.referencing(dependencies);
             }
+            value.prov = value.prov.with_sensitive(sensitive);
             return value;
         }
         let mut value = Value::new(Kind::OneOf(Arc::new(OneOf {
@@ -268,6 +323,7 @@ impl Value {
         if !dependencies.is_empty() {
             value.prov = value.prov.referencing(dependencies);
         }
+        value.prov = value.prov.with_sensitive(sensitive);
         value
     }
 
@@ -389,7 +445,7 @@ impl Value {
     /// Field `name` of an object (provenance joined), with the lattice rules
     /// for non-Known receivers.
     pub fn get_attr(&self, name: &str) -> Value {
-        match &self.kind {
+        let value = match &self.kind {
             Kind::Known(Known::Object(m)) => match m.get(name) {
                 Some(v) => v.child_of(self),
                 None => Value::error(format!("object has no attribute \"{name}\"")),
@@ -408,7 +464,8 @@ impl Value {
                 o.tainted,
             ),
             Kind::Unknown(_) | Kind::Tainted(_) => self.clone(),
-        }
+        };
+        value.inherit_sensitive(self)
     }
 
     /// Field `name` of an object, where a missing field of a Known object
@@ -429,7 +486,7 @@ impl Value {
 
     /// `self[key]`.
     pub fn index(&self, key: &Value) -> Value {
-        match (&self.kind, &key.kind) {
+        let value = match (&self.kind, &key.kind) {
             (Kind::OneOf(o), _) => Value::one_of(
                 o.alternatives
                     .iter()
@@ -465,7 +522,8 @@ impl Value {
             },
             (Kind::Known(Known::Null), _) => Value::error("attempt to index null value"),
             (Kind::Known(_), _) => Value::error("value cannot be indexed"),
-        }
+        };
+        value.inherit_sensitive(self).inherit_sensitive(key)
     }
 
     /// Structural equality of wholly-known values; `None` if either side is
@@ -596,6 +654,9 @@ impl fmt::Debug for Value {
 /// `<tainted: var.x>`, `<one of: a | b>`.
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_sensitive() {
+            return f.write_str("(sensitive)");
+        }
         match &self.kind {
             Kind::Known(k) => match k {
                 Known::Null => f.write_str("null"),

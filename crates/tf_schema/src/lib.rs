@@ -8,6 +8,8 @@
 //! * [`ResourceSchema`] derefs to [`Block`]: [`Block::attribute`],
 //!   [`Block::block_type`], [`Block::member`], [`Attribute::is_computed`],
 //!   [`Attribute::is_bool`], ...
+//! * [`lookup_provider`] supplies a provider configuration body for JSON
+//!   attribute-versus-block mapping.
 //! * Nested attributes (protocol-6 `nested_type`, used by framework providers
 //!   such as cloudflare 5.x) are [`Member::Attribute`]s whose type is
 //!   [`CtyType::Nested`]: [`Attribute::nested`] gives the nesting mode and the
@@ -41,6 +43,8 @@ mod generated {
     pub(crate) mod defaults;
     #[rustfmt::skip]
     pub(crate) mod index;
+    #[rustfmt::skip]
+    pub(crate) mod providers;
 }
 
 /// Typed views for allowlisted resources (`crates/tf_schema_codegen/allowlist.toml`).
@@ -168,3 +172,26 @@ mod embedded {
 
 #[cfg(feature = "embedded")]
 pub use embedded::*;
+
+/// Configuration body for an embedded provider's local name, e.g. `aws`.
+#[cfg(feature = "embedded")]
+pub fn lookup_provider(name: &str) -> Option<&'static Block<'static>> {
+    use generated::providers::{BLOB, ENTRIES, N, SYMBOLS};
+    use std::sync::OnceLock;
+    static CACHE: [OnceLock<SchemaBody<'static>>; N] = [const { OnceLock::new() }; N];
+    static SYMS: OnceLock<Vec<&'static str>> = OnceLock::new();
+    let index = ENTRIES.iter().position(|(n, _, _)| *n == name)?;
+    let (_, start, end) = ENTRIES[index];
+    Some(
+        &CACHE[index]
+            .get_or_init(|| {
+                let symbols = SYMS.get_or_init(|| {
+                    decode_symbols(SYMBOLS)
+                        .expect("embedded provider symbols are corrupt; rerun tf_schema_codegen")
+                });
+                decode_body(&BLOB[start..end], symbols)
+                    .expect("embedded provider schema is corrupt; rerun tf_schema_codegen")
+            })
+            .block,
+    )
+}

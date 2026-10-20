@@ -70,6 +70,7 @@ pub const SUPPORTED: &[&str] = &[
     "parseint",
     "pow",
     "range",
+    "regex",
     "replace",
     "reverse",
     "sensitive",
@@ -124,7 +125,7 @@ pub fn call(name: &str, args: Vec<Value>) -> Value {
                 _ => (vec![a.clone()], false),
             };
             if combos.len() * choices.len() > MAX_ALTERNATIVES {
-                return Value::other(format!("{name}: too many alternatives"));
+                return Value::limit(format!("{name}: too many alternatives"));
             }
             let mut next = Vec::new();
             for (c, ct) in &combos {
@@ -146,9 +147,15 @@ pub fn call(name: &str, args: Vec<Value>) -> Value {
 }
 
 fn call1(name: &str, args: Vec<Value>) -> Value {
-    let r = match dispatch(name, &args) {
+    let mut r = match dispatch(name, &args) {
         Ok(v) | Err(v) => v,
     };
+    if name == "nonsensitive" {
+        return r;
+    }
+    for a in &args {
+        r = r.inherit_sensitive(a);
+    }
     // Primitive results inherit the arguments' provenance.
     if r.prov.is_empty()
         && matches!(
@@ -398,7 +405,7 @@ fn dispatch(name: &str, a: &[Value]) -> R {
                 out.push(num(x));
                 x += step;
                 if out.len() > 1024 {
-                    return Err(Value::other("range: too large"));
+                    return Err(Value::limit("range: too large"));
                 }
             }
             Ok(Value::list(out))
@@ -491,7 +498,7 @@ fn dispatch(name: &str, a: &[Value]) -> R {
                     }
                 }
                 if next.len() > 4096 {
-                    return Err(Value::other("setproduct: too large"));
+                    return Err(Value::limit("setproduct: too large"));
                 }
                 rows = next;
             }
@@ -703,11 +710,71 @@ fn dispatch(name: &str, a: &[Value]) -> R {
             arity(a, 3)?;
             let (s, sub, rep) = (string(&a[0])?, string(&a[1])?, string(&a[2])?);
             if sub.len() > 1 && sub.starts_with('/') && sub.ends_with('/') {
-                return Err(Value::unknown(Origin::UnsupportedFunction(
-                    "replace (regex)".into(),
-                )));
+                let re = terraform_regex(&sub[1..sub.len() - 1])?;
+                regex_input(&s)?;
+                regex_input(&rep)?;
+                let mut output = String::new();
+                let mut end = 0;
+                for (i, captures) in re.captures_iter(&s).enumerate() {
+                    if i >= 16_384 {
+                        return Err(regex_limit());
+                    }
+                    let longest = captures
+                        .iter()
+                        .flatten()
+                        .map(|m| m.len())
+                        .max()
+                        .unwrap_or(0);
+                    if rep.len().saturating_mul(longest.saturating_add(1)) > 1_048_576 {
+                        return Err(regex_limit());
+                    }
+                    let matched = captures.get(0).unwrap();
+                    output.push_str(&s[end..matched.start()]);
+                    captures.expand(&rep, &mut output);
+                    if output.len() > 1_048_576 {
+                        return Err(regex_limit());
+                    }
+                    end = matched.end();
+                }
+                output.push_str(&s[end..]);
+                regex_input(&output)?;
+                return Ok(Value::string(output));
             }
             Ok(Value::string(s.replace(&*sub, &rep)))
+        }
+        "regex" => {
+            arity(a, 2)?;
+            let (pattern, input) = (string(&a[0])?, string(&a[1])?);
+            let re = terraform_regex(&pattern)?;
+            regex_input(&input)?;
+            let names: Vec<_> = re.capture_names().skip(1).collect();
+            if names.iter().any(Option::is_some) && names.iter().any(Option::is_none) {
+                return Err(Value::error(
+                    "regex: cannot mix named and unnamed capture groups",
+                ));
+            }
+            let captures = re
+                .captures(&input)
+                .ok_or_else(|| Value::error("regex: pattern did not match"))?;
+            let capture = |i| {
+                captures
+                    .get(i)
+                    .map(|m| Value::string(m.as_str()))
+                    .unwrap_or_else(Value::null)
+            };
+            Ok(if names.is_empty() {
+                capture(0)
+            } else if names[0].is_some() {
+                Value::object(
+                    names
+                        .iter()
+                        .enumerate()
+                        .map(|(i, name)| (Arc::from(name.unwrap()), capture(i + 1)))
+                        .collect(),
+                )
+            } else {
+                Value::list((1..captures.len()).map(capture).collect())
+            })
         }
         "split" => {
             arity(a, 2)?;
@@ -809,7 +876,8 @@ fn dispatch(name: &str, a: &[Value]) -> R {
                 _ => Err(v.clone()),
             }
         }
-        "sensitive" | "nonsensitive" => Ok(one_arg(a)?.clone()),
+        "sensitive" => Ok(one_arg(a)?.clone().sensitive()),
+        "nonsensitive" => Ok(one_arg(a)?.nonsensitive()),
         // ---- encoding
         "jsonencode" => {
             arity(a, 1)?;
@@ -1172,6 +1240,67 @@ fn cidrhost(p: &str, h: i128) -> Result<String, String> {
     let base = addr & mask;
     let off = if h >= 0 { h } else { size + h } as u128;
     Ok(render(base + off, v6))
+}
+
+fn regex_limit() -> Value {
+    Value::unknown(Origin::Limit("regular expression budget exceeded".into()))
+}
+
+fn regex_input(input: &str) -> Result<(), Value> {
+    if input.len() > 1_048_576 {
+        Err(regex_limit())
+    } else {
+        Ok(())
+    }
+}
+
+/// RE2 uses ASCII Perl classes and word boundaries, with Unicode literals and
+/// explicit Unicode properties. Translate those escapes before compiling.
+fn terraform_regex(pattern: &str) -> Result<regex::Regex, Value> {
+    if pattern.len() > 16_384 {
+        return Err(regex_limit());
+    }
+    let mut translated = String::new();
+    let mut chars = pattern.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            translated.push(ch);
+            continue;
+        }
+        match chars.next() {
+            Some('Q') => {
+                let mut quoted = String::new();
+                while let Some(ch) = chars.next() {
+                    if ch == '\\' && chars.peek() == Some(&'E') {
+                        chars.next();
+                        break;
+                    }
+                    quoted.push(ch);
+                }
+                translated.push_str(&regex::escape(&quoted));
+            }
+            Some('d') => translated.push_str("[0-9]"),
+            Some('D') => translated.push_str("[^0-9]"),
+            Some('w') => translated.push_str("[0-9A-Za-z_]"),
+            Some('W') => translated.push_str("[^0-9A-Za-z_]"),
+            Some('s') => translated.push_str("[\\t\\n\\f\\r ]"),
+            Some('S') => translated.push_str("[^\\t\\n\\f\\r ]"),
+            Some(ch @ ('b' | 'B')) => translated.push_str(&format!("(?-u:\\{ch})")),
+            Some(ch) => {
+                translated.push('\\');
+                translated.push(ch);
+            }
+            None => translated.push('\\'),
+        }
+    }
+    regex::RegexBuilder::new(&translated)
+        .size_limit(1_048_576)
+        .dfa_size_limit(1_048_576)
+        .build()
+        .map_err(|e| match e {
+            regex::Error::CompiledTooBig(_) => regex_limit(),
+            _ => Value::error("invalid regular expression"),
+        })
 }
 
 #[cfg(test)]

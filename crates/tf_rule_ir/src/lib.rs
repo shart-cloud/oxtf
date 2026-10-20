@@ -913,8 +913,8 @@ fn cmp(op: CmpOp, a: &Value, b: &Value) -> bool {
     }
 }
 
-fn eval_value(n: &Node, s: Scope<'_>) -> Value {
-    match n {
+fn eval_value(n: &Node, s: Scope<'_>) -> Result<Value, RuleFailure> {
+    Ok(match n {
         Node::Col { path, default } => {
             let (mut v, rest) = match s {
                 Scope::Resource(r) => {
@@ -939,7 +939,7 @@ fn eval_value(n: &Node, s: Scope<'_>) -> Value {
         },
         Node::Lit(v) => v.clone(),
         pred => {
-            let v = eval_pred(pred, s);
+            let v = eval_pred(pred, s)?;
             match v.truth {
                 Truth::True => Value::bool(true),
                 Truth::False => Value::bool(false),
@@ -947,15 +947,15 @@ fn eval_value(n: &Node, s: Scope<'_>) -> Value {
                 Truth::Unknown => v.witness.unwrap_or_else(|| Value::other("(expression)")),
             }
         }
-    }
+    })
 }
 
 fn is_true(v: &Value) -> Verdict {
     truth::test(v, &|x| x.as_bool() == Some(true))
 }
 
-fn eval_pred(n: &Node, s: Scope<'_>) -> Verdict {
-    match n {
+fn eval_pred(n: &Node, s: Scope<'_>) -> Result<Verdict, RuleFailure> {
+    Ok(match n {
         Node::CheckovGraph(_) => Verdict::new(Truth::Unknown, None),
         Node::CheckovAttribute(check) => match s {
             Scope::Resource(r) => check.evaluate(r),
@@ -966,12 +966,12 @@ fn eval_pred(n: &Node, s: Scope<'_>) -> Verdict {
             Scope::Value(_) => Verdict::new(Truth::Unknown, None),
         },
         Node::CheckovPython(check) => match s {
-            Scope::Resource(r) => check.evaluate(r),
+            Scope::Resource(r) => check.evaluate(r)?,
             Scope::Value(_) => Verdict::new(Truth::Unknown, None),
         },
-        Node::Col { .. } | Node::Element | Node::Lit(_) => is_true(&eval_value(n, s)),
+        Node::Col { .. } | Node::Element | Node::Lit(_) => is_true(&eval_value(n, s)?),
         Node::Cmp(op, l, r, witness_left) => {
-            let (lv, rv) = (eval_value(l, s), eval_value(r, s));
+            let (lv, rv) = (eval_value(l, s)?, eval_value(r, s)?);
             truth::map(&lv, &|a| {
                 truth::map(&rv, &|b| {
                     Verdict::new(
@@ -982,58 +982,61 @@ fn eval_pred(n: &Node, s: Scope<'_>) -> Verdict {
             })
         }
         Node::IsIn(e, vals) => {
-            let v = eval_value(e, s);
+            let v = eval_value(e, s)?;
             truth::test(&v, &|x| vals.iter().any(|l| eq(x, l)))
         }
         Node::ListContains(l, val) => {
-            let list = eval_value(l, s);
+            let list = eval_value(l, s)?;
             truth::exists(&list, &|e| truth::test(e, &|x| eq(x, val)))
         }
         Node::ListAny(l, p) => {
-            let list = eval_value(l, s);
-            truth::exists(&list, &|e| eval_pred(p, Scope::Value(e)))
+            let list = eval_value(l, s)?;
+            truth::try_exists(&list, &|e| eval_pred(p, Scope::Value(e)))?
         }
         Node::ListAll(l, p) => {
-            let list = eval_value(l, s);
-            truth::forall(&list, &|e| eval_pred(p, Scope::Value(e)))
+            let list = eval_value(l, s)?;
+            truth::try_exists(&list, &|e| {
+                eval_pred(p, Scope::Value(e)).map(Verdict::negate)
+            })?
+            .negate()
         }
         Node::And(args) => {
-            let mut acc = eval_pred(&args[0], s);
+            let mut acc = eval_pred(&args[0], s)?;
             for a in &args[1..] {
                 if acc.truth == Truth::False {
                     break;
                 }
-                acc = acc.and(eval_pred(a, s));
+                acc = acc.and(eval_pred(a, s)?);
             }
             acc
         }
         Node::Or(args) => {
-            let mut acc = eval_pred(&args[0], s);
+            let mut acc = eval_pred(&args[0], s)?;
             for a in &args[1..] {
                 if acc.truth == Truth::True {
                     break;
                 }
-                acc = acc.or(eval_pred(a, s));
+                acc = acc.or(eval_pred(a, s)?);
             }
             acc
         }
-        Node::Not(a) => eval_pred(a, s).negate(),
-        Node::IsNull(e) => truth::test(&eval_value(e, s), &|x| x.is_null()),
+        Node::Not(a) => eval_pred(a, s)?.negate(),
+        Node::IsNull(e) => truth::test(&eval_value(e, s)?, &|x| x.is_null()),
         Node::IsKnown(e) => {
-            let v = eval_value(e, s);
+            let v = eval_value(e, s)?;
             Verdict::new(Truth::from_bool(v.is_wholly_known()), Some(v))
         }
-    }
+    })
 }
 
 impl CompiledRule {
     /// The verdict of this rule for one resource (`None` when no clause
     /// applies to its type).
-    pub fn verdict(&self, r: &Resource) -> Option<Verdict> {
+    pub fn verdict(&self, r: &Resource) -> Result<Option<Verdict>, RuleFailure> {
         let typed = self.by_type.get(&*r.ty);
         let wildcard = self.by_type.get("*");
         if typed.is_none() && wildcard.is_none() {
-            return None;
+            return Ok(None);
         }
         let idx = typed
             .into_iter()
@@ -1047,19 +1050,19 @@ impl CompiledRule {
             }
             let v = match &c.for_each {
                 Some(fe) => {
-                    let list = eval_value(fe, Scope::Resource(r));
-                    truth::exists(&list, &|e| {
-                        truth::map(e, &|e| eval_pred(&c.condition, Scope::Value(e)))
-                    })
+                    let list = eval_value(fe, Scope::Resource(r))?;
+                    truth::try_exists(&list, &|e| {
+                        truth::try_map(e, &|e| eval_pred(&c.condition, Scope::Value(e)))
+                    })?
                 }
-                None => eval_pred(&c.condition, Scope::Resource(r)),
+                None => eval_pred(&c.condition, Scope::Resource(r))?,
             };
             acc = acc.or(v);
             if acc.truth == Truth::True {
                 break;
             }
         }
-        Some(acc)
+        Ok(Some(acc))
     }
 
     fn with_fix(&self, r: &Resource, j: Judgement) -> Judgement {
@@ -1082,6 +1085,9 @@ impl CompiledRule {
                 Piece::Type => s.push_str(&r.ty),
                 Piece::Name => s.push_str(&r.name),
                 Piece::Rule => s.push_str(&self.spec.name),
+                Piece::Witness(_) if w.is_some_and(Value::is_sensitive) => {
+                    s.push_str("(sensitive)")
+                }
                 Piece::Witness(fallback) => match (w.and_then(|v| v.to_str()), fallback) {
                     (Some(x), _) => s.push_str(&x),
                     (None, Some(f)) => s.push_str(f),
@@ -1115,12 +1121,14 @@ impl DynRule for CompiledRule {
             .iter()
             .map(|r| {
                 if r.mode == tf_semantic::Mode::Managed {
-                    self.verdict(r).unwrap_or(Verdict::FALSE)
+                    self.verdict(r)
+                        .map(|v| v.unwrap_or(Verdict::FALSE))
+                        .map_err(|e| format!("{}: {e}", r.address))
                 } else {
-                    Verdict::FALSE
+                    Ok(Verdict::FALSE)
                 }
             })
-            .collect();
+            .collect::<Result<_, _>>()?;
         for (clause, spec) in self.clauses.iter().zip(&self.spec.clauses) {
             if let Node::CheckovGraph(expr) = &clause.condition {
                 for (i, result) in expr.evaluate(graph).into_iter().enumerate() {
@@ -1154,7 +1162,7 @@ impl DynRule for CompiledRule {
             return Ok(Vec::new());
         }
         Ok(self
-            .verdict(r)
+            .verdict(r)?
             .and_then(|v| Judgement::from_verdict(v, |v| self.render(r, v.witness.as_ref())))
             .map(|j| self.with_fix(r, j))
             .into_iter()
@@ -1204,7 +1212,7 @@ mod tests {
             Box::new(Node::Lit(Value::number(22.0))),
             true,
         );
-        let t = |v: Value| eval_pred(&n, Scope::Value(&v)).truth;
+        let t = |v: Value| eval_pred(&n, Scope::Value(&v)).unwrap().truth;
         assert_eq!(t(Value::number(0.0)), Truth::True);
         assert_eq!(t(Value::string("0")), Truth::True);
         assert_eq!(t(Value::number(80.0)), Truth::False);
@@ -1212,7 +1220,10 @@ mod tests {
         assert_eq!(t(Value::other("y")), Truth::Unknown);
         let c = Node::ListContains(Box::new(Node::Element), Value::string("0.0.0.0/0"));
         let l = Value::list(vec![Value::string("10.0.0.0/8"), Value::tainted("v")]);
-        assert_eq!(eval_pred(&c, Scope::Value(&l)).truth, Truth::Tainted);
+        assert_eq!(
+            eval_pred(&c, Scope::Value(&l)).unwrap().truth,
+            Truth::Tainted
+        );
         let all = Node::ListAll(
             Box::new(Node::Element),
             Box::new(Node::Cmp(
@@ -1223,9 +1234,14 @@ mod tests {
             )),
         );
         assert_eq!(
-            eval_pred(&all, Scope::Value(&Value::list(vec![]))).truth,
+            eval_pred(&all, Scope::Value(&Value::list(vec![])))
+                .unwrap()
+                .truth,
             Truth::True
         );
-        assert_eq!(eval_pred(&all, Scope::Value(&l)).truth, Truth::Tainted);
+        assert_eq!(
+            eval_pred(&all, Scope::Value(&l)).unwrap().truth,
+            Truth::Tainted
+        );
     }
 }

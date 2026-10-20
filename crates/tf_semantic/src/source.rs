@@ -1,11 +1,11 @@
 //! Source files and the file table shared by a scan.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
-use tf_span::{FileId, FileSpan, LineIndex};
+use tf_span::{FileId, FileSpan, LineIndex, Span};
 
 /// A loaded source file.
 #[derive(Debug)]
@@ -49,6 +49,12 @@ pub struct FileTable {
     /// once per root that reaches it; the disk does not change during a
     /// scan, so the second listing is the first one.
     listings: RwLock<HashMap<PathBuf, Arc<Vec<PathBuf>>>>,
+    listing_errors: RwLock<HashMap<PathBuf, String>>,
+    /// Source ranges known to contain sensitive values. Evaluators keep
+    /// original text; renderers use a masked view.
+    sensitive: RwLock<HashMap<FileId, Vec<Span>>>,
+    protected: RwLock<HashSet<PathBuf>>,
+    canonical: RwLock<HashMap<PathBuf, PathBuf>>,
 }
 
 #[derive(Default, Debug)]
@@ -60,6 +66,77 @@ struct Inner {
 impl FileTable {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Installed package files may be scanned but must not be auto-edited.
+    pub fn protect_dir(&self, dir: &Path) {
+        let mut dirs = self.protected.write().unwrap();
+        dirs.insert(normalize(
+            &std::path::absolute(dir).unwrap_or_else(|_| dir.to_path_buf()),
+        ));
+        dirs.insert(self.canonical_path(dir));
+    }
+
+    /// Resolve filesystem aliases once per path in this scan. Overlay-only
+    /// paths use their absolute lexical identity.
+    pub fn canonical_path(&self, path: &Path) -> PathBuf {
+        let path = normalize(path);
+        if let Some(p) = self.canonical.read().unwrap().get(&path) {
+            return p.clone();
+        }
+        let resolved = path.canonicalize().unwrap_or_else(|_| {
+            normalize(&std::path::absolute(&path).unwrap_or_else(|_| path.clone()))
+        });
+        self.canonical
+            .write()
+            .unwrap()
+            .insert(path, resolved.clone());
+        resolved
+    }
+
+    pub fn is_protected(&self, path: &Path) -> bool {
+        let path = normalize(path);
+        if path.components().any(|c| c.as_os_str() == ".terraform") {
+            return true;
+        }
+        let abs = std::path::absolute(&path).ok().map(|p| normalize(&p));
+        let real = self.canonical_path(&path);
+        let dirs = self.protected.read().unwrap();
+        [Some(&path), abs.as_ref(), Some(&real)]
+            .into_iter()
+            .flatten()
+            .any(|p| p.ancestors().any(|a| dirs.contains(a)))
+    }
+
+    pub fn mark_sensitive(&self, at: FileSpan) {
+        let mut sensitive = self.sensitive.write().unwrap();
+        let spans = sensitive.entry(at.file).or_default();
+        if !spans.contains(&at.span) {
+            spans.push(at.span);
+        }
+    }
+
+    /// Mask sensitive bytes without changing offsets or line breaks.
+    pub fn display_text(&self, file: FileId) -> Arc<str> {
+        let sf = self.get(file);
+        let sensitive = self.sensitive.read().unwrap();
+        let Some(spans) = sensitive.get(&file) else {
+            return sf.text.clone();
+        };
+        let mut bytes = sf.text.as_bytes().to_vec();
+        for span in spans {
+            let end = (span.end as usize).min(bytes.len());
+            if let Some(slice) = bytes.get_mut(span.start as usize..end) {
+                for b in slice {
+                    if !matches!(*b, b'\n' | b'\r' | b'\t') {
+                        *b = b'*';
+                    }
+                }
+            }
+        }
+        String::from_utf8(bytes)
+            .expect("whole UTF-8 source spans are masked")
+            .into()
     }
 
     /// A table whose `files` shadow the disk. Paths are compared lexically
@@ -105,22 +182,28 @@ impl FileTable {
         if let Some(v) = self.listings.read().unwrap().get(&dir) {
             return v.clone();
         }
-        let mut v: Vec<PathBuf> = match std::fs::read_dir(&dir) {
-            Ok(rd) => rd
-                .filter_map(|e| e.ok())
-                .filter(|e| {
-                    // The entry's own type is free with the listing; only
-                    // a symlink needs a stat to see what it points at.
-                    match e.file_type() {
-                        Ok(t) if t.is_symlink() => e.path().is_file(),
-                        Ok(t) => t.is_file(),
-                        Err(_) => false,
-                    }
-                })
-                .map(|e| normalize(&e.path()))
-                .collect(),
-            Err(_) => Vec::new(),
+        let mut v = Vec::new();
+        let record_error = |e: io::Error| {
+            self.listing_errors
+                .write()
+                .unwrap()
+                .insert(dir.clone(), e.to_string());
         };
+        match std::fs::read_dir(&dir) {
+            Ok(rd) => {
+                for entry in rd {
+                    match entry.and_then(|e| Ok((e.file_type()?, e.path()))) {
+                        Ok((t, p)) if t.is_file() || (t.is_symlink() && p.is_file()) => {
+                            v.push(normalize(&p))
+                        }
+                        Ok(_) => {}
+                        Err(e) => record_error(e),
+                    }
+                }
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound && self.has_overlay_under(&dir) => {}
+            Err(e) => record_error(e),
+        }
         v.extend(
             self.overlay
                 .iter()
@@ -132,6 +215,14 @@ impl FileTable {
         let v = Arc::new(v);
         self.listings.write().unwrap().insert(dir, v.clone());
         v
+    }
+
+    pub fn listing_error(&self, dir: &Path) -> Option<String> {
+        self.listing_errors
+            .read()
+            .unwrap()
+            .get(&normalize(dir))
+            .cloned()
     }
 
     /// Overlay files (any depth) under `dir`.

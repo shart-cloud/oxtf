@@ -9,6 +9,7 @@ description = "The one scan request: input, catalog, selection and policies in, 
 [dependencies]
 serde_json.workspace = true
 tf_semantic.workspace = true
+tf_fetch.workspace = true
 tf_linter.workspace = true
 tf_rule_ir.workspace = true
 tf_plan.workspace = true
@@ -16,3 +17,4 @@ tf_rego.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+tf_eval.workspace = true

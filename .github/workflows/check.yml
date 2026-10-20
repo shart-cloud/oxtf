@@ -1,0 +1,81 @@
+name: Checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  OXTF_REQUIRE_CORPUS: "1"
+
+jobs:
+  rust:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install 1.96.0 --profile minimal --component rustfmt,clippy
+      - run: rustup default 1.96.0
+      - run: bash corpus/fetch.sh
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+
+  compatibility:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - run: rustup toolchain install 1.96.0 --profile minimal
+      - run: rustup default 1.96.0
+      - run: bash corpus/fetch.sh
+      - name: Install Python package and reference dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r scripts/ci-python.txt
+          VIRTUAL_ENV="$PWD/.venv" .venv/bin/maturin develop --locked --manifest-path crates/tfscan_py/Cargo.toml
+      - name: Install pinned Terraform source reference
+        run: |
+          mkdir -p "$RUNNER_TEMP/terraform-reference"
+          cd "$RUNNER_TEMP/terraform-reference"
+          curl --fail --location --retry 3 https://releases.hashicorp.com/terraform/1.16.1/terraform_1.16.1_linux_amd64.zip -o terraform_1.16.1_linux_amd64.zip
+          curl --fail --location --retry 3 https://releases.hashicorp.com/terraform/1.16.1/terraform_1.16.1_SHA256SUMS -o SHA256SUMS
+          sha256sum --ignore-missing -c SHA256SUMS
+          unzip -q terraform_1.16.1_linux_amd64.zip
+          echo "$RUNNER_TEMP/terraform-reference" >> "$GITHUB_PATH"
+      - run: .venv/bin/python -m pytest crates/tfscan_py/tests
+        env:
+          OXTF_REQUIRE_TERRAFORM: "1"
+      - run: cargo build --locked -p tf_cli
+      - name: Check generated catalog and Checkov value semantics
+        run: |
+          .venv/bin/python -I scripts/import_checkov.py --output "$RUNNER_TEMP/checkov-pack"
+          export CHECKOV_PACK="$RUNNER_TEMP/checkov-pack"
+          export CHECKOV_GRAPH_CHECKS
+          CHECKOV_GRAPH_CHECKS=$(.venv/bin/python -c 'import checkov,pathlib; print(pathlib.Path(checkov.__file__).parent / "terraform/checks/graph_checks")')
+          cargo test --locked -p tf_rule_ir --test bundled -- --include-ignored
+          .venv/bin/python -I bench/checkov/legacy_graph_importer.py --export "$RUNNER_TEMP/checkov-graph-pack"
+          CHECKOV_PACK="$RUNNER_TEMP/checkov-graph-pack" cargo test --locked -p tf_rule_ir --test checkov_policy -- --include-ignored
+          .venv/bin/python -I bench/checkov/compare.py --pack "$CHECKOV_PACK" --native target/debug/oxtf --output "$RUNNER_TEMP/checkov-values"
+      - name: Compare Rego evaluation with OPA
+        run: |
+          curl --fail --location --retry 3 https://github.com/open-policy-agent/opa/releases/download/v1.17.0/opa_linux_amd64_static -o "$RUNNER_TEMP/opa"
+          curl --fail --location --retry 3 https://github.com/open-policy-agent/opa/releases/download/v1.17.0/opa_linux_amd64_static.sha256 -o "$RUNNER_TEMP/opa.sha256"
+          printf '%s  %s\n' "$(cut -d ' ' -f 1 "$RUNNER_TEMP/opa.sha256")" "$RUNNER_TEMP/opa" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/opa"
+          .venv/bin/python bench/rego/opa_compare.py --native "$PWD/target/debug/oxtf" --opa "$RUNNER_TEMP/opa" --corpus fixtures/rules --output "$RUNNER_TEMP/opa-conformance"

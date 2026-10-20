@@ -20,7 +20,10 @@ fn evaluate(source: &str, condition: serde_json::Value) -> tf_eval::Verdict {
         &files,
     );
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
-    compiled[0].verdict(&a.modules[0].resources[0]).unwrap()
+    compiled[0]
+        .verdict(&a.modules[0].resources[0])
+        .unwrap()
+        .unwrap()
 }
 
 fn verdict(
