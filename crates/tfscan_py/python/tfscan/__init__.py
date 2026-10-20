@@ -401,16 +401,22 @@ def fix(
     overlay: Mapping[PathLike, str] = {},
     threads: Optional[int] = None,
     profiles: Optional[Sequence[str]] = None,
+    at: Optional[str] = None,
 ) -> dict[str, Any]:
     """Fix the finding with ``fingerprint`` in the scan the other arguments
     describe (as :func:`scan`'s; callback rules cannot be re-run, so they
     are refused): its fix hint is applied in memory and the source is
     rescanned with the edit as an overlay, as ``oxtf fix`` does.
 
+    A value written as ``var.x`` is fixed at the variable's default first
+    (keeping the module's interface), and at the attribute when that does
+    not verify; ``at="default"`` or ``at="attribute"`` picks one.
+
     Returns a dict: ``fingerprint``, ``rule``, ``file``, ``resource``,
-    ``attribute``, ``action``, ``value``, ``original`` and ``text`` (the
-    file before and after the edit), ``diff`` (unified) and ``verified``
-    (the finding is gone from the rescan). Nothing is written: write
+    ``attribute``, ``action``, ``value``, ``site`` (where the literal
+    went), ``original`` and ``text`` (the file before and after the edit),
+    ``diff`` (unified) and ``verified`` (the rule no longer fails on the
+    declaration in the rescan). Nothing is written: write
     ``text`` to ``file`` when ``verified`` is what you need. Raises
     ``ValueError`` when no finding has the fingerprint, the finding has no
     fix hint, or the scan fails."""
@@ -438,6 +444,7 @@ def fix(
         policy_entries=list(policy_entries),
         rego_v0=rego_v0,
         profiles=None if profiles is None else list(profiles),
+        at=at,
     )
 
 

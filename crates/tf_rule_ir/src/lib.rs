@@ -523,8 +523,9 @@ pub struct CompiledRule {
     clauses: Vec<CClause>,
     by_type: HashMap<String, Vec<usize>>,
     message: Vec<Piece>,
-    /// A fix derived from the predicate, when it is unambiguous.
-    fix: Option<(String, serde_json::Value)>,
+    /// Per resource type, the fix the predicate implies, when it is
+    /// unambiguous: an attribute path and the literal to write.
+    fix: HashMap<String, (Vec<String>, serde_json::Value)>,
 }
 
 impl CompiledRule {
@@ -757,15 +758,17 @@ pub fn compile(spec: RuleSpec) -> Result<CompiledRule, String> {
     })
 }
 
-/// The one mechanical fix a Checkov policy's predicate implies, if any:
-/// its definition holds exactly one fixable leaf (beside filters), on a
-/// top-level attribute, and the leaf names the value to write: `equals` a
-/// literal, `is_true`, `is_false`, or `within` a single literal. A Checkov
-/// value check implies one when it expects a single literal of a top-level
-/// attribute ([`checkov::ValueCheck::fix`]). Every clause must imply the
-/// same fix. `exists` and other operators do not say what to write, so
-/// they derive none.
-fn derive_fix(spec: &RuleSpec) -> Option<(String, serde_json::Value)> {
+/// The mechanical fix a Checkov policy's predicate implies, per resource
+/// type. A clause implies one when its definition holds exactly one
+/// fixable leaf (beside filters) and the leaf names the value to write:
+/// `equals` a literal, `is_true`, `is_false`, or `within` a single literal.
+/// A Checkov value check implies one when it expects a single literal
+/// ([`checkov::ValueCheck::fix`]). Paths may be nested; whether the edit
+/// is valid for a resource is decided when the hint is built
+/// ([`tf_linter::FixHint::set_path`]). A type whose clauses imply
+/// different fixes gets none. `exists` and other operators do not say what
+/// to write, so they derive none.
+fn derive_fix(spec: &RuleSpec) -> HashMap<String, (Vec<String>, serde_json::Value)> {
     use checkov::AttributeOp::*;
     fn leaves<'g>(e: &'g graph::GraphExpr, out: &mut Vec<&'g graph::GraphExpr>) -> bool {
         match e {
@@ -778,21 +781,34 @@ fn derive_fix(spec: &RuleSpec) -> Option<(String, serde_json::Value)> {
             _ => false,
         }
     }
-    let literal = |v: &serde_json::Value| !v.is_array() && !v.is_object() && !v.is_null();
-    let mut fixes = spec.clauses.iter().map(|c| {
+    fn literal(v: &serde_json::Value) -> bool {
+        !v.is_array() && !v.is_object() && !v.is_null()
+    }
+    type Fix = (Vec<String>, serde_json::Value);
+    // The fix, and the types the leaf is about (a graph clause may also
+    // name types it only filters or connects).
+    fn clause_fix(c: &Clause) -> Option<(Option<&[String]>, Fix)> {
         let definition = match &c.condition {
             Expr::CheckovGraph { definition } => definition,
-            Expr::CheckovValue { check } if c.for_each.is_none() => return check.fix(),
+            Expr::CheckovValue { check } if c.for_each.is_none() => {
+                return check.fix().map(|f| (None, f));
+            }
             _ => return None,
         };
         let mut found = Vec::new();
         if !leaves(definition, &mut found) {
             return None;
         }
-        let [graph::GraphExpr::Attribute { check, .. }] = found.as_slice() else {
+        let [
+            graph::GraphExpr::Attribute {
+                check,
+                resource_types,
+            },
+        ] = found.as_slice()
+        else {
             return None;
         };
-        if check.attribute.is_empty() || check.attribute.contains(['.', '*', '[']) {
+        if check.attribute.is_empty() || check.attribute.contains(['*', '[']) {
             return None;
         }
         let value = match (check.operator, &check.value) {
@@ -802,10 +818,33 @@ fn derive_fix(spec: &RuleSpec) -> Option<(String, serde_json::Value)> {
             (Within, serde_json::Value::Array(a)) if a.len() == 1 && literal(&a[0]) => a[0].clone(),
             _ => return None,
         };
-        Some((check.attribute.clone(), value))
-    });
-    let first = fixes.next()??;
-    fixes.all(|f| f.as_ref() == Some(&first)).then_some(first)
+        let path = check.attribute.split('.').map(str::to_string).collect();
+        Some((Some(resource_types.as_slice()), (path, value)))
+    }
+    let mut by_type: HashMap<String, Option<Fix>> = HashMap::new();
+    for c in &spec.clauses {
+        let (about, fix) = match clause_fix(c) {
+            Some((about, fix)) => (about, Some(fix)),
+            None => (None, None),
+        };
+        for ty in &c.resource_types {
+            let fix = fix
+                .clone()
+                .filter(|_| about.is_none_or(|a| a.is_empty() || a.contains(ty)));
+            by_type
+                .entry(ty.clone())
+                .and_modify(|f| {
+                    if *f != fix {
+                        *f = None;
+                    }
+                })
+                .or_insert(fix);
+        }
+    }
+    by_type
+        .into_iter()
+        .filter_map(|(ty, f)| Some((ty, f?)))
+        .collect()
 }
 
 /// Parse and compile every rule of a rules document.
@@ -1024,12 +1063,13 @@ impl CompiledRule {
     }
 
     fn with_fix(&self, r: &Resource, j: Judgement) -> Judgement {
-        match &self.fix {
-            Some((attribute, value)) => Judgement {
-                fix_hint: Some(tf_linter::FixHint::set(r, attribute, value.clone())),
-                ..j
-            },
-            None => j,
+        let hint = self.fix.get(&*r.ty).and_then(|(path, value)| {
+            let path: Vec<&str> = path.iter().map(String::as_str).collect();
+            tf_linter::FixHint::set_path(r, &path, value.clone())
+        });
+        Judgement {
+            fix_hint: hint.or(j.fix_hint),
+            ..j
         }
     }
 

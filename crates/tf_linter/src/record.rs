@@ -190,9 +190,14 @@ pub struct FixHintRecord {
     /// `set`.
     pub action: String,
     pub value: Json,
-    /// Where the attribute is written today; `None` means insert it into
-    /// the resource block at `site_block`.
+    /// Where the attribute is written today; `None` means insert it (and
+    /// any missing blocks on its path) into the resource block.
     pub site: Option<Location>,
+    /// The default of the variable the attribute is written as
+    /// (`x = var.x`): the other place the literal can go, which keeps a
+    /// module's interface. Only fixes occurrences no caller overrides.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_site: Option<Location>,
 }
 
 fn fix_hint_record(files: &FileTable, h: &FixHint) -> FixHintRecord {
@@ -202,6 +207,7 @@ fn fix_hint_record(files: &FileTable, h: &FixHint) -> FixHintRecord {
         action: h.action.as_str().into(),
         value: h.value.clone(),
         site: h.site.map(|at| location(files, at)),
+        default_site: h.default_site(files).map(|at| location(files, at)),
     }
 }
 
@@ -371,6 +377,16 @@ fn local_identity(f: &Finding) -> String {
 pub fn finding_fingerprint(files: &FileTable, f: &Finding, repos: &mut RepoRoots) -> String {
     let file = repos.relative(&files.get(f.primary.file).path);
     fingerprint(&f.rule, &file, &local_identity(f), f.attribute.as_deref())
+}
+
+/// What a fix must make go away: the rule on the declaration (its
+/// module directory, repository-relative, and local identity), whatever
+/// attribute now decides it. Two findings with the same key are the same
+/// rule failing on the same declaration.
+pub fn finding_subject_key(files: &FileTable, f: &Finding, repos: &mut RepoRoots) -> String {
+    let path = &files.get(f.primary.file).path;
+    let dir = repos.relative(path.parent().unwrap_or(path));
+    fingerprint(&f.rule, &dir, &local_identity(f), None)
 }
 
 /// Findings that are one finding: the same rule, file, local identity and

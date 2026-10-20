@@ -209,16 +209,31 @@ into the file. Paths are as given on the command line.
 ### Fix hint
 
 `resource` (the instance to edit; for the S3 rule this is the public-access
-block, not the bucket), `attribute` (top-level path to set), `action`
-(`set`), `value` (the literal to write), and `site`: the location of the
-attribute as written today, or `null` meaning insert the attribute into the
-resource block at the finding's `location`. The hint says what a mechanical
-edit would do; whether to make it, and where in a provenance chain to make
-it instead, is the caller's judgement.
+block, not the bucket), `attribute` (the path to set: nested block names,
+then the attribute, as in `metadata_options.http_tokens`), `action`
+(`set`), `value` (the literal to write), `site`: the location of the
+attribute as written today, or `null` meaning insert it into the resource
+block, creating the blocks on its path that are not written, and, only
+when the attribute is written as exactly `var.<name>` and its value comes
+from that variable's default, `default_site`: the location of the
+`default`, the other place the literal can go.
 
-Provenance steps are the candidate edit sites: a value that reaches the
-resource through a variable default or a tfvars line can be fixed at any
-step, with different blast radius.
+A hint is only built when the edit is valid configuration: each block on
+the path is written at most once and not by `dynamic`, and a block that
+has to be created needs no other required attribute or block in the
+provider schema (an EKS `vpc_config` needs `subnet_ids`, so a missing one
+gets no hint). The hint says what a mechanical edit would do; whether to
+make it is the caller's judgement.
+
+`oxtf fix FINGERPRINT` (and `tfscan.fix`) applies a hint and rescans to
+verify it. The fix is verified when the rule no longer fails on the
+declaration from any root, whatever attribute would decide it next. With a
+`default_site` it writes the default first, which keeps a module's
+interface, and falls back to the attribute when a caller passes its own
+value. `--at default|attribute` picks the site. Edits keep the file's
+layout: a replaced value keeps the text up to its `=`, and an inserted
+attribute is aligned with the attributes above it as `terraform fmt`
+aligns them.
 
 ## NDJSON
 
@@ -227,8 +242,8 @@ step, with different blast radius.
 - `finding`, one per finding in record order: `fingerprint`, `rule`,
   `level`, `certainty`, `file`, `line`, `column`, `address`, `attribute`,
   `message`, `occurrences` (a count) and, when there is one, `fix_hint`
-  (`resource` as an address, `attribute`, `action`, `value`, `site` as
-  `file`/`line`/`column`);
+  (`resource` as an address, `attribute`, `action`, `value`, `site` and,
+  when there is one, `default_site` as `file`/`line`/`column`);
 - `rule_error`: `rule`, `resource`, `message`;
 - `diagnostic`: `severity`, `code`, `message`, `file`, `line`;
 - `summary`, always last: `schema`, `findings`, `occurrences`, `definite`,

@@ -176,9 +176,10 @@ fn absent_attribute_findings_name_it_and_fix_it() {
     );
     assert!(hint.site.is_none());
 
-    let edit = tf_scan::apply_fix(&before, &hint).unwrap();
+    let edit = tf_scan::apply_fix(&before, &before.result.findings[0]).unwrap();
     assert!(
-        edit.text.contains("  monitoring = true\n}"),
+        edit.text
+            .contains("  instance_type = \"t3.micro\"\n  monitoring    = true\n}"),
         "{}",
         edit.text
     );

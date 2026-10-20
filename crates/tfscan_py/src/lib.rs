@@ -1312,12 +1312,14 @@ fn scan_request(a: ScanArgs<'_, '_>) -> PyResult<(ScanRequest, CallbackError, Ca
 /// describe (as [`scan`]'s, without callback rules): its fix hint applied
 /// in memory and the source rescanned with the edit as an overlay
 /// (`tf_scan::fix`). Returns a dict: `fingerprint`, `rule`, `file`,
-/// `resource`, `attribute`, `action`, `value`, `original` and `text` (the
-/// file before and after), `diff` (unified) and `verified` (the finding is
-/// gone after the edit). Nothing is written. Raises `ValueError` when no
+/// `resource`, `attribute`, `action`, `value`, `site` (`attribute` or
+/// `default`: where the literal went; `at` picks one, else a variable's
+/// default is tried first), `original` and `text` (the file before and
+/// after), `diff` (unified) and `verified` (the rule no longer fails on the
+/// declaration). Nothing is written. Raises `ValueError` when no
 /// finding has the fingerprint, it has no fix hint, or the scan fails.
 #[pyfunction]
-#[pyo3(signature = (fingerprint, paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, rule_files=vec![], data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], rego_v0=false, bundled=true, profiles=None))]
+#[pyo3(signature = (fingerprint, paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, rule_files=vec![], data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], rego_v0=false, bundled=true, profiles=None, at=None))]
 #[allow(clippy::too_many_arguments)]
 fn fix_finding<'py>(
     py: Python<'py>,
@@ -1343,7 +1345,18 @@ fn fix_finding<'py>(
     rego_v0: bool,
     bundled: bool,
     profiles: Option<Vec<String>>,
+    at: Option<&str>,
 ) -> PyResult<Bound<'py, PyDict>> {
+    let site = match at {
+        None => None,
+        Some("attribute") => Some(tf_scan::FixSite::Attribute),
+        Some("default") => Some(tf_scan::FixSite::Default),
+        Some(other) => {
+            return Err(PyValueError::new_err(format!(
+                "at must be \"attribute\" or \"default\", not {other:?}"
+            )));
+        }
+    };
     let (request, _, _) = scan_request(ScanArgs {
         paths,
         recursive,
@@ -1369,7 +1382,7 @@ fn fix_finding<'py>(
         profiles,
     })?;
     let o = py
-        .detach(move || tf_scan::fix(request, &fingerprint))
+        .detach(move || tf_scan::fix(request, &fingerprint, site))
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let d = PyDict::new(py);
     d.set_item("fingerprint", &o.fingerprint)?;
@@ -1379,6 +1392,7 @@ fn fix_finding<'py>(
     d.set_item("attribute", &o.hint.attribute)?;
     d.set_item("action", o.hint.action.as_str())?;
     d.set_item("value", json_to_py(py, &o.hint.value)?)?;
+    d.set_item("site", o.site.as_str())?;
     d.set_item(
         "diff",
         tf_scan::unified_diff(&o.edit.file, &o.original, &o.edit.text),

@@ -4711,6 +4711,13 @@
           "fix_hint": {
             "action": "set",
             "attribute": "storage_encrypted",
+            "default_site": {
+              "column": 3,
+              "end": 55,
+              "file": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false/main.tf",
+              "line": 3,
+              "start": 40
+            },
             "resource": {
               "address": "aws_db_instance.db",
               "base_address": "aws_db_instance.db",

@@ -240,33 +240,174 @@ pub struct FixHint {
     /// The resource instance to edit (not always the finding's: the S3 rule
     /// points at the public-access block).
     pub resource: tf_semantic::Address,
-    /// Attribute path to set.
+    /// Path of the attribute to set: nested block names, then the
+    /// attribute (`metadata_options.http_tokens`). Blocks that are not
+    /// written are created; [`FixHint::set_path`] only builds a hint whose
+    /// blocks the provider schema says can be created that way.
     pub attribute: String,
     pub action: FixAction,
     /// The literal to write.
     pub value: serde_json::Value,
-    /// Where the attribute is written today, or `None` to insert into the
-    /// resource block.
+    /// Where the attribute is written today, or `None` to insert it (and
+    /// any missing blocks) into the resource block.
     pub site: Option<FileSpan>,
+    /// The `variable` whose default the written value comes from, when the
+    /// attribute is set from one and no caller overrides it: writing the
+    /// literal there keeps the module's interface. Checked against the
+    /// source by [`FixHint::default_site`].
+    pub variable: Option<(Arc<str>, FileSpan)>,
 }
 
 impl FixHint {
     /// Set top-level `attribute` of `r` to `value`: in place when it is
     /// written, else inserted into the resource block.
     pub fn set(r: &Resource, attribute: &str, value: serde_json::Value) -> FixHint {
+        let attr = r.attr(attribute);
         FixHint {
             resource: r.id.clone(),
             attribute: attribute.to_string(),
             action: FixAction::Set,
             value,
-            site: r.attr(attribute).map(|a| a.span),
+            site: attr.map(|a| a.span),
+            variable: attr.and_then(variable_default),
         }
     }
+
+    /// Set the attribute at `path` (nested block names, then the
+    /// attribute; index segments such as `[0]` or `0` are dropped) of `r`
+    /// to `value`. Each block on the path must be written at most once and
+    /// not by `dynamic`; a block that is not written must be one the
+    /// provider schema lets us create holding only the path (no other
+    /// required attribute or block). `None` when the edit is ambiguous or
+    /// would not be valid configuration.
+    pub fn set_path(r: &Resource, path: &[&str], value: serde_json::Value) -> Option<FixHint> {
+        let names: Vec<&str> = path
+            .iter()
+            .copied()
+            .filter(|s| !is_index_segment(s))
+            .collect();
+        let (&last, blocks) = names.split_last()?;
+        let schema = match r.mode {
+            tf_semantic::Mode::Managed => tf_schema::lookup_resource(&r.ty),
+            tf_semantic::Mode::Data => tf_schema::lookup_data_source(&r.ty),
+        }
+        .map(|s| s.block());
+        let mut body = Some(&r.body);
+        let mut block_schema = schema;
+        for (i, &name) in blocks.iter().enumerate() {
+            let nested = match block_schema {
+                Some(b) => Some(b.block_type(name)?),
+                None => None,
+            };
+            block_schema = nested.map(|n| n.block());
+            let Some(b) = body else { continue };
+            if b.attr(name).is_some() {
+                // An object attribute or attributes-as-blocks: no block
+                // to descend into.
+                return None;
+            }
+            let mut written = b.blocks_of(name);
+            body = match (written.next(), written.next()) {
+                (Some(one), None) if !one.dynamic => Some(&one.body),
+                (None, _) => {
+                    // Create this block and the rest of the path.
+                    creatable(schema?, blocks, i, last)?;
+                    None
+                }
+                _ => return None,
+            };
+        }
+        if let Some(b) = block_schema {
+            let a = b.attribute(last)?;
+            if a.is_computed_only() {
+                return None;
+            }
+        }
+        let attr = body.and_then(|b| b.attr(last));
+        Some(FixHint {
+            resource: r.id.clone(),
+            attribute: names.join("."),
+            action: FixAction::Set,
+            value,
+            site: attr.map(|a| a.span),
+            variable: attr.and_then(variable_default),
+        })
+    }
+
+    /// The default of the variable the attribute is set from, when the
+    /// attribute is written as exactly `var.<name>`: the other place the
+    /// literal can go.
+    pub fn default_site(&self, files: &tf_semantic::source::FileTable) -> Option<FileSpan> {
+        let (name, default) = self.variable.as_ref()?;
+        let site = self.site?;
+        let text = &files.get(site.file).text[site.span.start as usize..site.span.end as usize];
+        let (_, expr) = text.split_once('=')?;
+        (expr.trim() == format!("var.{name}")).then_some(*default)
+    }
+}
+
+/// `[0]`, `0`: an index into a block list, which a fix path ignores.
+fn is_index_segment(s: &str) -> bool {
+    let s = s
+        .strip_prefix('[')
+        .and_then(|s| s.strip_suffix(']'))
+        .unwrap_or(s);
+    !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// The value of `attr` comes straight from a variable's default: its
+/// provenance is that default, the variable, and the attribute.
+fn variable_default(attr: &tf_semantic::Attr) -> Option<(Arc<str>, FileSpan)> {
+    let steps = attr.value.prov.steps();
+    let (origin, rest) = steps.split_first()?;
+    let passed_through = rest.iter().all(|s| {
+        matches!(
+            s.kind,
+            tf_eval::prov::StepKind::Variable | tf_eval::prov::StepKind::Attribute
+        )
+    });
+    if origin.kind != tf_eval::prov::StepKind::VariableDefault || !passed_through {
+        return None;
+    }
+    let name = origin
+        .label
+        .strip_prefix("variable ")?
+        .strip_suffix(" default")?;
+    Some((Arc::from(name), origin.at))
+}
+
+/// Whether blocks `blocks[from..]` can be created, nested, holding only
+/// `last`: each needs no other required attribute or block.
+fn creatable(
+    schema: &tf_schema::Block<'static>,
+    blocks: &[&str],
+    from: usize,
+    last: &str,
+) -> Option<()> {
+    let mut b = schema;
+    for (i, &name) in blocks.iter().enumerate() {
+        b = b.block_type(name)?.block();
+        if i < from {
+            continue;
+        }
+        let child = blocks.get(i + 1).copied().unwrap_or(last);
+        let other_required = b
+            .attributes()
+            .iter()
+            .any(|a| a.is_required() && a.name() != child)
+            || b.block_types()
+                .iter()
+                .any(|n| n.min_items() > 0 && n.name() != child);
+        if other_required {
+            return None;
+        }
+    }
+    Some(())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FixAction {
-    /// Set (or add) a top-level attribute to a literal.
+    /// Set (or add) an attribute to a literal, creating missing blocks.
     Set,
 }
 
