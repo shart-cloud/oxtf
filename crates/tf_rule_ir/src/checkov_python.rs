@@ -960,6 +960,10 @@ struct Interp<'p> {
     paths: Rc<Paths>,
     /// Configuration lookups so far this run, in order.
     reads: RefCell<Vec<Read>>,
+    /// `conf.keys()` lists of configuration dicts, by the list's address,
+    /// so `"k" in conf.keys()` is traced like `"k" in conf`. The list is
+    /// held so its address is not reused this run.
+    key_lists: RefCell<HashMap<usize, (List, ConfPath)>>,
     /// The witness of the last native check the program delegated to
     /// (Checkov's generic value check): it located what it judged.
     delegated: RefCell<Option<Value>>,
@@ -1151,7 +1155,17 @@ impl<'p> Interp<'p> {
             },
             Py::List(l) | Py::Set(l) => {
                 let items = l.borrow().clone();
-                self.contains_seq(&items, needle)
+                let found = self.contains_seq(&items, needle)?;
+                let addr = Rc::as_ptr(&l) as *const () as usize;
+                let dict = self.key_lists.borrow().get(&addr).map(|(_, p)| p.clone());
+                if let (Some(dict), Py::Str(key)) = (dict, self.concrete(needle)?) {
+                    self.reads.borrow_mut().push(Read {
+                        dict,
+                        key,
+                        present: found,
+                    });
+                }
+                Ok(found)
             }
             Py::Tuple(t) => self.contains_seq(&t, needle),
             Py::Dict(d) => {
@@ -2861,7 +2875,17 @@ impl<'p> Interp<'p> {
                     None => Self::arg(&args, &kwargs, 1, "default").unwrap_or(Py::None),
                 }
             }
-            (Py::Dict(d), "keys") => Py::list(d.borrow().iter().map(|(k, _)| k.clone()).collect()),
+            (Py::Dict(d), "keys") => {
+                let keys = Py::list(d.borrow().iter().map(|(k, _)| k.clone()).collect());
+                let addr = Rc::as_ptr(d) as *const () as usize;
+                if let (Some(path), Py::List(l)) = (self.paths.get(&addr), &keys) {
+                    self.key_lists.borrow_mut().insert(
+                        Rc::as_ptr(l) as *const () as usize,
+                        (l.clone(), path.clone()),
+                    );
+                }
+                keys
+            }
             (Py::Dict(d), "values") => {
                 Py::list(d.borrow().iter().map(|(_, v)| v.clone()).collect())
             }
@@ -4554,6 +4578,7 @@ fn run_with(
         steps: std::cell::Cell::new(0),
         paths,
         reads: RefCell::new(Vec::new()),
+        key_lists: RefCell::new(HashMap::default()),
         delegated: RefCell::new(None),
     };
     let outcome = interp.call_function(&program.entry, vec![py_conf], Vec::new());

@@ -40,11 +40,8 @@ fn fixes(dir: &Path, rule: &str, configure: &dyn Fn(&mut ScanRequest)) -> String
         .filter(|f| &*f.rule == rule)
         .collect();
     assert_eq!(found.len(), 1, "{rule} in {}: {found:?}", dir.display());
-    let hint = found[0]
-        .fix_hint
-        .as_ref()
-        .unwrap_or_else(|| panic!("{rule}: no fix hint"));
-    let edit = apply_fix(&before, hint).unwrap();
+    assert!(found[0].fix_hint.is_some(), "{rule}: no fix hint");
+    let edit = apply_fix(&before, found[0]).unwrap();
     let after = run(
         dir,
         configure,
@@ -84,7 +81,7 @@ fn checkov_predicates_imply_fixes_that_pass() {
     );
     fixes(&cases.join("is_false"), "CKV2_FIX_IS_FALSE", &checkov);
     let acl = fixes(&cases.join("within_one"), "CKV2_FIX_WITHIN", &checkov);
-    assert!(acl.contains("acl = \"private\""), "{acl}");
+    assert!(acl.contains("  acl    = \"private\"\n"), "{acl}");
 }
 
 #[test]

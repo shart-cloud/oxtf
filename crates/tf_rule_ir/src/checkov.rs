@@ -1106,17 +1106,18 @@ impl ValueCheck {
             .join(".")
     }
 
-    /// The mechanical fix a passing value implies: a positive check of a
-    /// top-level attribute against one literal sets it to that literal.
-    pub fn fix(&self) -> Option<(String, Json)> {
-        let [attribute] = self.path.as_slice() else {
-            return None;
-        };
+    /// The mechanical fix a passing value implies: a positive check
+    /// against one literal sets the attribute at its path (index segments
+    /// included; [`tf_linter::FixHint::set_path`] drops them) to that
+    /// literal.
+    pub fn fix(&self) -> Option<(Vec<String>, Json)> {
         let [value] = self.values.as_slice() else {
             return None;
         };
         let literal = !value.is_array() && !value.is_object() && !value.is_null();
-        (!self.negative && !self.any_value && literal).then(|| (attribute.clone(), value.clone()))
+        let wildcard = self.path.iter().any(|s| s.contains('*'));
+        (!self.negative && !self.any_value && literal && !wildcard)
+            .then(|| (self.path.clone(), value.clone()))
     }
 
     pub fn evaluate(&self, resource: &Resource) -> Verdict {

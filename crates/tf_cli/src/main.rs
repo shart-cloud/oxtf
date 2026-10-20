@@ -4,7 +4,7 @@
 //! oxtf scan [PATH...] [-r|--recursive] [--format text|json|ndjson|sarif] [--var-file FILE]...
 //!           [--rule ID]... [--rule-file PATH]... [--threads N] [--color] [--no-diagnostics] [--quiet]
 //! oxtf scan --plan PLAN.json [--source DIR] [options]
-//! oxtf fix FINGERPRINT [PATH...] [scan options] [--write] [-f diff|json]
+//! oxtf fix FINGERPRINT [PATH...] [scan options] [--at default|attribute] [--write] [-f diff|json]
 //! oxtf rules
 //! ```
 //!
@@ -41,11 +41,13 @@ const USAGE: &str = "usage:
                                   scan `terraform show -json` output; findings are mapped
                                   back to .tf spans in DIR (default: the plan's directory
                                   if it has .tf files, else locations point into the JSON)
-  oxtf fix FINGERPRINT [PATH...] [scan options] [--write] [-f diff|json]
+  oxtf fix FINGERPRINT [PATH...] [scan options] [--at default|attribute] [--write] [-f diff|json]
                                   apply the fix hint of the finding with FINGERPRINT in
                                   memory, rescan to check the finding is gone, and print
                                   the edit as a diff (or JSON); --write writes it, only
-                                  when verified. Exit 0 verified, 1 the finding remains,
+                                  when verified. A value written as var.x is fixed at the
+                                  variable's default first, else at the attribute (--at
+                                  picks one). Exit 0 verified, 1 the finding remains,
                                   2 no such finding, no fix hint, or the scan failed
   oxtf rules [--rule-file PATH]... [-f json]
                                   list built-in and loaded rules: level, category, engine,
@@ -433,11 +435,16 @@ fn fix(mut args: impl Iterator<Item = String>) -> ExitCode {
     let Some(fingerprint) = args.next().filter(|a| !a.starts_with('-')) else {
         return fail(format!("oxtf fix needs a FINGERPRINT first\n\n{USAGE}"));
     };
-    // `--write` and the fix's own format are not scan options.
-    let (mut write, mut json, mut rest) = (false, false, Vec::new());
+    // `--write`, `--at` and the fix's own format are not scan options.
+    let (mut write, mut json, mut site, mut rest) = (false, false, None, Vec::new());
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--write" => write = true,
+            "--at" => match args.next().as_deref() {
+                Some("attribute") => site = Some(tf_scan::FixSite::Attribute),
+                Some("default") => site = Some(tf_scan::FixSite::Default),
+                other => return fail(format!("unknown fix site {other:?}")),
+            },
             "-f" | "--format" => match args.next().as_deref() {
                 Some("diff") => json = false,
                 Some("json") => json = true,
@@ -450,7 +457,7 @@ fn fix(mut args: impl Iterator<Item = String>) -> ExitCode {
         Ok(a) => a.request,
         Err(e) => return fail(format!("{e}\n\n{USAGE}")),
     };
-    let outcome = match tf_scan::fix(request, &fingerprint) {
+    let outcome = match tf_scan::fix(request, &fingerprint, site) {
         Ok(o) => o,
         Err(e) => return fail(e.to_string()),
     };
@@ -471,6 +478,7 @@ fn fix(mut args: impl Iterator<Item = String>) -> ExitCode {
                 "attribute": hint.attribute,
                 "action": hint.action.as_str(),
                 "value": hint.value,
+                "site": outcome.site.as_str(),
                 "verified": outcome.verified,
                 "written": written,
                 "diff": diff,
@@ -479,8 +487,12 @@ fn fix(mut args: impl Iterator<Item = String>) -> ExitCode {
     } else {
         print!("{diff}");
         eprintln!(
-            "{}: {} {}",
+            "{}: {}{} {}",
             outcome.fingerprint,
+            match outcome.site {
+                tf_scan::FixSite::Default => "at the variable default: ",
+                tf_scan::FixSite::Attribute => "",
+            },
             if outcome.verified {
                 "the edit removes the finding"
             } else {

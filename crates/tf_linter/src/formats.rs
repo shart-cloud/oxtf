@@ -81,6 +81,10 @@ fn finding_line(f: &FindingRecord) -> J {
             "value": h.value,
             "site": h.site.as_ref().map(|l| json!({"file": l.file, "line": l.line, "column": l.column})),
         });
+        if let Some(l) = &h.default_site {
+            v["fix_hint"]["default_site"] =
+                json!({"file": l.file, "line": l.line, "column": l.column});
+        }
     }
     v
 }

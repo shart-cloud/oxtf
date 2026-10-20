@@ -470,11 +470,13 @@ pub struct FixOutcome {
     /// The rule of the finding.
     pub rule: String,
     pub hint: tf_linter::FixHint,
+    /// Where the literal was written.
+    pub site: FixSite,
     /// The file's text before the edit.
     pub original: String,
     pub edit: FixEdit,
-    /// The finding is gone from a scan of the same request with the edit
-    /// as an overlay.
+    /// The rule no longer fails on the declaration in a scan of the same
+    /// request with the edit as an overlay (on no attribute, from no root).
     pub verified: bool,
 }
 
@@ -516,12 +518,20 @@ impl fmt::Display for FixError {
 impl std::error::Error for FixError {}
 
 /// Fix the finding with `fingerprint`: scan `request`, apply the finding's
-/// fix hint to the source in memory ([`apply_fix`]), and scan again with
-/// the edit as an overlay to check the finding is gone. Nothing is written
-/// to disk; the caller decides what to do with a verified (or unverified)
-/// edit.
-pub fn fix(request: ScanRequest, fingerprint: &str) -> Result<FixOutcome, FixError> {
-    let mut verify = request.try_clone().ok_or(FixError::NotRepeatable)?;
+/// fix hint to the source in memory ([`apply_fix_at`]), and scan again
+/// with the edit as an overlay to check the rule no longer fails on the
+/// declaration. Nothing is written to disk; the caller decides what to do
+/// with a verified (or unverified) edit.
+///
+/// With `site` `None`, a value written as `var.x` is first fixed at the
+/// variable's default (keeping the module's interface), and at the
+/// attribute when that does not verify (a caller passes its own value).
+pub fn fix(
+    request: ScanRequest,
+    fingerprint: &str,
+    site: Option<FixSite>,
+) -> Result<FixOutcome, FixError> {
+    let verify = request.try_clone().ok_or(FixError::NotRepeatable)?;
     let mut request = request;
     request.keep_models = true;
     let output = scan(request).map_err(FixError::Scan)?;
@@ -537,41 +547,64 @@ pub fn fix(request: ScanRequest, fingerprint: &str) -> Result<FixOutcome, FixErr
             ) == fingerprint
         })
         .ok_or_else(|| FixError::NotFound(fingerprint.to_string()))?;
-    let rule = r.findings[group.representative].rule.to_string();
+    let representative = &r.findings[group.representative];
+    let rule = representative.rule.to_string();
+    let subject = tf_linter::record::finding_subject_key(&r.files, representative, &mut repos);
     // The representative's hint, else any occurrence's.
-    let hint = std::iter::once(group.representative)
+    let hinted = std::iter::once(group.representative)
         .chain(group.members.iter().copied())
-        .find_map(|i| r.findings[i].fix_hint.clone())
+        .map(|i| &r.findings[i])
+        .find(|f| f.fix_hint.is_some())
         .ok_or_else(|| FixError::NoHint {
             fingerprint: fingerprint.to_string(),
             rule: rule.clone(),
         })?;
-    let edit = apply_fix(&output, &hint).map_err(FixError::Apply)?;
-    let original = r
-        .files
-        .load(&edit.file)
-        .map(|sf| sf.text.to_string())
-        .map_err(|e| FixError::Apply(format!("{}: {e}", edit.file.display())))?;
-    verify.keep_models = false;
-    verify
-        .overlay
-        .retain(|(p, _)| normalize(p) != normalize(&edit.file));
-    verify
-        .overlay
-        .push((edit.file.clone(), Arc::from(edit.text.as_str())));
-    let after = scan(verify).map_err(FixError::Scan)?;
-    let mut repos = tf_linter::record::RepoRoots::new();
-    let verified = !after.result.findings.iter().any(|f| {
-        tf_linter::record::finding_fingerprint(&after.result.files, f, &mut repos) == fingerprint
-    });
-    Ok(FixOutcome {
-        fingerprint: fingerprint.to_string(),
-        rule,
-        hint,
-        original,
-        edit,
-        verified,
-    })
+    let hint = hinted.fix_hint.clone().expect("found by its hint");
+    let sites = match site {
+        Some(s) => vec![s],
+        None if hint.default_site(&r.files).is_some() => {
+            vec![FixSite::Default, FixSite::Attribute]
+        }
+        None => vec![FixSite::Attribute],
+    };
+    let mut first = None;
+    for site in sites {
+        let edit = apply_fix_at(&output, &hinted.root, &hint, site).map_err(FixError::Apply)?;
+        let original = r
+            .files
+            .load(&edit.file)
+            .map(|sf| sf.text.to_string())
+            .map_err(|e| FixError::Apply(format!("{}: {e}", edit.file.display())))?;
+        let mut verify = verify.try_clone().ok_or(FixError::NotRepeatable)?;
+        verify.keep_models = false;
+        verify
+            .overlay
+            .retain(|(p, _)| normalize(p) != normalize(&edit.file));
+        verify
+            .overlay
+            .push((edit.file.clone(), Arc::from(edit.text.as_str())));
+        let after = scan(verify).map_err(FixError::Scan)?;
+        let mut repos = tf_linter::record::RepoRoots::new();
+        let verified = !after.result.findings.iter().any(|f| {
+            f.rule == representative.rule
+                && tf_linter::record::finding_subject_key(&after.result.files, f, &mut repos)
+                    == subject
+        });
+        let outcome = FixOutcome {
+            fingerprint: fingerprint.to_string(),
+            rule: rule.clone(),
+            hint: hint.clone(),
+            site,
+            original,
+            edit,
+            verified,
+        };
+        if verified {
+            return Ok(outcome);
+        }
+        first.get_or_insert(outcome);
+    }
+    Ok(first.expect("at least one site is tried"))
 }
 
 /// A unified diff of one file's edit (one hunk around the changed lines,
@@ -634,15 +667,83 @@ pub struct FixEdit {
     pub text: String,
 }
 
+/// Where a fix writes its literal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FixSite {
+    /// The attribute in the resource block (inserted when not written).
+    Attribute,
+    /// The default of the variable the attribute is written as
+    /// ([`tf_linter::FixHint::default_site`]).
+    Default,
+}
+
+impl FixSite {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            FixSite::Attribute => "attribute",
+            FixSite::Default => "default",
+        }
+    }
+}
+
 /// Apply a finding's fix hint to the source of `output` (scanned with
-/// `keep_models`): the attribute is rewritten at its `site`, or inserted
-/// into the resource block when it is not written. The value is written as
-/// an HCL literal. Nothing is written to disk; scan the edit through
-/// `ScanRequest::overlay` to check it.
-pub fn apply_fix(output: &ScanOutput, hint: &tf_linter::FixHint) -> Result<FixEdit, String> {
+/// `keep_models`) at the attribute: rewritten in place when it is written,
+/// else inserted into the resource block, creating the blocks on its path.
+/// See [`apply_fix_at`].
+pub fn apply_fix(output: &ScanOutput, finding: &tf_linter::Finding) -> Result<FixEdit, String> {
+    let hint = finding
+        .fix_hint
+        .as_ref()
+        .ok_or_else(|| format!("{} on {}: no fix hint", finding.rule, finding.address))?;
+    apply_fix_at(output, &finding.root, hint, FixSite::Attribute)
+}
+
+/// Apply a fix hint of a finding from root module `root` at `site` (the
+/// hint's resource address is looked up in that root: two roots may each
+/// declare `aws_instance.this`). A written value is replaced, keeping the
+/// text up to and including its `=` (so alignment survives); an inserted
+/// attribute is aligned with the attributes above it the way `terraform
+/// fmt` aligns them. The value is written as an HCL literal. Nothing is
+/// written to disk; scan the edit through `ScanRequest::overlay` to check
+/// it.
+pub fn apply_fix_at(
+    output: &ScanOutput,
+    root: &std::path::Path,
+    hint: &tf_linter::FixHint,
+    site: FixSite,
+) -> Result<FixEdit, String> {
+    let files = &output.result.files;
+    let value = hcl_literal(&hint.value);
+    let at = match site {
+        FixSite::Attribute => hint.site,
+        FixSite::Default => Some(hint.default_site(files).ok_or_else(|| {
+            format!(
+                "{} {}: not written as a variable with a default",
+                hint.resource, hint.attribute
+            )
+        })?),
+    };
+    if let Some(at) = at {
+        let sf = files.get(at.file);
+        let mut text = sf.text.to_string();
+        let (start, end) = (at.span.start as usize, at.span.end as usize);
+        let eq = text[start..end]
+            .find('=')
+            .ok_or_else(|| format!("{}: no `=` in the attribute", hint.attribute))?;
+        let mut from = start + eq + 1;
+        while matches!(text.as_bytes().get(from), Some(b' ' | b'\t')) {
+            from += 1;
+        }
+        text.replace_range(from..end, &value);
+        return Ok(FixEdit {
+            file: sf.path.clone(),
+            text,
+        });
+    }
     let resource = output
         .analyses
         .iter()
+        .filter(|a| normalize(&a.root_dir) == normalize(root))
         .flat_map(|a| &a.modules)
         .flat_map(|m| &m.resources)
         .find(|r| r.id == hint.resource)
@@ -652,36 +753,166 @@ pub fn apply_fix(output: &ScanOutput, hint: &tf_linter::FixHint) -> Result<FixEd
                 hint.resource
             )
         })?;
-    let line = format!("{} = {}", hint.attribute, hcl_literal(&hint.value));
-    let (file, text) = match hint.site {
-        Some(at) => {
-            let sf = output.result.files.get(at.file);
-            let mut text = sf.text.to_string();
-            text.replace_range(at.span.start as usize..at.span.end as usize, &line);
-            (sf.path.clone(), text)
-        }
-        None => {
-            let body = resource.body.span;
-            let sf = output.result.files.get(body.file);
-            let mut text = sf.text.to_string();
-            // A block body's span ends at its closing brace.
-            let close = body.span.end as usize;
-            if text.as_bytes().get(close) != Some(&b'}') {
+    // Descend the blocks on the path that are written; the rest is created.
+    let path: Vec<&str> = hint.attribute.split('.').collect();
+    let (&key, blocks) = path.split_last().expect("split yields one item");
+    let mut body = &resource.body;
+    let mut missing = blocks;
+    while let Some((&name, rest)) = missing.split_first() {
+        let mut written = body.blocks_of(name);
+        match (written.next(), written.next()) {
+            (Some(one), None) if !one.dynamic => body = &one.body,
+            (None, _) => break,
+            _ => {
                 return Err(format!(
-                    "{}: resource block has no closing brace",
+                    "{}: more than one `{name}` block, or a dynamic one",
                     hint.resource
                 ));
             }
-            let line_start = text[..close].rfind('\n').map_or(0, |i| i + 1);
-            if text[line_start..close].trim().is_empty() {
-                text.insert_str(line_start, &format!("  {line}\n"));
-            } else {
-                text.insert_str(close, &format!("\n  {line}\n"));
-            }
-            (sf.path.clone(), text)
         }
+        missing = rest;
+    }
+    let sf = files.get(body.span.file);
+    let mut text = sf.text.to_string();
+    let span = body.span.span;
+    insert_into_body(
+        &mut text,
+        (span.start as usize, span.end as usize),
+        missing,
+        key,
+        &value,
+    )
+    .ok_or_else(|| format!("{}: cannot find the block's braces", hint.resource))?;
+    Ok(FixEdit {
+        file: sf.path.clone(),
+        text,
+    })
+}
+
+/// Insert `key = value`, wrapped in new nested `blocks`, at the end of the
+/// block body `(open, close)` (from after its `{` to its `}`) of `text`.
+fn insert_into_body(
+    text: &mut String,
+    (open, close): (usize, usize),
+    blocks: &[&str],
+    key: &str,
+    value: &str,
+) -> Option<()> {
+    if open == 0 || text.as_bytes().get(open - 1) != Some(&b'{') {
+        return None;
+    }
+    if text.as_bytes().get(close) != Some(&b'}') {
+        return None;
+    }
+    let indent_of = |text: &str, at: usize| -> String {
+        let line = text[..at].rfind('\n').map_or(0, |i| i + 1);
+        text[line..]
+            .chars()
+            .take_while(|c| *c == ' ' || *c == '\t')
+            .collect()
     };
-    Ok(FixEdit { file, text })
+    // A one-line block (`{}` or `{ a = 1 }`) is opened up first: HCL wants
+    // the opening brace to end its line in a multi-line block.
+    let close = if text[open..close].contains('\n') {
+        close
+    } else {
+        let outer = indent_of(text, open);
+        let inner = text[open..close].trim().to_string();
+        let mut expanded = String::from("\n");
+        if !inner.is_empty() {
+            expanded.push_str(&format!("{outer}  {inner}\n"));
+        }
+        expanded.push_str(&outer);
+        text.replace_range(open..close, &expanded);
+        open + expanded.len()
+    };
+    let line_start = text[..close].rfind('\n').map_or(0, |i| i + 1);
+    let mut close = close;
+    if !text[line_start..close].trim().is_empty() {
+        // Content before the closing brace on its line: break the line.
+        let outer = indent_of(text, open);
+        text.insert_str(close, &format!("\n{outer}"));
+        close += 1 + outer.len();
+    }
+    let line_start = text[..close].rfind('\n').map_or(0, |i| i + 1);
+    let base = format!("{}  ", &text[line_start..close]);
+    let mut lines = String::new();
+    for (depth, name) in blocks.iter().enumerate() {
+        lines.push_str(&format!("{base}{}{name} {{\n", "  ".repeat(depth)));
+    }
+    let mut line_start = line_start;
+    if blocks.is_empty() {
+        let (line, at) = align(text, line_start, &base, key, value)?;
+        lines.push_str(&line);
+        line_start = at;
+    } else {
+        let deepest = format!("{base}{}", "  ".repeat(blocks.len()));
+        lines.push_str(&format!("{deepest}{key} = {value}\n"));
+    }
+    for depth in (0..blocks.len()).rev() {
+        lines.push_str(&format!("{base}{}}}\n", "  ".repeat(depth)));
+    }
+    text.insert_str(line_start, &lines);
+    Some(())
+}
+
+/// `key = value` as a line at `indent`, aligned with the run of one-line
+/// attributes ending just above `at` the way `terraform fmt` aligns them.
+/// Only when `key` is the longest are the run's lines re-padded in `text`;
+/// the line goes at the returned offset (`at`, moved by the re-padding).
+fn align(
+    text: &mut String,
+    at: usize,
+    indent: &str,
+    key: &str,
+    value: &str,
+) -> Option<(String, usize)> {
+    // The run: one-line `name = value` lines at `indent`, directly above.
+    let mut run: Vec<(usize, usize)> = Vec::new(); // (line start, line end)
+    let mut end = at;
+    while end > 0 {
+        let start = text[..end - 1].rfind('\n').map_or(0, |i| i + 1);
+        let line = &text[start..end - 1];
+        if attribute_line(line, indent).is_none() {
+            break;
+        }
+        run.push((start, end - 1));
+        end = start;
+    }
+    let longest = run
+        .iter()
+        .filter_map(|&(s, e)| attribute_line(&text[s..e], indent).map(|(k, _)| k.len()))
+        .max()
+        .unwrap_or(0);
+    let width = longest.max(key.len());
+    let mut at = at;
+    // Lines already aligned to the longest name keep their text.
+    let repad: &[(usize, usize)] = if key.len() > longest { &run } else { &[] };
+    for &(s, e) in repad {
+        let (k, rest) = attribute_line(&text[s..e], indent)?;
+        let line = format!("{indent}{k:width$} = {rest}");
+        at = at + line.len() - (e - s);
+        text.replace_range(s..e, &line);
+    }
+    Some((format!("{indent}{key:width$} = {value}\n"), at))
+}
+
+/// `name = value` on one line at exactly `indent`: the name and the
+/// value. A value opening a multi-line expression is not one line.
+fn attribute_line<'t>(line: &'t str, indent: &str) -> Option<(&'t str, &'t str)> {
+    let rest = line.strip_prefix(indent)?;
+    if rest.starts_with([' ', '\t']) {
+        return None;
+    }
+    let (name, value) = rest.split_once('=')?;
+    let name = name.trim_end();
+    let value = value.trim();
+    let ident = !name.is_empty()
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
+    let opens = value.ends_with(['{', '[', '(']) || value.starts_with("<<") || value.is_empty();
+    (ident && !value.starts_with('=') && !opens).then_some((name, value))
 }
 
 /// A JSON value as an HCL literal.

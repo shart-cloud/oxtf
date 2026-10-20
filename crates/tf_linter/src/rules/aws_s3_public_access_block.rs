@@ -98,6 +98,7 @@ impl Rule for AwsS3PublicAccessBlock {
             action: FixAction::Set,
             value: serde_json::Value::Bool(true),
             site: (step.kind != StepKind::Default).then_some(step.at),
+            variable: None,
         })
     }
 
