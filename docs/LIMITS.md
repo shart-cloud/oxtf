@@ -476,7 +476,7 @@ remains outside `text_bytes`; scalar coercion still uses text admission. Model
 builders, instance/expansion caches and projection copies are admitted by the
 following slice. Container headers, B-tree overhead, provenance, and standard allocator OOM
 behavior retain the existing exclusions. The validated recursive type/value
-walks still require the planned explicit-stack replacement.
+walks are covered by the measured stack bound ("Stack bound").
 
 ## Analyzer model collection admission
 
@@ -606,7 +606,7 @@ Hash-table spare capacity/control bytes, container headers, diagnostic storage,
 and symbol/key text retain the earlier exclusions. The reference slot protects
 the new edge allocation; the symbol's text length still needs text admission.
 Composition and reference traversal work remain outside the work counter.
-Existing parser-guarded recursive walks still need explicit traversal stacks.
+Existing parser-guarded recursive walks are covered by the measured stack bound.
 Graph solver/dependency construction and evaluator value provenance are separate
 from these cached, parsed reference records.
 
@@ -660,6 +660,27 @@ reports `RunOutput.results_exhaustion`.
 The default is about 190 times the largest measured corpus scan (507 findings
 and 14 rule errors with the standard catalog).
 
+## Stack bound
+
+Input-driven recursion is bounded by depth guards (parser 64, AST 64, JSON 64,
+evaluation 128, modules 10) rather than explicit work stacks. The bound is
+verified by measurement: an adversarial corpus nests every construct at, one
+past and far past (1,000) its ceiling and is scanned with every profile on
+shrinking worker stacks.
+
+| Build | Worst root | Stack needed |
+| --- | --- | --- |
+| release | 1,000-local chain | 274 KiB |
+| release | parser-only constructs | ≤ 124 KiB |
+| debug | 1,000-local chain | 635 KiB |
+| debug | 1,000-deep wrapped values | 508 KiB |
+
+Workers reserve 4 MiB, at most 256 MiB across 64 workers; stack reservation is
+virtual and is not resident memory. `crates/tf_scan/tests/stack.rs` runs the
+corpus through the production scan in a debug child process; it aborts at a
+256 KiB worker stack and passes at 4 MiB. A new recursive path that outgrows the
+headroom fails that test rather than a user's scan.
+
 ## Remaining scope
 
 Input, arena, evaluator text, builtin, expression, semantic conversion, analyzer
@@ -677,9 +698,8 @@ This is not a process-wide CPU or memory sandbox.
 Those gaps remain in [Phase 2/3 of the TigerStyle plan](plans/TIGERSTYLE_PLAN.md).
 Its completion cut line closes the gaps that are linear in admitted input (plan
 models, line indexes, parser scratch, paths and metadata text).
-The temporary depth guards still need replacement with explicit traversal
-stacks, including runtime conversion's descent through validated type/default
-trees. The completed directory walkers do not close that broader recursion work.
+Depth guards with the measured stack bound above replace the planned
+explicit-stack rewrite; see "Stack bound".
 
 ## Default measurement
 
@@ -1337,3 +1357,25 @@ without repeated measurements. Findings, errors, status and every input/arena/
 text/collection counter match exactly: results admission adds no collection
 payload. Raw samples are retained in
 [`tigerstyle-results.json`](../bench/results/tigerstyle-results.json).
+
+## Stack measurements
+
+Paired comparison against the seventeenth-slice probe, five alternating pairs
+per case. This run was noisier than earlier ones (the seed single-worker
+baseline measured 947 ms against 743 ms an hour before, on the unchanged binary).
+
+| Catalog | Workers | Keep models | Before ms | After ms | Elapsed change | Peak RSS change |
+| --- | ---: | --- | ---: | ---: | ---: | ---: |
+| seed | 1 | false | 946.73 | 982.44 | +3.77% | +0.15% |
+| seed | 1 | true | 1034.01 | 1037.91 | +0.38% | +0.00% |
+| seed | 4 | false | 571.39 | 459.31 | -19.62% | +8.76% |
+| seed | 4 | true | 364.73 | 375.93 | +3.07% | -0.06% |
+| standard | 1 | false | 1216.15 | 1218.57 | +0.20% | +0.09% |
+| standard | 1 | true | 1290.54 | 1244.98 | -3.53% | -0.02% |
+| standard | 4 | false | 589.63 | 575.20 | -2.45% | -0.71% |
+| standard | 4 | true | 501.33 | 503.08 | +0.35% | -0.13% |
+
+No elapsed or RSS median rises above the 10% gate, and findings, errors, status
+and every counter match. Untouched stack pages are not resident, so the smaller
+reservation is not expected to change RSS. Raw samples are retained in
+[`tigerstyle-stack.json`](../bench/results/tigerstyle-stack.json).

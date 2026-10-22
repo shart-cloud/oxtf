@@ -17,9 +17,11 @@ use crate::engine::Linter;
 use crate::record::RuleError;
 use crate::rule::{Certainty, Finding};
 
-/// Each worker currently reserves a 64 MiB stack: cap the total reservation at 4 GiB.
+/// At most 64 workers of 4 MiB each: 256 MiB of reserved stack.
 pub use tf_limits::WORKERS_MAX;
-const WORKER_STACK_BYTES: usize = 64 << 20;
+/// Guarded recursion at every depth ceiling needs at most 274 KiB in release and
+/// 635 KiB in debug (docs/LIMITS.md); `tests/stack.rs` in tf_scan enforces the fit.
+const WORKER_STACK_BYTES: usize = 4 << 20;
 
 #[derive(Debug)]
 pub enum ScanError {
@@ -383,9 +385,8 @@ pub fn scan_with_files(
             })
             .collect()
     };
-    // Deep reference chains recurse; give workers generous stacks. No more
-    // workers than roots: a one-root scan (an editor buffer, a patch) must
-    // not spawn a thread per CPU to use one of them.
+    // No more workers than roots: a one-root scan (an editor buffer, a patch)
+    // must not spawn a thread per CPU to use one of them.
     let threads = opts
         .threads
         .unwrap_or_else(|| {

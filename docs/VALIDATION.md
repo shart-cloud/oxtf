@@ -569,3 +569,26 @@ stay below the 10% elapsed/RSS gate.
 The accepted seventeenth-slice probe is preserved at
 `/tmp/oxtf-scan-after-results`, SHA-256
 `db008b9022e5e7dadefbd67c3b41b5f647e73145c22da26da416d14ed1fe850e`.
+
+## Stack checks
+
+The eighteenth TigerStyle slice sets worker stacks from measurement.
+`crates/tf_scan/tests/stack.rs` scans an adversarial corpus (every nesting
+construct at, one past and far past its ceiling, every profile) on production
+workers in a debug child process with core dumps disabled. It was verified to
+abort with 256 KiB workers and pass with 4 MiB. Use the commands in "Graph and
+provenance checks", with the paired comparison:
+
+```sh
+python3 bench/collection_limits.py --before /tmp/oxtf-scan-after-results \
+  --baseline-record bench/results/tigerstyle-results.json --repeats 5 \
+  --output bench/results/tigerstyle-stack.json
+```
+
+Final eighteenth-slice validation: 572 Rust workspace checks pass (two existing
+ignored tests) and 349 Python checks pass with Terraform required. Clippy and
+formatting pass. No paired case rises above the 10% gate.
+
+The accepted eighteenth-slice probe is preserved at
+`/tmp/oxtf-scan-after-stack`, SHA-256
+`5e9ac19e702d669496478ea824c1b5daab0b6202012a283cfcb329afdceb14c1`.

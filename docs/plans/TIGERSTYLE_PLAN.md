@@ -646,6 +646,20 @@ Validation: 571 Rust and 349 Python checks pass; all eight paired comparisons
 pass the 10% gate with identical outcomes and counters. Samples in
 `bench/results/tigerstyle-results.json`.
 
+The eighteenth slice (2026-10-22) closes areas 5 and 6 by measurement:
+
+- An adversarial corpus nests every construct (blocks, unary, parentheses, lists,
+  objects, calls, templates, conditionals, binary chains, JSON, tfvars JSON,
+  local chains, wrapped values, module chains) at, one past and far past its
+  ceiling, scanned with every profile. Release needs at most 274 KiB of worker
+  stack, debug 635 KiB; both worst cases are 1,000-local chains stopped by the
+  evaluator guard. Parser-only constructs need at most 124 KiB (release).
+- Rewriting the parser and evaluator to explicit stacks would replace the two
+  hottest paths to remove a crash the guards already prevent, so it is dropped.
+  Worker stacks shrink from 64 MiB to 4 MiB (6× debug, 15× release headroom);
+  `tf_scan/tests/stack.rs` scans the corpus on production workers in a child
+  process and fails if any guarded path outgrows them (verified to abort at 256 KiB).
+
 ### Remaining work after slice fifteen
 
 Eight work areas remain. These are scope groups, not fixed-size implementation
@@ -694,14 +708,12 @@ Applied to the eight areas:
 | 2. Plan models | Closed | Plan JSON is admitted input; decoding and ownership are linear in it. |
 | 3. Metadata and text | Closed | Line indexes, paths, keys and scratch are linear in admitted source. |
 | 4. Results and adapters | Done (slice 17) | Findings scale with rules × resources: cap findings and diagnostics, reserve the terminal diagnostic. Rendering and Python conversion are linear in the capped results. |
-| 5. Live memory | Do, small | Measure and set the worker stack size after area 6; document live vs cumulative memory. |
-| 6. Traversal stacks | Do, narrowed | Parser and evaluator, where input drives depth. Other walks run over depth-checked ASTs and keep their guards. |
+| 5. Live memory | Done (slice 18) | Worker stacks set from measurement (64 MiB → 4 MiB). Retained models are admitted at construction; counters stay cumulative, not live RSS. |
+| 6. Traversal stacks | Closed (slice 18) | Measured instead of rewritten: every guarded path at and past its ceiling needs at most 274 KiB (release) / 635 KiB (debug); a CI probe enforces the fit. Revisit only if the probe fails. |
 | 7. Work coverage | Audit only | Record amplifying gaps and fix those; linear predicates and builtins are bounded by input. |
 | 8. Policy | Ratchet | CI rejects new functions over 70 lines; existing ones are allowlisted and shrink over time. |
 
-Remaining slices, in order: parser/evaluator explicit stacks followed by stack
-sizing (6, 5),
-then the function-length ratchet and the area 7 audit (8, 7).
+Remaining slice: the function-length ratchet and the area 7 audit (8, 7).
 
 Validation cadence: each slice runs the Rust workspace tests with the corpus
 required, Clippy, and one corpus timing against the 0.5 s budget. The full paired
@@ -992,7 +1004,7 @@ and performance harnesses.
    global map lock during parsing, and test initialization failure/reentrancy
    so the change cannot deadlock.
 3. Remeasure stacks after Phase 4 and replace the 64 MiB worker reservation
-   with a justified size. Keep worker count within the configured ceiling and
+   with a justified size (done in slice 18 without an explicit-stack rewrite). Keep worker count within the configured ceiling and
    admitted work. Distinguish stack reservation from resident memory.
 4. Document and measure the memory model:
    retained source/AST/cache data + retained results/models + active-root
