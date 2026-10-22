@@ -1,6 +1,6 @@
 # Proof-of-value plan
 
-Status: proposed, 2026-10-22. Follows the completed
+Status: items 1 and 2 done (2026-10-22); items 3–5 open. Follows the completed
 [TigerStyle migration](TIGERSTYLE_PLAN.md). Relates to the open items in
 [signal completion](SIGNAL_COMPLETION.md).
 
@@ -54,6 +54,14 @@ Make a scan of an uninitialized repository read as useful and honest.
 Done when: the EKS scan above shows one install hint, names the incomplete root,
 and every remaining diagnostic is one a user can act on.
 
+Done (2026-10-22). Missing installs have their own code
+(`coverage-module-not-installed`) and one text line; records and Python expose
+each root's `status`; `oxtf scan --fetch` / `tfscan.scan(fetch=True)` install
+modules for the roots that need them and rescan (7.3 s on EKS, 17 of 19 roots
+complete). The two remaining EKS errors are reusable modules whose defaults
+Terraform also rejects (`coalescelist([], [])`, `coalesce("", "")`); the
+diagnostic now names the builtin.
+
 ### 2. Reconciliation against Checkov
 
 Answer "why fewer findings?" before anyone asks.
@@ -70,6 +78,11 @@ Answer "why fewer findings?" before anyone asks.
 
 Done when: every Checkov result on those repositories has a category, and
 genuine gaps are listed with counts.
+
+Done (2026-10-22): [RECONCILIATION.md](../RECONCILIATION.md). On six
+repositories, 255 results match; all 20 Checkov-only results are Checkov false
+positives; 57 reviewed oxtf-only results are real except `CKV_AWS_315`'s narrow
+predicate; 168 of 174 unshipped results are `CKV_TF_1`.
 
 ### 3. Installation
 
@@ -107,6 +120,11 @@ the reconciliation ranks them. Known candidates from signal completion:
 - `CKV_GCP_24` and `CKV_GCP_22` raise on `version = null` in the pinned Checkov
   classes (13 corpus errors). Needs a reviewed checker replacement; do not
   swallow exceptions globally.
+- `CKV_AWS_315` accepts only a top-level `launch_template`, failing ASGs that
+  use one through `mixed_instances_policy` (Checkov shares the defect). Needs
+  the same reviewed-replacement mechanism as the two crashing checks.
+- Decide on a `CKV_TF_1` equivalent (module source pinning, `hygiene`), the
+  largest single count difference from Checkov.
 - Missing deterministic functions: `fileset` (6 roots), `timeadd` (4),
   `formatdate` (1). Implement against Terraform comparisons. Runtime-generated
   values such as `uuid` stay unknown.
