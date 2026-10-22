@@ -1,6 +1,6 @@
 # TigerStyle alignment plan
 
-Status: implementation in progress. Shared evaluation/default/rule accounting,
+Status: implementation in progress; completion is defined by the cut line under "Remaining work". Shared evaluation/default/rule accounting,
 scan input admission, cooperative Rego execution time, and root-owned backend
 caches are implemented. Arena/model/output storage, remaining backend and loader
 work, explicit AST/evaluator traversal stacks, and final acceptance remain open.
@@ -644,6 +644,38 @@ slices; several will require multiple passes. The overall migration remains inco
 The next bounded storage slice should start with graph construction and traversal
 containers in `graph.rs`, preserving dependency certainty and solver completion.
 Value provenance is a separate part of the same remaining work area.
+
+### Completion cut line (2026-10-22)
+
+The list above grew as slices uncovered more containers; admitting every
+container has no natural end. Completion is defined by this rule instead:
+
+> A structure whose size is at most linear in already-admitted input is bounded
+> transitively by the input limits and needs no reservation of its own. Only
+> operations that can amplify — multiply, expand, copy across instances, or
+> combine rules with resources — need their own admission.
+
+Each existing slice remains valid; the rule only stops further per-container work.
+Applied to the eight areas:
+
+| Area | Decision | Reason |
+| --- | --- | --- |
+| 1. Graph and provenance | Do | Dependency sets and provenance copies can grow multiplicatively. |
+| 2. Plan models | Closed | Plan JSON is admitted input; decoding and ownership are linear in it. |
+| 3. Metadata and text | Closed | Line indexes, paths, keys and scratch are linear in admitted source. |
+| 4. Results and adapters | Do, narrowed | Findings scale with rules × resources: cap findings and diagnostics, reserve the terminal diagnostic. Rendering and Python conversion are linear in the capped results. |
+| 5. Live memory | Do, small | Measure and set the worker stack size after area 6; document live vs cumulative memory. |
+| 6. Traversal stacks | Do, narrowed | Parser and evaluator, where input drives depth. Other walks run over depth-checked ASTs and keep their guards. |
+| 7. Work coverage | Audit only | Record amplifying gaps and fix those; linear predicates and builtins are bounded by input. |
+| 8. Policy | Ratchet | CI rejects new functions over 70 lines; existing ones are allowlisted and shrink over time. |
+
+Remaining slices, in order: graph/provenance (1), findings cap and terminal
+diagnostic (4), parser/evaluator explicit stacks followed by stack sizing (6, 5),
+then the function-length ratchet and the area 7 audit (8, 7).
+
+Validation cadence: each slice runs the Rust workspace tests with the corpus
+required, Clippy, and one corpus timing against the 0.5 s budget. The full paired
+benchmark, Python suite and documentation updates run once per completed area.
 
 ## Scope and decisions
 
