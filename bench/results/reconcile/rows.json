@@ -1,0 +1,5722 @@
+[
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV2_AWS_41",
+  "file": "examples/eks-hybrid-nodes/remote.tf",
+  "resource": "aws_instance.hybrid_node",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV2_AWS_5",
+  "file": "main.tf",
+  "resource": "aws_security_group.cluster",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV2_AWS_5",
+  "file": "modules/eks-managed-node-group/main.tf",
+  "resource": "aws_security_group.this",
+  "category": "checkov-only",
+  "certainty": null,
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV2_AWS_5",
+  "file": "modules/self-managed-node-group/main.tf",
+  "resource": "aws_security_group.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV2_AWS_5",
+  "file": "node_groups.tf",
+  "resource": "aws_security_group.node",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV2_AWS_5",
+  "file": "tests/eks-managed-node-group/main.tf",
+  "resource": "aws_security_group.remote_access",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_111",
+  "file": "node_groups.tf",
+  "resource": "aws_iam_policy_document.cni_ipv6_policy",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_126",
+  "file": "examples/eks-hybrid-nodes/remote.tf",
+  "resource": "aws_instance.hybrid_node",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_135",
+  "file": "examples/eks-hybrid-nodes/remote.tf",
+  "resource": "aws_instance.hybrid_node",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_158",
+  "file": "main.tf",
+  "resource": "aws_cloudwatch_log_group.this",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_23",
+  "file": "examples/eks-hybrid-nodes/remote.tf",
+  "resource": "aws_security_group.remote_node",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_23",
+  "file": "examples/eks-hybrid-nodes/remote.tf",
+  "resource": "aws_vpc_security_group_egress_rule.remote_node",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_23",
+  "file": "examples/eks-hybrid-nodes/remote.tf",
+  "resource": "aws_vpc_security_group_ingress_rule.remote_node",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_23",
+  "file": "tests/eks-managed-node-group/main.tf",
+  "resource": "aws_security_group.remote_access",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_274",
+  "file": "modules/capability/main.tf",
+  "resource": "aws_iam_role_policy_attachment.additional",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_290",
+  "file": "modules/eks-managed-node-group/main.tf",
+  "resource": "aws_iam_role_policy.this",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_315",
+  "file": "modules/self-managed-node-group/main.tf",
+  "resource": "aws_autoscaling_group.this",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_338",
+  "file": "main.tf",
+  "resource": "aws_cloudwatch_log_group.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_339",
+  "file": "main.tf",
+  "resource": "aws_eks_cluster.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_341",
+  "file": "modules/eks-managed-node-group/main.tf",
+  "resource": "aws_launch_template.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_341",
+  "file": "modules/self-managed-node-group/main.tf",
+  "resource": "aws_launch_template.this",
+  "category": "checkov-only",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_355",
+  "file": "modules/capability/main.tf",
+  "resource": "aws_iam_policy.this",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_355",
+  "file": "modules/eks-managed-node-group/main.tf",
+  "resource": "aws_iam_role_policy.this",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_355",
+  "file": "modules/hybrid-node-role/main.tf",
+  "resource": "aws_iam_policy.intermediate",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_355",
+  "file": "modules/hybrid-node-role/main.tf",
+  "resource": "aws_iam_policy.this",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_355",
+  "file": "tests/eks-fargate-profile/main.tf",
+  "resource": "aws_iam_policy.additional",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_355",
+  "file": "tests/eks-managed-node-group/main.tf",
+  "resource": "aws_iam_policy.node_additional",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_355",
+  "file": "tests/self-managed-node-group/main.tf",
+  "resource": "aws_iam_policy.additional",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_356",
+  "file": "modules/hybrid-node-role/main.tf",
+  "resource": "aws_iam_policy_document.this",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_356",
+  "file": "node_groups.tf",
+  "resource": "aws_iam_policy_document.cni_ipv6_policy",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_37",
+  "file": "main.tf",
+  "resource": "aws_eks_cluster.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_38",
+  "file": "main.tf",
+  "resource": "aws_eks_cluster.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_382",
+  "file": "tests/eks-managed-node-group/main.tf",
+  "resource": "aws_security_group.remote_access",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_39",
+  "file": "main.tf",
+  "resource": "aws_eks_cluster.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_58",
+  "file": "main.tf",
+  "resource": "aws_eks_cluster.this",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "unreviewed",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_79",
+  "file": "modules/eks-managed-node-group/main.tf",
+  "resource": "aws_launch_template.this",
+  "category": "checkov-only",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_79",
+  "file": "modules/self-managed-node-group/main.tf",
+  "resource": "aws_launch_template.this",
+  "category": "checkov-only",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_8",
+  "file": "examples/eks-hybrid-nodes/remote.tf",
+  "resource": "aws_instance.hybrid_node",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_AWS_88",
+  "file": "examples/eks-hybrid-nodes/remote.tf",
+  "resource": "aws_instance.hybrid_node",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "examples/eks-auto-mode/main.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "examples/eks-capabilities/main.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "examples/eks-hybrid-nodes/main.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "examples/eks-hybrid-nodes/remote.tf",
+  "resource": "key_pair",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "examples/eks-hybrid-nodes/remote.tf",
+  "resource": "remote_node_vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "examples/eks-managed-node-group/eks-al2023.tf",
+  "resource": "eks_al2023",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "examples/eks-managed-node-group/eks-bottlerocket.tf",
+  "resource": "eks_bottlerocket",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "examples/eks-managed-node-group/main.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "examples/karpenter/main.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "examples/self-managed-node-group/eks-al2023.tf",
+  "resource": "eks_al2023",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "examples/self-managed-node-group/eks-bottlerocket.tf",
+  "resource": "eks_bottlerocket",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "examples/self-managed-node-group/main.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "main.tf",
+  "resource": "kms",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "tests/eks-fargate-profile/main.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "tests/eks-managed-node-group/main.tf",
+  "resource": "aws_vpc_cni_ipv6_pod_identity",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "tests/eks-managed-node-group/main.tf",
+  "resource": "ebs_kms_key",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "tests/eks-managed-node-group/main.tf",
+  "resource": "key_pair",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "tests/eks-managed-node-group/main.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "tests/self-managed-node-group/main.tf",
+  "resource": "aws_vpc_cni_ipv4_pod_identity",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "tests/self-managed-node-group/main.tf",
+  "resource": "ebs_kms_key",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "tests/self-managed-node-group/main.tf",
+  "resource": "key_pair",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "tests/self-managed-node-group/main.tf",
+  "resource": "kms",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-eks",
+  "check": "CKV_TF_1",
+  "file": "tests/self-managed-node-group/main.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV2_AWS_5",
+  "file": "modules/file-system/main.tf",
+  "resource": "aws_security_group.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV2_AWS_6",
+  "file": "main.tf",
+  "resource": "aws_s3_bucket.this",
+  "category": "checkov-only",
+  "certainty": null,
+  "profile": "unreviewed",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV2_AWS_61",
+  "file": "main.tf",
+  "resource": "aws_s3_bucket.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV2_AWS_62",
+  "file": "main.tf",
+  "resource": "aws_s3_bucket.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV2_AWS_65",
+  "file": "main.tf",
+  "resource": "aws_s3_bucket_ownership_controls.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_AWS_144",
+  "file": "main.tf",
+  "resource": "aws_s3_bucket.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_AWS_145",
+  "file": "main.tf",
+  "resource": "aws_s3_bucket.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_AWS_18",
+  "file": "main.tf",
+  "resource": "aws_s3_bucket.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_AWS_19",
+  "file": "main.tf",
+  "resource": "aws_s3_bucket.this",
+  "category": "checkov-only",
+  "certainty": null,
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_AWS_21",
+  "file": "main.tf",
+  "resource": "aws_s3_bucket.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_AWS_27",
+  "file": "examples/notification/main.tf",
+  "resource": "aws_sqs_queue.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_AWS_286",
+  "file": "modules/file-system/main.tf",
+  "resource": "aws_iam_role_policy.this",
+  "category": "oxtf-only",
+  "certainty": "conditional",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_AWS_287",
+  "file": "modules/file-system/main.tf",
+  "resource": "aws_iam_role_policy.this",
+  "category": "oxtf-only",
+  "certainty": "conditional",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_AWS_288",
+  "file": "modules/file-system/main.tf",
+  "resource": "aws_iam_role_policy.this",
+  "category": "oxtf-only",
+  "certainty": "conditional",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_AWS_289",
+  "file": "modules/file-system/main.tf",
+  "resource": "aws_iam_role_policy.this",
+  "category": "oxtf-only",
+  "certainty": "conditional",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_AWS_290",
+  "file": "modules/file-system/main.tf",
+  "resource": "aws_iam_role_policy.this",
+  "category": "oxtf-only",
+  "certainty": "conditional",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_AWS_300",
+  "file": "main.tf",
+  "resource": "aws_s3_bucket_lifecycle_configuration.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_AWS_355",
+  "file": "modules/file-system/main.tf",
+  "resource": "aws_iam_role_policy.this",
+  "category": "oxtf-only",
+  "certainty": "conditional",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_AWS_53",
+  "file": "main.tf",
+  "resource": "aws_s3_bucket_public_access_block.this",
+  "category": "checkov-only",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_AWS_54",
+  "file": "main.tf",
+  "resource": "aws_s3_bucket_public_access_block.this",
+  "category": "checkov-only",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_AWS_55",
+  "file": "main.tf",
+  "resource": "aws_s3_bucket_public_access_block.this",
+  "category": "checkov-only",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_AWS_56",
+  "file": "main.tf",
+  "resource": "aws_s3_bucket_public_access_block.this",
+  "category": "checkov-only",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_TF_1",
+  "file": "examples/bucket-policies/main.tf",
+  "resource": "kms",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_TF_1",
+  "file": "examples/complete/main.tf",
+  "resource": "kms",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_TF_1",
+  "file": "examples/directory-bucket/main.tf",
+  "resource": "kms",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_TF_1",
+  "file": "examples/file-system/main.tf",
+  "resource": "agents_security_group",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_TF_1",
+  "file": "examples/file-system/main.tf",
+  "resource": "client_role",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_TF_1",
+  "file": "examples/file-system/main.tf",
+  "resource": "client_security_group",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_TF_1",
+  "file": "examples/file-system/main.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_TF_1",
+  "file": "examples/inventory-and-analytics/main.tf",
+  "resource": "kms",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_TF_1",
+  "file": "examples/notification/main.tf",
+  "resource": "lambda_function1",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_TF_1",
+  "file": "examples/notification/main.tf",
+  "resource": "lambda_function2",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_TF_1",
+  "file": "examples/notification/main.tf",
+  "resource": "sns_topic1",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_TF_1",
+  "file": "examples/notification/main.tf",
+  "resource": "sns_topic2",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_TF_1",
+  "file": "examples/object/main.tf",
+  "resource": "kms",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_TF_1",
+  "file": "examples/s3-replication/main.tf",
+  "resource": "kms_replica",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_TF_1",
+  "file": "examples/table-bucket/main.tf",
+  "resource": "kms",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-s3-bucket",
+  "check": "CKV_TF_1",
+  "file": "examples/vectors/main.tf",
+  "resource": "kms",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV2_AWS_30",
+  "file": "modules/db_instance/main.tf",
+  "resource": "aws_db_instance.this",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV2_AWS_60",
+  "file": "modules/db_instance/main.tf",
+  "resource": "aws_db_instance.this",
+  "category": "checkov-only",
+  "certainty": null,
+  "profile": "unreviewed",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV2_AWS_69",
+  "file": "modules/db_instance/main.tf",
+  "resource": "aws_db_instance.this",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_AWS_118",
+  "file": "modules/db_instance/main.tf",
+  "resource": "aws_db_instance.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_AWS_129",
+  "file": "modules/db_instance/main.tf",
+  "resource": "aws_db_instance.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_AWS_133",
+  "file": "modules/db_instance/main.tf",
+  "resource": "aws_db_instance.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_AWS_157",
+  "file": "modules/db_instance/main.tf",
+  "resource": "aws_db_instance.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_AWS_158",
+  "file": "modules/db_instance/main.tf",
+  "resource": "aws_cloudwatch_log_group.this",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_AWS_16",
+  "file": "modules/db_instance/main.tf",
+  "resource": "aws_db_instance.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_AWS_161",
+  "file": "modules/db_instance/main.tf",
+  "resource": "aws_db_instance.this",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_AWS_211",
+  "file": "modules/db_instance/main.tf",
+  "resource": "aws_db_instance.this",
+  "category": "checkov-only",
+  "certainty": null,
+  "profile": "unreviewed",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_AWS_226",
+  "file": "modules/db_instance/main.tf",
+  "resource": "aws_db_instance.this",
+  "category": "checkov-only",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_AWS_245",
+  "file": "modules/db_instance_automated_backups_replication/main.tf",
+  "resource": "aws_db_instance_automated_backups_replication.this",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_AWS_293",
+  "file": "modules/db_instance/main.tf",
+  "resource": "aws_db_instance.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_AWS_304",
+  "file": "modules/db_instance/main.tf",
+  "resource": "aws_secretsmanager_secret_rotation.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_AWS_338",
+  "file": "modules/db_instance/main.tf",
+  "resource": "aws_cloudwatch_log_group.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_AWS_353",
+  "file": "modules/db_instance/main.tf",
+  "resource": "aws_db_instance.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_AWS_354",
+  "file": "modules/db_instance/main.tf",
+  "resource": "aws_db_instance.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/blue-green-deployment/main.tf",
+  "resource": "mysql_security_group",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/blue-green-deployment/main.tf",
+  "resource": "postgres_security_group",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/blue-green-deployment/main.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/complete-mssql/main.tf",
+  "resource": "security_group",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/complete-mssql/main.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/complete-mysql/main.tf",
+  "resource": "security_group",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/complete-mysql/main.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/complete-oracle/main.tf",
+  "resource": "kms",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/complete-oracle/main.tf",
+  "resource": "security_group",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/complete-oracle/main.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/complete-postgres/main.tf",
+  "resource": "kms",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/complete-postgres/main.tf",
+  "resource": "security_group",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/complete-postgres/main.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/cross-region-replica-postgres/main.tf",
+  "resource": "kms",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/cross-region-replica-postgres/main.tf",
+  "resource": "security_group_region1",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/cross-region-replica-postgres/main.tf",
+  "resource": "security_group_region2",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/cross-region-replica-postgres/main.tf",
+  "resource": "vpc_region1",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/cross-region-replica-postgres/main.tf",
+  "resource": "vpc_region2",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/enhanced-monitoring/main.tf",
+  "resource": "security_group",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/enhanced-monitoring/main.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/replica-mysql/main.tf",
+  "resource": "security_group",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/replica-mysql/main.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/replica-postgres/main.tf",
+  "resource": "security_group",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/replica-postgres/main.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/role-association-postgres/main.tf",
+  "resource": "lambda",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/role-association-postgres/main.tf",
+  "resource": "rds_invoke_lambda_policy",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/role-association-postgres/main.tf",
+  "resource": "rds_invoke_lambda_role",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/role-association-postgres/main.tf",
+  "resource": "security_group",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/role-association-postgres/main.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/s3-import-mysql/main.tf",
+  "resource": "import_s3_bucket",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/s3-import-mysql/main.tf",
+  "resource": "security_group",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "CKV_TF_1",
+  "file": "examples/s3-import-mysql/main.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-rds",
+  "check": "aws-rds-unencrypted",
+  "file": "modules/db_instance/main.tf",
+  "resource": "aws_db_instance.this",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-vpc",
+  "check": "CKV2_AWS_1",
+  "file": "main.tf",
+  "resource": "aws_network_acl.private",
+  "category": "checkov-only",
+  "certainty": null,
+  "profile": "unreviewed",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-vpc",
+  "check": "CKV2_AWS_11",
+  "file": "main.tf",
+  "resource": "aws_vpc.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-vpc",
+  "check": "CKV2_AWS_12",
+  "file": "main.tf",
+  "resource": "aws_vpc.this",
+  "category": "checkov-only",
+  "certainty": null,
+  "profile": "unreviewed",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-vpc",
+  "check": "CKV2_AWS_19",
+  "file": "main.tf",
+  "resource": "aws_eip.nat",
+  "category": "checkov-only",
+  "certainty": null,
+  "profile": "unreviewed",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-vpc",
+  "check": "CKV2_AWS_5",
+  "file": "modules/vpc-endpoints/main.tf",
+  "resource": "aws_security_group.this",
+  "category": "checkov-only",
+  "certainty": null,
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-vpc",
+  "check": "CKV_AWS_148",
+  "file": "main.tf",
+  "resource": "aws_default_vpc.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-vpc",
+  "check": "CKV_AWS_158",
+  "file": "modules/flow-log/main.tf",
+  "resource": "aws_cloudwatch_log_group.this",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-vpc",
+  "check": "CKV_AWS_158",
+  "file": "vpc-flow-logs.tf",
+  "resource": "aws_cloudwatch_log_group.flow_log",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-vpc",
+  "check": "CKV_AWS_231",
+  "file": "main.tf",
+  "resource": "aws_network_acl_rule.outpost_inbound",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "unreviewed",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-vpc",
+  "check": "CKV_AWS_232",
+  "file": "main.tf",
+  "resource": "aws_network_acl_rule.outpost_inbound",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "unreviewed",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-vpc",
+  "check": "CKV_AWS_338",
+  "file": "modules/flow-log/main.tf",
+  "resource": "aws_cloudwatch_log_group.this",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-vpc",
+  "check": "CKV_AWS_338",
+  "file": "vpc-flow-logs.tf",
+  "resource": "aws_cloudwatch_log_group.flow_log",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-vpc",
+  "check": "CKV_TF_1",
+  "file": "examples/complete/main.tf",
+  "resource": "rds_security_group",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-vpc",
+  "check": "CKV_TF_1",
+  "file": "examples/flow-log/main.tf",
+  "resource": "flow_log_group",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-vpc",
+  "check": "CKV_TF_1",
+  "file": "examples/flow-log/main.tf",
+  "resource": "flow_log_role",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-aws-modules__terraform-aws-vpc",
+  "check": "CKV_TF_1",
+  "file": "examples/flow-log/main.tf",
+  "resource": "s3_bucket",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV2_AZURE_29",
+  "file": "main.tf",
+  "resource": "azurerm_kubernetes_cluster.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV2_AZURE_31",
+  "file": "examples/api_server_vnet_integration/main.tf",
+  "resource": "azurerm_subnet.api_server",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV2_AZURE_31",
+  "file": "examples/api_server_vnet_integration/main.tf",
+  "resource": "azurerm_subnet.nodes",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV2_AZURE_31",
+  "file": "examples/application_gateway_ingress/main.tf",
+  "resource": "azurerm_subnet.appgw",
+  "category": "checkov-only",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV2_AZURE_31",
+  "file": "examples/application_gateway_ingress/main.tf",
+  "resource": "azurerm_subnet.test",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV2_AZURE_31",
+  "file": "examples/local_dns_config/main.tf",
+  "resource": "azurerm_subnet.node_pool_subnet",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV2_AZURE_31",
+  "file": "examples/local_dns_config/main.tf",
+  "resource": "azurerm_subnet.test",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV2_AZURE_31",
+  "file": "examples/multiple_node_pools/main.tf",
+  "resource": "azurerm_subnet.default_node_pool_subnet",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV2_AZURE_31",
+  "file": "examples/multiple_node_pools/main.tf",
+  "resource": "azurerm_subnet.node_pool_subnet",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV2_AZURE_31",
+  "file": "examples/named_cluster/main.tf",
+  "resource": "azurerm_subnet.test",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV2_AZURE_31",
+  "file": "examples/startup/main.tf",
+  "resource": "azurerm_subnet.test",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV2_AZURE_31",
+  "file": "examples/uai_and_assign_role_on_subnet/main.tf",
+  "resource": "azurerm_subnet.subnet",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV2_AZURE_31",
+  "file": "examples/with_acr/main.tf",
+  "resource": "azurerm_subnet.test",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV2_AZURE_31",
+  "file": "examples/without_monitor/main.tf",
+  "resource": "azurerm_subnet.test",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV2_AZURE_32",
+  "file": "examples/named_cluster/key_vault.tf",
+  "resource": "azurerm_key_vault.des_vault",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV2_AZURE_32",
+  "file": "examples/startup/disk_encryption_set.tf",
+  "resource": "azurerm_key_vault.des_vault",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV2_AZURE_32",
+  "file": "examples/without_monitor/disk_encryption_set.tf",
+  "resource": "azurerm_key_vault.des_vault",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_109",
+  "file": "examples/named_cluster/key_vault.tf",
+  "resource": "azurerm_key_vault.des_vault",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_112",
+  "file": "examples/named_cluster/kms.tf",
+  "resource": "azurerm_key_vault_key.kms",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_115",
+  "file": "main.tf",
+  "resource": "azurerm_kubernetes_cluster.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_116",
+  "file": "main.tf",
+  "resource": "azurerm_kubernetes_cluster.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_117",
+  "file": "main.tf",
+  "resource": "azurerm_kubernetes_cluster.main",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_139",
+  "file": "examples/with_acr/main.tf",
+  "resource": "azurerm_container_registry.example",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_141",
+  "file": "main.tf",
+  "resource": "azurerm_kubernetes_cluster.main",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_164",
+  "file": "examples/with_acr/main.tf",
+  "resource": "azurerm_container_registry.example",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_165",
+  "file": "examples/with_acr/main.tf",
+  "resource": "azurerm_container_registry.example",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_166",
+  "file": "examples/with_acr/main.tf",
+  "resource": "azurerm_container_registry.example",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_167",
+  "file": "examples/with_acr/main.tf",
+  "resource": "azurerm_container_registry.example",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_168",
+  "file": "extra_node_pool.tf",
+  "resource": "azurerm_kubernetes_cluster_node_pool.node_pool_create_after_destroy",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_168",
+  "file": "extra_node_pool.tf",
+  "resource": "azurerm_kubernetes_cluster_node_pool.node_pool_create_before_destroy",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_168",
+  "file": "main.tf",
+  "resource": "azurerm_kubernetes_cluster.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_170",
+  "file": "main.tf",
+  "resource": "azurerm_kubernetes_cluster.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_172",
+  "file": "main.tf",
+  "resource": "azurerm_kubernetes_cluster.main",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_217",
+  "file": "examples/application_gateway_ingress/main.tf",
+  "resource": "azurerm_application_gateway.appgw",
+  "category": "checkov-only",
+  "certainty": null,
+  "profile": "unreviewed",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_218",
+  "file": "examples/application_gateway_ingress/main.tf",
+  "resource": "azurerm_application_gateway.appgw",
+  "category": "checkov-only",
+  "certainty": null,
+  "profile": "unreviewed",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_226",
+  "file": "main.tf",
+  "resource": "azurerm_kubernetes_cluster.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_227",
+  "file": "extra_node_pool.tf",
+  "resource": "azurerm_kubernetes_cluster_node_pool.node_pool_create_after_destroy",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_227",
+  "file": "extra_node_pool.tf",
+  "resource": "azurerm_kubernetes_cluster_node_pool.node_pool_create_before_destroy",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_227",
+  "file": "main.tf",
+  "resource": "azurerm_kubernetes_cluster.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_232",
+  "file": "main.tf",
+  "resource": "azurerm_kubernetes_cluster.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_233",
+  "file": "examples/with_acr/main.tf",
+  "resource": "azurerm_container_registry.example",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_237",
+  "file": "examples/with_acr/main.tf",
+  "resource": "azurerm_container_registry.example",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_4",
+  "file": "main.tf",
+  "resource": "azurerm_kubernetes_cluster.main",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": true
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_5",
+  "file": "main.tf",
+  "resource": "azurerm_kubernetes_cluster.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_6",
+  "file": "main.tf",
+  "resource": "azurerm_kubernetes_cluster.main",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_AZURE_7",
+  "file": "main.tf",
+  "resource": "azurerm_kubernetes_cluster.main",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_TF_1",
+  "file": "examples/named_cluster/key_vault.tf",
+  "resource": "public_ip",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_TF_1",
+  "file": "examples/startup/disk_encryption_set.tf",
+  "resource": "public_ip",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "Azure__terraform-azurerm-aks",
+  "check": "CKV_TF_1",
+  "file": "examples/without_monitor/disk_encryption_set.tf",
+  "resource": "public_ip",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "examples/gke_standard_cluster/main.tf",
+  "resource": "google_compute_network.additional_network",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "examples/simple_windows_node_pool/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "examples/simple_zonal_with_hub/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/beta_cluster/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/deploy_service/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/disable_client_cert/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/gke_standard_cluster/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/node_pool/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/node_pool_update_variant/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/sandbox_enabled/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/shared_vpc/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/simple_regional/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/simple_regional_additional_ip_ranges/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/simple_regional_cluster_autoscaling/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/simple_regional_private/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/simple_regional_private_no_pool/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/simple_regional_private_with_cluster_version/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/simple_regional_with_gateway_api/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/simple_regional_with_ipv6/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/simple_regional_with_kubeconfig/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/simple_zonal_private/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/stub_domains/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/stub_domains_private/main.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/stub_domains_upstream_nameservers/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/upstream_nameservers/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/workload_identity/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV2_GCP_18",
+  "file": "test/fixtures/workload_metadata_config/network.tf",
+  "resource": "google_compute_network.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_117",
+  "file": "test/setup/iam.tf",
+  "resource": "google_project_iam_member.int_test_asm",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_12",
+  "file": "cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_12",
+  "file": "modules/beta-autopilot-private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_12",
+  "file": "modules/beta-autopilot-public-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_12",
+  "file": "modules/beta-private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_12",
+  "file": "modules/beta-private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_12",
+  "file": "modules/beta-public-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_12",
+  "file": "modules/beta-public-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_12",
+  "file": "modules/gke-autopilot-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_12",
+  "file": "modules/gke-standard-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_12",
+  "file": "modules/private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_12",
+  "file": "modules/private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_123",
+  "file": "cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_123",
+  "file": "modules/beta-private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_123",
+  "file": "modules/beta-private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_123",
+  "file": "modules/beta-public-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_123",
+  "file": "modules/beta-public-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_123",
+  "file": "modules/private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_123",
+  "file": "modules/private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_13",
+  "file": "modules/gke-autopilot-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_13",
+  "file": "modules/gke-standard-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_18",
+  "file": "modules/gke-autopilot-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "oxtf-only",
+  "certainty": "conditional",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_18",
+  "file": "modules/gke-standard-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "oxtf-only",
+  "certainty": "conditional",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_20",
+  "file": "cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_20",
+  "file": "modules/beta-autopilot-private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_20",
+  "file": "modules/beta-autopilot-public-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_20",
+  "file": "modules/beta-private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_20",
+  "file": "modules/beta-private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_20",
+  "file": "modules/beta-public-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_20",
+  "file": "modules/beta-public-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_20",
+  "file": "modules/gke-autopilot-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "oxtf-only",
+  "certainty": "conditional",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_20",
+  "file": "modules/gke-standard-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "oxtf-only",
+  "certainty": "conditional",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_20",
+  "file": "modules/private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_20",
+  "file": "modules/private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_21",
+  "file": "cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_21",
+  "file": "modules/beta-autopilot-private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_21",
+  "file": "modules/beta-autopilot-public-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_21",
+  "file": "modules/beta-private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_21",
+  "file": "modules/beta-private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_21",
+  "file": "modules/beta-public-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_21",
+  "file": "modules/beta-public-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_21",
+  "file": "modules/gke-autopilot-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_21",
+  "file": "modules/gke-standard-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_21",
+  "file": "modules/private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_21",
+  "file": "modules/private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_22",
+  "file": "cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_22",
+  "file": "modules/beta-private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_22",
+  "file": "modules/beta-private-cluster/cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_22",
+  "file": "modules/beta-public-cluster-update-variant/cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_22",
+  "file": "modules/beta-public-cluster/cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_22",
+  "file": "modules/private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_22",
+  "file": "modules/private-cluster/cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_23",
+  "file": "modules/gke-autopilot-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_23",
+  "file": "modules/gke-standard-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_25",
+  "file": "cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_25",
+  "file": "modules/beta-autopilot-public-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_25",
+  "file": "modules/beta-public-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_25",
+  "file": "modules/beta-public-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "examples/gke_standard_cluster/main.tf",
+  "resource": "google_compute_subnetwork.additional_subnetwork",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "examples/simple_windows_node_pool/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "examples/simple_zonal_with_hub/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/beta_cluster/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/deploy_service/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/disable_client_cert/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/gke_standard_cluster/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/node_pool/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/node_pool_update_variant/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/sandbox_enabled/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/shared_vpc/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/simple_regional/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/simple_regional_additional_ip_ranges/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/simple_regional_additional_ip_ranges/network.tf",
+  "resource": "google_compute_subnetwork.secondary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/simple_regional_cluster_autoscaling/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/simple_regional_private/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/simple_regional_private_no_pool/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/simple_regional_private_with_cluster_version/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/simple_regional_with_gateway_api/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/simple_regional_with_ipv6/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/simple_regional_with_kubeconfig/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/simple_zonal_private/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/stub_domains/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/stub_domains_private/main.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/stub_domains_upstream_nameservers/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/upstream_nameservers/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/workload_identity/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_26",
+  "file": "test/fixtures/workload_metadata_config/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_32",
+  "file": "examples/island_cluster_anywhere_in_gcp_design/router.tf",
+  "resource": "google_compute_instance.vm",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_32",
+  "file": "examples/island_cluster_with_vm_router/router.tf",
+  "resource": "google_compute_instance.vm",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_36",
+  "file": "examples/island_cluster_anywhere_in_gcp_design/router.tf",
+  "resource": "google_compute_instance.vm",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_38",
+  "file": "examples/island_cluster_anywhere_in_gcp_design/router.tf",
+  "resource": "google_compute_instance.vm",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_38",
+  "file": "examples/island_cluster_with_vm_router/router.tf",
+  "resource": "google_compute_instance.vm",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_41",
+  "file": "test/setup/iam.tf",
+  "resource": "google_project_iam_member.int_test_1",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_41",
+  "file": "test/setup/iam.tf",
+  "resource": "google_project_iam_member.int_test_2",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_41",
+  "file": "test/setup/iam.tf",
+  "resource": "google_project_iam_member.int_test_asm",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_41",
+  "file": "test/setup/iam.tf",
+  "resource": "google_project_iam_member.int_test_fleet",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_42",
+  "file": "test/fixtures/safer_cluster_iap_bastion/example.tf",
+  "resource": "google_project_iam_member.member",
+  "category": "oxtf-only",
+  "certainty": "conditional",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_43",
+  "file": "test/fixtures/beta_cluster/main.tf",
+  "resource": "google_kms_crypto_key.db",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_46",
+  "file": "test/fixtures/safer_cluster_iap_bastion/example.tf",
+  "resource": "google_project_iam_member.member",
+  "category": "oxtf-only",
+  "certainty": "conditional",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_49",
+  "file": "test/setup/iam.tf",
+  "resource": "google_project_iam_member.int_test_1",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_49",
+  "file": "test/setup/iam.tf",
+  "resource": "google_project_iam_member.int_test_2",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_49",
+  "file": "test/setup/iam.tf",
+  "resource": "google_project_iam_member.int_test_asm",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_49",
+  "file": "test/setup/iam.tf",
+  "resource": "google_project_iam_member.int_test_fleet",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_61",
+  "file": "cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_61",
+  "file": "modules/beta-autopilot-private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_61",
+  "file": "modules/beta-autopilot-public-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_61",
+  "file": "modules/beta-private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_61",
+  "file": "modules/beta-private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_61",
+  "file": "modules/beta-public-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_61",
+  "file": "modules/beta-public-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_61",
+  "file": "modules/gke-autopilot-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_61",
+  "file": "modules/gke-standard-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_61",
+  "file": "modules/private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_61",
+  "file": "modules/private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "audit",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_64",
+  "file": "cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_64",
+  "file": "modules/beta-autopilot-public-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_64",
+  "file": "modules/beta-public-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_64",
+  "file": "modules/beta-public-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_65",
+  "file": "cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_65",
+  "file": "modules/beta-autopilot-private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_65",
+  "file": "modules/beta-autopilot-public-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_65",
+  "file": "modules/beta-private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_65",
+  "file": "modules/beta-private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_65",
+  "file": "modules/beta-public-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_65",
+  "file": "modules/beta-public-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_65",
+  "file": "modules/gke-autopilot-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_65",
+  "file": "modules/gke-standard-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_65",
+  "file": "modules/private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_65",
+  "file": "modules/private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_66",
+  "file": "cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_66",
+  "file": "modules/beta-autopilot-private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_66",
+  "file": "modules/beta-autopilot-public-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_66",
+  "file": "modules/beta-private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_66",
+  "file": "modules/beta-private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_66",
+  "file": "modules/beta-public-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_66",
+  "file": "modules/beta-public-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_66",
+  "file": "modules/gke-autopilot-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_66",
+  "file": "modules/gke-standard-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_66",
+  "file": "modules/private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_66",
+  "file": "modules/private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_68",
+  "file": "cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_68",
+  "file": "cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_68",
+  "file": "modules/beta-private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_68",
+  "file": "modules/beta-private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_68",
+  "file": "modules/beta-private-cluster/cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_68",
+  "file": "modules/beta-private-cluster/cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_68",
+  "file": "modules/beta-public-cluster-update-variant/cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_68",
+  "file": "modules/beta-public-cluster-update-variant/cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_68",
+  "file": "modules/beta-public-cluster/cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_68",
+  "file": "modules/beta-public-cluster/cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_68",
+  "file": "modules/gke-node-pool/main.tf",
+  "resource": "google_container_node_pool.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_68",
+  "file": "modules/gke-standard-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_68",
+  "file": "modules/private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_68",
+  "file": "modules/private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_68",
+  "file": "modules/private-cluster/cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_68",
+  "file": "modules/private-cluster/cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/beta-autopilot-private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/beta-autopilot-public-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/beta-private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/beta-private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/beta-private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/beta-private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/beta-private-cluster/cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/beta-private-cluster/cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/beta-public-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/beta-public-cluster-update-variant/cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/beta-public-cluster-update-variant/cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/beta-public-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/beta-public-cluster/cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/beta-public-cluster/cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/gke-autopilot-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/gke-node-pool/main.tf",
+  "resource": "google_container_node_pool.main",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/gke-standard-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/private-cluster/cluster.tf",
+  "resource": "google_container_cluster.primary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/private-cluster/cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_69",
+  "file": "modules/private-cluster/cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_70",
+  "file": "modules/gke-standard-cluster/main.tf",
+  "resource": "google_container_cluster.main",
+  "category": "oxtf-only",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_72",
+  "file": "cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "unreviewed",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_72",
+  "file": "modules/beta-private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "unreviewed",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_72",
+  "file": "modules/beta-private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "unreviewed",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_72",
+  "file": "modules/beta-private-cluster/cluster.tf",
+  "resource": "google_container_node_pool.pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "unreviewed",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_72",
+  "file": "modules/beta-private-cluster/cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "unreviewed",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_72",
+  "file": "modules/beta-public-cluster-update-variant/cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "unreviewed",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_72",
+  "file": "modules/beta-public-cluster/cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "unreviewed",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_72",
+  "file": "modules/private-cluster-update-variant/cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "unreviewed",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_72",
+  "file": "modules/private-cluster/cluster.tf",
+  "resource": "google_container_node_pool.windows_pools",
+  "category": "coverage",
+  "certainty": null,
+  "profile": "unreviewed",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "examples/gke_standard_cluster/main.tf",
+  "resource": "google_compute_subnetwork.additional_subnetwork",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "examples/simple_windows_node_pool/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "examples/simple_zonal_with_hub/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/deploy_service/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/disable_client_cert/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/gke_standard_cluster/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/node_pool/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/node_pool_update_variant/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/sandbox_enabled/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/shared_vpc/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/simple_regional/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/simple_regional_additional_ip_ranges/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/simple_regional_additional_ip_ranges/network.tf",
+  "resource": "google_compute_subnetwork.secondary",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/simple_regional_cluster_autoscaling/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/simple_regional_private/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/simple_regional_private_no_pool/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/simple_regional_private_with_cluster_version/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/simple_regional_with_gateway_api/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/simple_regional_with_ipv6/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/simple_regional_with_kubeconfig/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/simple_zonal_private/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/stub_domains/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/stub_domains_private/main.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/stub_domains_upstream_nameservers/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/upstream_nameservers/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/workload_identity/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_74",
+  "file": "test/fixtures/workload_metadata_config/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_76",
+  "file": "test/fixtures/simple_regional_with_ipv6/network.tf",
+  "resource": "google_compute_subnetwork.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_82",
+  "file": "modules/binary-authorization/main.tf",
+  "resource": "google_kms_crypto_key.crypto-key",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_82",
+  "file": "test/fixtures/beta_cluster/main.tf",
+  "resource": "google_kms_crypto_key.db",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_83",
+  "file": "examples/confidential_safer_cluster/main.tf",
+  "resource": "google_pubsub_topic.updates",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_GCP_83",
+  "file": "examples/safer_cluster/main.tf",
+  "resource": "google_pubsub_topic.updates",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_K8S_10",
+  "file": "examples/deploy_service/main.tf",
+  "resource": "kubernetes_pod.nginx-example",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_K8S_11",
+  "file": "examples/deploy_service/main.tf",
+  "resource": "kubernetes_pod.nginx-example",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_K8S_12",
+  "file": "examples/deploy_service/main.tf",
+  "resource": "kubernetes_pod.nginx-example",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_K8S_13",
+  "file": "examples/deploy_service/main.tf",
+  "resource": "kubernetes_pod.nginx-example",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_K8S_15",
+  "file": "examples/deploy_service/main.tf",
+  "resource": "kubernetes_pod.nginx-example",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_K8S_21",
+  "file": "examples/deploy_service/main.tf",
+  "resource": "kubernetes_pod.nginx-example",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_K8S_21",
+  "file": "examples/deploy_service/main.tf",
+  "resource": "kubernetes_service.nginx-example",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_K8S_21",
+  "file": "examples/workload_identity/main.tf",
+  "resource": "kubernetes_service_account_v1.test",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_K8S_21",
+  "file": "modules/workload-identity/main.tf",
+  "resource": "kubernetes_service_account_v1.main",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_K8S_28",
+  "file": "examples/deploy_service/main.tf",
+  "resource": "kubernetes_pod.nginx-example",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_K8S_29",
+  "file": "examples/deploy_service/main.tf",
+  "resource": "kubernetes_pod.nginx-example",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_K8S_30",
+  "file": "examples/deploy_service/main.tf",
+  "resource": "kubernetes_pod.nginx-example",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_K8S_41",
+  "file": "modules/workload-identity/main.tf",
+  "resource": "kubernetes_service_account_v1.main",
+  "category": "oxtf-only",
+  "certainty": "conditional",
+  "profile": "security",
+  "checkov_passed": true
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_K8S_43",
+  "file": "examples/deploy_service/main.tf",
+  "resource": "kubernetes_pod.nginx-example",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "security",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_K8S_8",
+  "file": "examples/deploy_service/main.tf",
+  "resource": "kubernetes_pod.nginx-example",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_K8S_9",
+  "file": "examples/deploy_service/main.tf",
+  "resource": "kubernetes_pod.nginx-example",
+  "category": "matched",
+  "certainty": "definite",
+  "profile": "hygiene",
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/acm-terraform-blog-part1/terraform/gke.tf",
+  "resource": "enabled_google_apis",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/acm-terraform-blog-part1/terraform/gke.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/acm-terraform-blog-part2/terraform/gke.tf",
+  "resource": "enabled_google_apis",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/acm-terraform-blog-part2/terraform/gke.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/acm-terraform-blog-part3/terraform/gke.tf",
+  "resource": "enabled_google_apis",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/acm-terraform-blog-part3/terraform/gke.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/acm-terraform-blog-part3/terraform/gke.tf",
+  "resource": "wi",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/autopilot_private_firewalls/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/autopilot_private_firewalls/network.tf",
+  "resource": "gcp-network",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/confidential_autopilot_private/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/confidential_autopilot_private/main.tf",
+  "resource": "kms",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/confidential_autopilot_private/network.tf",
+  "resource": "gcp-network",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/confidential_safer_cluster/kms.tf",
+  "resource": "kms",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/confidential_safer_cluster/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/confidential_safer_cluster/network.tf",
+  "resource": "gcp-network",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/deploy_service/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/disable_client_cert/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/gke_autopilot_cluster/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/gke_autopilot_cluster/network.tf",
+  "resource": "gcp-network",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/gke_standard_cluster/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/gke_standard_cluster/main.tf",
+  "resource": "node_pool",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/island_cluster_anywhere_in_gcp_design/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/island_cluster_anywhere_in_gcp_design/network.tf",
+  "resource": "cloud_router",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/island_cluster_anywhere_in_gcp_design/network.tf",
+  "resource": "net",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/island_cluster_with_vm_router/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/island_cluster_with_vm_router/main.tf",
+  "resource": "net",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/node_pool/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/node_pool_update_variant/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/node_pool_update_variant_beta/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/node_pool_update_variant_public_beta/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/private_zonal_with_networking/main.tf",
+  "resource": "gcp-network",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/private_zonal_with_networking/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/regional_private_node_pool_oauth_scopes/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/regional_private_node_pool_oauth_scopes/network.tf",
+  "resource": "gke-network",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/safer_cluster/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/safer_cluster/network.tf",
+  "resource": "gcp-network",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/safer_cluster_iap_bastion/apis.tf",
+  "resource": "enabled_google_apis",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/safer_cluster_iap_bastion/bastion.tf",
+  "resource": "bastion",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/safer_cluster_iap_bastion/cluster.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/safer_cluster_iap_bastion/kms.tf",
+  "resource": "kms",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/safer_cluster_iap_bastion/network.tf",
+  "resource": "cloud-nat",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/safer_cluster_iap_bastion/network.tf",
+  "resource": "vpc",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/shared_vpc/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_autopilot_private/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_autopilot_private/network.tf",
+  "resource": "gcp-network",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_autopilot_private_cmek/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_autopilot_private_cmek/main.tf",
+  "resource": "kms",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_autopilot_private_cmek/network.tf",
+  "resource": "gcp-network",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_autopilot_private_non_default_sa/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_autopilot_private_non_default_sa/network.tf",
+  "resource": "gcp-network",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_autopilot_public/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_autopilot_public/network.tf",
+  "resource": "gcp-network",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_fleet_app_operator_permissions/main.tf",
+  "resource": "custom_permissions",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_fleet_app_operator_permissions/main.tf",
+  "resource": "permissions",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_regional/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_regional_additional_ip_ranges/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_regional_beta/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_regional_cluster_autoscaling/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_regional_private/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_regional_private_beta/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_regional_private_no_pool/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_regional_private_with_cluster_version/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_regional_with_gateway_api/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_regional_with_ipv6/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_regional_with_kubeconfig/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_regional_with_kubeconfig/main.tf",
+  "resource": "gke_auth",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_regional_with_networking/main.tf",
+  "resource": "gcp-network",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_regional_with_networking/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_windows_node_pool/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_zonal_private/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_zonal_with_hub/hub.tf",
+  "resource": "hub",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_zonal_with_hub/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/simple_zonal_with_hub_kubeconfig/hub.tf",
+  "resource": "hub",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/stub_domains/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/stub_domains_private/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/stub_domains_upstream_nameservers/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/upstream_nameservers/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/workload_identity/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/workload_identity/main.tf",
+  "resource": "workload_identity",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/workload_identity/main.tf",
+  "resource": "workload_identity_existing_gsa",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/workload_identity/main.tf",
+  "resource": "workload_identity_existing_ksa",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "examples/workload_metadata_config/main.tf",
+  "resource": "gke",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "modules/binary-authorization/main.tf",
+  "resource": "project-services",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "modules/hub-legacy/main.tf",
+  "resource": "gke_hub_registration",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "modules/services/main.tf",
+  "resource": "services",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "modules/workload-identity/main.tf",
+  "resource": "annotate-sa",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "test/setup/main.tf",
+  "resource": "gke-project-1",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "test/setup/main.tf",
+  "resource": "gke-project-2",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "test/setup/main.tf",
+  "resource": "gke-project-asm",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ },
+ {
+  "repo": "terraform-google-modules__terraform-google-kubernetes-engine",
+  "check": "CKV_TF_1",
+  "file": "test/setup/main.tf",
+  "resource": "gke-project-fleet",
+  "category": "not-bundled",
+  "certainty": null,
+  "profile": null,
+  "checkov_passed": false
+ }
+]

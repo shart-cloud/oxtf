@@ -1,0 +1,1 @@
+terraform-aws-modules__terraform-aws-eks terraform-aws-modules__terraform-aws-s3-bucket terraform-aws-modules__terraform-aws-rds terraform-aws-modules__terraform-aws-vpc Azure__terraform-azurerm-aks terraform-google-modules__terraform-google-kubernetes-engine
