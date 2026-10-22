@@ -25,6 +25,11 @@ use tf_rego::{Policies, PolicyError};
 use tf_semantic::source::normalize;
 use tf_semantic::{Analysis, DiagSeverity, Diagnostic, FileTable};
 
+pub mod limits;
+pub use limits::Limits;
+mod finding_delta;
+pub use finding_delta::{FindingChange, FindingDelta};
+
 pub use tf_fetch::{FetchLimits, FetchReport, FetchRequest, FetchedModule, fetch};
 pub use tf_rego::Shape;
 pub use tf_rego::foreign::{TestOutcome, TestResult};
@@ -32,11 +37,13 @@ pub use tf_rego::foreign::{TestOutcome, TestResult};
 /// Run the `test_*` rules of the catalog's Rego (its rule files and
 /// policy paths) as `conftest verify` does.
 pub fn verify_policies(catalog: &Catalog) -> Result<Vec<TestOutcome>, ScanError> {
+    let sources = Arc::new(FileTable::new());
     let policies = &catalog.policies;
     let mut paths = policies.foreign.clone();
     let mut exclude = policies.exclude.clone();
     for path in &catalog.rule_files {
-        let loaded = tf_rule_ir::load_rules_file(path).map_err(ScanError::Rules)?;
+        let loaded =
+            tf_rule_ir::load_rules_file_with_sources(path, &sources).map_err(ScanError::Rules)?;
         if !loaded.rego.is_empty() {
             paths.push(path.clone());
             exclude.extend(loaded.claimed);
@@ -47,16 +54,19 @@ pub fn verify_policies(catalog: &Catalog) -> Result<Vec<TestOutcome>, ScanError>
             "no Rego policies to test".into(),
         )));
     }
-    tf_rego::foreign::verify(&tf_rego::foreign::Options {
-        paths: &paths,
-        data: &policies.data,
-        exclude: &exclude,
-        entries: &[],
-        namespaces: &policies.namespaces,
-        all_namespaces: true,
-        shape: Shape::Hcl,
-        rego_v0: policies.rego_v0,
-    })
+    tf_rego::foreign::verify_with_sources(
+        &tf_rego::foreign::Options {
+            paths: &paths,
+            data: &policies.data,
+            exclude: &exclude,
+            entries: &[],
+            namespaces: &policies.namespaces,
+            all_namespaces: true,
+            shape: Shape::Hcl,
+            rego_v0: policies.rego_v0,
+        },
+        sources,
+    )
     .map_err(|e| ScanError::Policy(PolicyError(e)))
 }
 
@@ -81,6 +91,8 @@ pub enum ScanInput {
 /// rule **shadows** an earlier one of the same name, so a rule-IR or Rego
 /// rule named `aws-rds-unencrypted` replaces the seed rule, and a Checkov
 /// policy loaded from a file replaces the bundled one with its ID.
+/// `Default` is empty for custom catalogs; scan constructors use
+/// [`Catalog::standard`] unless the caller explicitly replaces the catalog.
 #[derive(Default)]
 pub struct Catalog {
     /// The bundled Checkov catalog (`tf_rule_ir::bundled`): Checkov's
@@ -156,7 +168,11 @@ impl Catalog {
 
     /// The rules this catalog yields, in order, shadowed by name, and a
     /// warning for each rule-directory file that was skipped.
-    pub fn resolve(mut self) -> Result<Resolved, ScanError> {
+    pub fn resolve(self) -> Result<Resolved, ScanError> {
+        self.resolve_with_sources(&Arc::new(FileTable::new()))
+    }
+
+    pub fn resolve_with_sources(mut self, sources: &Arc<FileTable>) -> Result<Resolved, ScanError> {
         let mut warnings = Vec::new();
         // A shadowed rule leaves a hole, so each rule keeps the position of
         // its source; holes are dropped at the end. A rule's aliases shadow
@@ -197,7 +213,8 @@ impl Catalog {
             add(shipped(tf_linter::rules::all()));
         }
         for path in &self.rule_files {
-            let loaded = tf_rule_ir::load_rules_file(path).map_err(ScanError::Rules)?;
+            let loaded = tf_rule_ir::load_rules_file_with_sources(path, sources)
+                .map_err(ScanError::Rules)?;
             // Rego goes to the policy bundle: the file, or the directory
             // (whose rule files are not data for OPA mode).
             if !loaded.rego.is_empty() {
@@ -213,12 +230,20 @@ impl Catalog {
             add(compile_specs(loaded.rules)?);
         }
         for json in &self.rule_json {
-            let specs = tf_rule_ir::parse_rules(json).map_err(ScanError::Rules)?;
+            sources
+                .input_budget()
+                .admit(json.len() as u64)
+                .map_err(|e| ScanError::Rules(e.to_string()))?;
+            let specs = tf_rule_ir::parse_rules_with_limits(json, sources.input_budget().limits())
+                .map_err(ScanError::Rules)?;
             add(compile_specs(specs)?);
         }
         add(self.runtime);
         if !self.policies.is_empty() {
-            add(tf_rego::catalog(&self.policies)?);
+            add(tf_rego::catalog_with_sources(
+                &self.policies,
+                sources.clone(),
+            )?);
         }
         Ok(Resolved {
             rules: rules.into_iter().flatten().collect(),
@@ -258,6 +283,8 @@ fn compile_specs(specs: Vec<tf_rule_ir::RuleSpec>) -> Result<Vec<Box<dyn DynRule
 }
 
 pub struct ScanRequest {
+    /// Validated per-root runtime evaluation allowance.
+    pub limits: tf_limits::Limits,
     pub input: ScanInput,
     pub catalog: Catalog,
     /// Only run these rule ids, from the whole resolved catalog. Unknown
@@ -268,7 +295,7 @@ pub struct ScanRequest {
     /// Installed Terraform data directory, relative to each source root
     /// unless absolute. Defaults to `.terraform`; scanning never fetches.
     pub data_dir: Option<PathBuf>,
-    /// Worker threads; `None` = number of CPUs.
+    /// Worker threads (1..=64); `None` uses CPUs, capped by roots and 64.
     pub threads: Option<usize>,
     /// In-memory files that shadow the disk for this scan: their text is
     /// read instead of the file's, and they are listed in their directory
@@ -286,6 +313,7 @@ impl ScanRequest {
     /// A copy of this request, unless its catalog holds runtime rules.
     pub fn try_clone(&self) -> Option<ScanRequest> {
         Some(ScanRequest {
+            limits: self.limits,
             input: self.input.clone(),
             catalog: self.catalog.try_clone()?,
             selection: self.selection.clone(),
@@ -297,11 +325,14 @@ impl ScanRequest {
         })
     }
 
-    /// Seed rules over `paths`, every other knob at its default.
+    /// Standard rules over `paths`, every other knob at its default.
+    /// Includes the bundled Checkov catalog and seed rules, as in CLI/Python.
+    /// Assign [`Catalog::seed`] to `catalog` for only the seed rules.
     pub fn dirs(paths: Vec<PathBuf>, recursive: bool) -> ScanRequest {
         ScanRequest {
+            limits: tf_limits::Limits::default(),
             input: ScanInput::Dirs { paths, recursive },
-            catalog: Catalog::seed(),
+            catalog: Catalog::standard(),
             selection: None,
             var_files: Vec::new(),
             data_dir: None,
@@ -311,11 +342,13 @@ impl ScanRequest {
         }
     }
 
-    /// Seed rules over a plan.
+    /// Standard rules over a plan, matching CLI/Python defaults.
+    /// Assign [`Catalog::seed`] to `catalog` for only the seed rules.
     pub fn plan(plan: PathBuf, source: Option<PathBuf>) -> ScanRequest {
         ScanRequest {
+            limits: tf_limits::Limits::default(),
             input: ScanInput::Plan { plan, source },
-            catalog: Catalog::seed(),
+            catalog: Catalog::standard(),
             selection: None,
             var_files: Vec::new(),
             data_dir: None,
@@ -350,6 +383,7 @@ pub enum ScanError {
     Selection(RuleSelectionError),
     Policy(PolicyError),
     Plan(PlanError),
+    Execution(tf_linter::scan::ScanError),
 }
 
 impl fmt::Display for ScanError {
@@ -359,6 +393,7 @@ impl fmt::Display for ScanError {
             ScanError::Selection(e) => e.fmt(f),
             ScanError::Policy(e) => e.fmt(f),
             ScanError::Plan(e) => e.fmt(f),
+            ScanError::Execution(e) => e.fmt(f),
         }
     }
 }
@@ -384,6 +419,7 @@ impl From<PlanError> for ScanError {
 /// Run one request. The catalog is resolved and the selection validated
 /// before any input is read, so a bad rule id never costs a parse.
 pub fn scan(mut req: ScanRequest) -> Result<ScanOutput, ScanError> {
+    tf_linter::scan::validate_threads(req.threads).map_err(ScanError::Execution)?;
     // Conftest-mode policies see what Conftest would be given: a `.tf`
     // file (HCL shape) when scanning directories, the plan for a plan.
     let policies = &mut req.catalog.policies;
@@ -397,7 +433,20 @@ pub fn scan(mut req: ScanRequest) -> Result<ScanOutput, ScanError> {
     if req.selection.is_some() {
         req.catalog.profiles = Some(ALL_PROFILES.to_vec());
     }
-    let resolved = req.catalog.resolve()?;
+    let files = Arc::new(FileTable::with_overlay_and_limits(
+        req.overlay.iter().cloned(),
+        req.limits,
+    ));
+    let resolved = match req.catalog.resolve_with_sources(&files) {
+        Ok(resolved) => resolved,
+        Err(_) if files.input_budget().exhaustion().is_some() => {
+            return Ok(ScanOutput {
+                result: tf_linter::scan::limited_scan(files),
+                analyses: Vec::new(),
+            });
+        }
+        Err(e) => return Err(e),
+    };
     let skipped: Vec<Diagnostic> = resolved.diagnostics().collect();
     let linter = match &req.selection {
         Some(ids) => Linter::filtered(resolved.rules, ids)?,
@@ -415,13 +464,16 @@ pub fn scan(mut req: ScanRequest) -> Result<ScanOutput, ScanError> {
         });
         let located: Vec<Diagnostic> = located.collect();
         result.diagnostics.splice(0..0, located);
+        result.diagnostics.retain(|d| d.code != "coverage-storage");
+        result.diagnostics.extend(result.files.limit_diagnostic());
         Ok(ScanOutput { result, analyses })
     };
+    if files.input_budget().exhaustion().is_some() {
+        return output(tf_linter::scan::limited_scan(files.clone()), Vec::new());
+    }
     match req.input {
         ScanInput::Dirs { paths, recursive } => {
-            // Only for root discovery; the scan builds its own table from
-            // the same overlay so `FileId`s stay scan-local.
-            let files = FileTable::with_overlay(req.overlay.iter().cloned());
+            // Discovery and execution share the scan's snapshot and input allowance.
             let mut roots = Vec::new();
             for p in &paths {
                 if !files.is_dir(p) {
@@ -433,12 +485,20 @@ pub fn scan(mut req: ScanRequest) -> Result<ScanOutput, ScanError> {
                 // Normalised so a root is never analysed twice under two
                 // spellings when the overlay adds directories below.
                 if !recursive || p.is_dir() {
-                    roots.extend(
-                        tf_linter::scan::discover_roots_checked(p, recursive)
-                            .map_err(|e| ScanError::Input(format!("{}: {e}", p.display())))?
-                            .iter()
-                            .map(|r| normalize(r)),
-                    );
+                    match tf_linter::scan::discover_roots_with_budget(
+                        p,
+                        recursive,
+                        files.input_budget(),
+                    ) {
+                        Ok(discovered) => roots.extend(discovered.iter().map(|r| normalize(r))),
+                        Err(e) if tf_limits::input::exhaustion(&e).is_some() => {
+                            return output(
+                                tf_linter::scan::limited_scan(files.clone()),
+                                Vec::new(),
+                            );
+                        }
+                        Err(e) => return Err(ScanError::Input(format!("{}: {e}", p.display()))),
+                    }
                 }
                 if recursive {
                     // Directories that exist only in the overlay.
@@ -447,12 +507,19 @@ pub fn scan(mut req: ScanRequest) -> Result<ScanOutput, ScanError> {
                             && let Some(dir) = f.parent().map(normalize)
                             && !roots.contains(&dir)
                         {
+                            if files.input_budget().root().is_err() {
+                                return output(
+                                    tf_linter::scan::limited_scan(files.clone()),
+                                    Vec::new(),
+                                );
+                            }
                             roots.push(dir);
                         }
                     }
                 }
             }
             let opts = ScanOptions {
+                limits: req.limits,
                 recursive,
                 var_files: req.var_files,
                 data_dir: req.data_dir,
@@ -460,7 +527,9 @@ pub fn scan(mut req: ScanRequest) -> Result<ScanOutput, ScanError> {
                 overlay: req.overlay,
                 keep_models: req.keep_models,
             };
-            let (result, analyses) = tf_linter::scan_with(&linter, &roots, &opts);
+            let (result, analyses) =
+                tf_linter::scan::scan_with_files(&linter, &roots, &opts, files)
+                    .map_err(ScanError::Execution)?;
             output(result, analyses)
         }
         ScanInput::Plan { plan, source } => {
@@ -469,17 +538,33 @@ pub fn scan(mut req: ScanRequest) -> Result<ScanOutput, ScanError> {
                     "var files apply to directory input, not a plan".into(),
                 ));
             }
-            let files = Arc::new(FileTable::with_overlay(req.overlay));
-            let (result, analysis) = tf_plan::scan_plan_with_model(
+            if files.input_budget().ensure_roots(1).is_err() {
+                return output(tf_linter::scan::limited_scan(files.clone()), Vec::new());
+            }
+            let loaded = tf_plan::scan_plan_with_model(
                 &linter,
                 &plan,
                 &PlanOptions {
+                    limits: req.limits,
                     source,
                     data_dir: req.data_dir,
                 },
-                files,
-            )?;
-            output(result, vec![analysis])
+                files.clone(),
+            );
+            match loaded {
+                Ok((result, analysis)) => {
+                    let analyses = if req.keep_models {
+                        vec![analysis]
+                    } else {
+                        Vec::new()
+                    };
+                    output(result, analyses)
+                }
+                Err(PlanError::Io(_, e)) if tf_limits::input::exhaustion(&e).is_some() => {
+                    output(tf_linter::scan::limited_scan(files.clone()), Vec::new())
+                }
+                Err(e) => Err(e.into()),
+            }
         }
     }
 }
@@ -502,9 +587,17 @@ pub struct FixOutcome {
     pub diff: String,
     /// Both scans completed and the rule no longer fails on the declaration
     /// with the edit as an overlay (on no attribute, from no root).
+    pub target_resolved: bool,
+    /// Both scans completed without adding findings or affected occurrences
+    /// anywhere in the request's selected rules and roots. Existing unrelated
+    /// findings may remain.
+    pub no_new_findings: bool,
+    /// The observed before/after findings, even when either scan is incomplete.
+    pub finding_delta: FindingDelta,
+    /// Both `target_resolved` and `no_new_findings` are true.
     pub verified: bool,
     /// Analysis failures or coverage gaps in either scan. Empty does not
-    /// imply verified: the finding may still be present.
+    /// imply verified: the target may remain or other findings may appear.
     pub verification_errors: Vec<String>,
 }
 
@@ -548,12 +641,13 @@ impl std::error::Error for FixError {}
 /// Fix the finding with `fingerprint`: scan `request`, apply the finding's
 /// fix hint to the source in memory ([`apply_fix_at`]), and scan again
 /// with the edit as an overlay to check the rule no longer fails on the
-/// declaration. Nothing is written to disk; the caller decides what to do
+/// declaration and no new findings or occurrences appear in the selected scan.
+/// Nothing is written to disk; the caller decides what to do
 /// with a verified (or unverified) edit.
 ///
 /// With `site` `None`, a value written as `var.x` is first fixed at the
 /// variable's default (keeping the module's interface), and at the
-/// attribute when that does not verify (a caller passes its own value).
+/// attribute when that leaves the target unresolved or introduces findings.
 pub fn fix(
     request: ScanRequest,
     fingerprint: &str,
@@ -564,6 +658,7 @@ pub fn fix(
     request.keep_models = true;
     let output = scan(request).map_err(FixError::Scan)?;
     let r = &output.result;
+    let before_findings = output.record().findings;
     let mut repos = tf_linter::record::RepoRoots::new();
     let group = tf_linter::record::group(&r.files, &r.findings)
         .into_iter()
@@ -639,12 +734,15 @@ pub fn fix(
                     .map(|e| format!("after edit: {e}")),
             )
             .collect();
-        let verified = verification_errors.is_empty()
+        let target_resolved = verification_errors.is_empty()
             && !after.result.findings.iter().any(|f| {
                 f.rule == representative.rule
                     && tf_linter::record::finding_subject_key(&after.result.files, f, &mut repos)
                         == subject
             });
+        let finding_delta = FindingDelta::between(&before_findings, &after.record().findings);
+        let no_new_findings = verification_errors.is_empty() && !finding_delta.has_new_findings();
+        let verified = target_resolved && no_new_findings;
         let outcome = FixOutcome {
             fingerprint: fingerprint.to_string(),
             rule: rule.clone(),
@@ -653,6 +751,9 @@ pub fn fix(
             original,
             edit,
             diff,
+            target_resolved,
+            no_new_findings,
+            finding_delta,
             verified,
             verification_errors,
         };

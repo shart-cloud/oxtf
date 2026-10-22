@@ -7,6 +7,7 @@ use tf_scan::{ScanRequest, scan};
 fn request(config: &str, inputs: &[(&str, &str)]) -> ScanRequest {
     let root = PathBuf::from("/nonexistent/oxtf-json-vars");
     let mut req = ScanRequest::dirs(vec![root.clone()], false);
+    req.catalog = tf_scan::Catalog::seed();
     req.overlay.push((root.join("main.tf"), Arc::from(config)));
     req.overlay
         .extend(inputs.iter().map(|(p, s)| (root.join(p), Arc::from(*s))));
@@ -95,14 +96,12 @@ fn mixed_variable_files_follow_terraform_precedence() {
 
 #[test]
 fn invalid_json_is_failed_with_a_location() {
-    let deep = format!("{{\"x\":{}0{}}}", "[".repeat(200), "]".repeat(200));
     for input in [
         "[]",
         "{\"x\":",
         r#"{"x":1,"x":2}"#,
         r#"{"x":{"a":1,"a":2}}"#,
         r#"{"x":1e400}"#,
-        &deep,
     ] {
         let out = scan(request(
             "variable \"x\" {}\n",
@@ -117,6 +116,29 @@ fn invalid_json_is_failed_with_a_location() {
                 .any(|d| d.code == "parse-error" && d.at.is_some())
         );
     }
+}
+
+#[test]
+fn excessive_json_depth_is_incomplete_with_a_location() {
+    let deep = format!("{{\"x\":{}0{}}}", "[".repeat(200), "]".repeat(200));
+    let out = scan(request(
+        "variable \"x\" {}\n",
+        &[("terraform.tfvars.json", &deep)],
+    ))
+    .unwrap();
+    assert_eq!(out.result.status(), ScanStatus::Incomplete);
+    assert!(
+        out.result
+            .diagnostics
+            .iter()
+            .any(|d| { d.code == "coverage-parse-limit" && d.at.is_some() })
+    );
+    assert!(
+        !out.result
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "parse-error")
+    );
 }
 
 #[test]

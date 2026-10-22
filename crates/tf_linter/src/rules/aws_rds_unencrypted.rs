@@ -14,9 +14,17 @@ pub struct AwsRdsUnencrypted;
 impl RuleMeta for AwsRdsUnencrypted {
     const NAME: &'static str = "aws-rds-unencrypted";
     const CATEGORY: Category = Category::Encryption;
-    const LEVEL: Level = Level::High;
+    const LEVEL: Level = Level::Medium;
     const DESCRIPTION: &'static str = "RDS instance storage is not encrypted";
     const RESOURCE_TYPES: &'static [&'static str] = &["aws_db_instance"];
+    const RATIONALE: Option<&'static str> = Some(
+        "Unencrypted database storage lacks protection for storage and snapshot copies. This does not establish public reachability or unauthorized database access.",
+    );
+    const REMEDIATION: Option<&'static str> = Some(
+        "Set storage_encrypted = true for new instances. For an existing unencrypted instance, copy a snapshot with encryption enabled, restore a new instance, and plan a tested cutover. Review Terraform replacement and KMS permissions before applying; a verified source edit is not an in-place data migration.",
+    );
+    const GUIDELINE: Option<&'static str> =
+        Some("https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.Encryption.html");
 }
 
 impl Rule for AwsRdsUnencrypted {

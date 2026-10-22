@@ -9,9 +9,42 @@ use tf_scan::{ScanRequest, scan};
 fn request(source: &str) -> ScanRequest {
     let root = PathBuf::from("/nonexistent/oxtf-completion");
     let mut req = ScanRequest::dirs(vec![root.clone()], false);
+    req.catalog = tf_scan::Catalog::seed();
     req.threads = Some(1);
     req.overlay = vec![(root.join("main.tf"), Arc::from(source))];
     req
+}
+
+#[test]
+fn pinned_gke_null_version_defects_remain_visible_as_rule_errors() {
+    for (ty, attribute, rule) in [
+        (
+            "google_container_cluster",
+            "min_master_version",
+            "CKV_GCP_24",
+        ),
+        ("google_container_node_pool", "version", "CKV_GCP_22"),
+    ] {
+        for (value, status) in [
+            ("null", ScanStatus::Failed),
+            ("\"1.29\"", ScanStatus::Complete),
+        ] {
+            let mut req = request(&format!(
+                "resource \"{ty}\" \"r\" {{ {attribute} = {value} }}"
+            ));
+            req.catalog = tf_scan::Catalog::standard();
+            req.selection = Some(vec![rule.into()]);
+            let out = scan(req).unwrap();
+            assert_eq!(out.result.status(), status);
+            assert_eq!(
+                out.result.rule_errors.len(),
+                usize::from(status == ScanStatus::Failed)
+            );
+            if status == ScanStatus::Failed {
+                assert!(out.result.rule_errors[0].message.contains("AttributeError"));
+            }
+        }
+    }
 }
 
 fn error_when_encrypted() -> String {
@@ -92,6 +125,11 @@ fn fix_cannot_verify_when_the_rescan_fails() {
     let outcome = tf_scan::fix(req, fp, None).unwrap();
     assert!(outcome.edit.text.contains("storage_encrypted = true"));
     assert!(!outcome.verified);
+    assert!(!outcome.target_resolved && !outcome.no_new_findings);
+    assert_eq!(
+        (outcome.finding_delta.before, outcome.finding_delta.after),
+        (1, 0)
+    );
     assert!(
         outcome
             .verification_errors
@@ -108,6 +146,7 @@ fn fix_cannot_verify_an_initially_broken_configuration() {
     let fp = &before.record().findings[0].fingerprint;
     let outcome = tf_scan::fix(req, fp, None).unwrap();
     assert!(!outcome.verified);
+    assert!(!outcome.target_resolved && !outcome.no_new_findings);
     assert!(
         outcome
             .verification_errors

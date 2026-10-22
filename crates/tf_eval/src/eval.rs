@@ -8,15 +8,23 @@
 
 use std::sync::Arc;
 
-use tf_ast::{
-    BinaryOperator, Expression, ForExpr, ObjectKey, Template, TemplateElement, TraversalOperator,
-    UnaryOperator,
-};
-use tf_span::{FileId, Span};
+use tf_ast::{BinaryOperator, Expression, ForExpr, ObjectKey, TraversalOperator, UnaryOperator};
+use tf_span::{FileId, FileSpan, GetSpan, Span};
 
+use crate::budget::{BudgetRef, EvaluationBudget};
+use crate::collections::{self, Buffer};
+use crate::depth::DepthGuard;
+pub use crate::depth::EVALUATION_DEPTH_MAX;
 use crate::functions;
 use crate::prov::Prov;
+use crate::text;
 use crate::value::{Kind, Known, Map, Value};
+
+mod catches;
+mod containers;
+mod for_expr;
+mod templates;
+use containers::failure;
 
 /// Lexical bindings: a linked list of frames on the Rust stack.
 #[derive(Clone, Copy, Default)]
@@ -69,6 +77,11 @@ impl<'s> Scope<'s> {
 
 /// Resolves references rooted outside the lexical scope.
 pub trait Resolver<'a> {
+    /// Contextual functions (for example file reads) belong to the resolver.
+    fn call(&self, name: &str, args: Vec<Value>, budget: &EvaluationBudget) -> Value {
+        functions::call_budgeted(name, args, budget.storage())
+    }
+
     /// `root` is the first name of the reference (`var`, `local`,
     /// `aws_s3_bucket`, ...), `ops` the operators that follow it. Returns the
     /// value and how many leading `ops` it consumed; the evaluator applies
@@ -103,76 +116,75 @@ impl<'a> Resolver<'a> for NoResolver {
 }
 
 /// Cap on the cartesian product when lifting operations over `OneOf`s.
-pub const MAX_ALTERNATIVES: usize = 16;
-
-/// One possible collection produced by a `for` expression.
-#[derive(Clone, Default)]
-struct ForResult {
-    list: Vec<Value>,
-    object: Map,
-    grouped: std::collections::BTreeMap<Arc<str>, Vec<Value>>,
-}
-
-impl ForResult {
-    fn push(&mut self, key: Option<Arc<str>>, value: Value, grouping: bool) {
-        match key {
-            None => self.list.push(value),
-            Some(key) if grouping => self.grouped.entry(key).or_default().push(value),
-            Some(key) => {
-                self.object.insert(key, value);
-            }
-        }
-    }
-
-    fn finish(self, f: &ForExpr<'_>) -> Value {
-        if f.key_expr.is_none() {
-            Value::list(self.list)
-        } else if f.grouping {
-            Value::object(
-                self.grouped
-                    .into_iter()
-                    .map(|(k, v)| (k, Value::list(v)))
-                    .collect(),
-            )
-        } else {
-            Value::object(self.object)
-        }
-    }
-}
+pub use tf_limits::ALTERNATIVES_MAX as MAX_ALTERNATIVES;
 
 pub struct Evaluator<'r, 'a> {
     pub resolver: &'r dyn Resolver<'a>,
     /// File the expressions being evaluated live in.
     pub file: FileId,
+    budget: BudgetRef<'r>,
 }
 
 impl<'r, 'a> Evaluator<'r, 'a> {
     pub fn new(resolver: &'r dyn Resolver<'a>, file: FileId) -> Self {
-        Evaluator { resolver, file }
+        Self {
+            resolver,
+            file,
+            budget: BudgetRef::Owned(EvaluationBudget::new(tf_limits::Limits::default())),
+        }
+    }
+
+    /// Re-enter evaluation without resetting the root's cumulative allowance.
+    pub fn with_budget(
+        resolver: &'r dyn Resolver<'a>,
+        file: FileId,
+        budget: &'r EvaluationBudget,
+    ) -> Self {
+        Self {
+            resolver,
+            file,
+            budget: BudgetRef::Shared(budget),
+        }
+    }
+
+    pub fn budget(&self) -> &EvaluationBudget {
+        &self.budget
+    }
+
+    fn enter(&self, span: Span, steps: u64) -> Result<DepthGuard, Value> {
+        let at = FileSpan::new(self.file, span);
+        self.budget.charge(at, steps)?;
+        DepthGuard::enter().map_err(|limit| self.budget.finish(limit, at))
+    }
+
+    fn finish(&self, guard: &DepthGuard, value: Value, span: Span) -> Value {
+        self.budget
+            .finish(guard.finish(value), FileSpan::new(self.file, span))
     }
 
     /// Evaluate an expression that has no references (type-constraint
     /// defaults); works for any AST lifetime.
     pub fn eval_static(&self, e: &Expression<'_>) -> Value {
+        let guard = match self.enter(e.span(), 1) {
+            Ok(guard) => guard,
+            Err(limit) => return limit,
+        };
+        self.finish(&guard, self.eval_static_inner(e), e.span())
+    }
+
+    fn eval_static_inner(&self, e: &Expression<'_>) -> Value {
         match e.without_parens() {
             Expression::Null(_) => Value::null(),
             Expression::Bool(b) => Value::bool(b.value),
             Expression::Number(n) => Value::number(n.value),
-            Expression::String(s) => Value::string(s.value.as_str()),
-            Expression::Tuple(t) => {
-                Value::list(t.elements.iter().map(|x| self.eval_static(x)).collect())
-            }
-            Expression::Object(o) => Value::object(
-                o.items
-                    .iter()
-                    .filter_map(|i| {
-                        Some((
-                            Arc::from(i.key.as_static_str()?),
-                            self.eval_static(&i.value),
-                        ))
-                    })
-                    .collect(),
-            ),
+            Expression::String(s) => text::copy(s.value.as_str(), self.budget.storage())
+                .map(Value::string)
+                .unwrap_or_else(|v| v),
+            Expression::Tuple(t) => self
+                .values(t.elements.iter().map(|x| self.eval_static(x)))
+                .map(|values| Value::list(values.finish()))
+                .unwrap_or_else(|v| v),
+            Expression::Object(o) => self.static_object(o),
             Expression::Unary(u) if u.operator == UnaryOperator::Negate => {
                 match self.eval_static(&u.operand).as_number() {
                     Some(n) => Value::number(-n),
@@ -184,11 +196,21 @@ impl<'r, 'a> Evaluator<'r, 'a> {
     }
 
     pub fn eval(&self, e: &'a Expression<'a>, sc: Scope<'_>) -> Value {
+        let guard = match self.enter(e.span(), 1) {
+            Ok(guard) => guard,
+            Err(limit) => return limit,
+        };
+        self.finish(&guard, self.eval_inner(e, sc), e.span())
+    }
+
+    fn eval_inner(&self, e: &'a Expression<'a>, sc: Scope<'_>) -> Value {
         match e {
             Expression::Null(_) => Value::null(),
             Expression::Bool(b) => Value::bool(b.value),
             Expression::Number(n) => Value::number(n.value),
-            Expression::String(s) => Value::string(s.value.as_str()),
+            Expression::String(s) => text::copy(s.value.as_str(), self.budget.storage())
+                .map(Value::string)
+                .unwrap_or_else(|v| v),
             Expression::Template(t) => self.eval_template(&t.template, sc),
             Expression::Heredoc(h) => self.eval_template(&h.template, sc),
             Expression::Variable(v) => match sc.lookup(&v.name) {
@@ -218,53 +240,12 @@ impl<'r, 'a> Evaluator<'r, 'a> {
                 };
                 self.apply_ops(base, ops, sc)
             }
-            Expression::FunctionCall(f) => {
-                let name = if f.namespace.is_empty() {
-                    f.name.name.to_string()
-                } else {
-                    f.full_name()
-                };
-                match name.as_str() {
-                    "try" => return self.eval_try(&f.arguments, sc),
-                    "can" => return self.eval_can(&f.arguments, sc),
-                    _ => {}
-                }
-                let mut args: Vec<Value> = f.arguments.iter().map(|a| self.eval(a, sc)).collect();
-                if f.expand_final
-                    && let Some(last) = args.pop()
-                {
-                    match last.as_list() {
-                        Some(l) => args.extend(l.iter().map(|x| x.child_of(&last))),
-                        None => return non_known_or(&last, "cannot expand non-list"),
-                    }
-                }
-                functions::call(&name, args)
-            }
-            Expression::Tuple(t) => {
-                Value::list(t.elements.iter().map(|x| self.eval(x, sc)).collect())
-            }
-            Expression::Object(o) => {
-                let mut m = Map::new();
-                let mut keys = Prov::EMPTY;
-                for item in o.items.iter() {
-                    let key: Arc<str> = match &item.key {
-                        ObjectKey::Identifier(i) => Arc::from(i.name.as_str()),
-                        ObjectKey::Expression(k) => {
-                            // A bare traversal key like `aws.east` is literal
-                            // text in Terraform only for provider maps; treat
-                            // parenthesised / other keys as expressions.
-                            let kv = self.eval(k, sc);
-                            keys = keys.joined(&kv.prov);
-                            match kv.to_str() {
-                                Some(s) => s,
-                                None => return non_known_or(&kv, "object key is not a string"),
-                            }
-                        }
-                    };
-                    m.insert(key, self.eval(&item.value, sc));
-                }
-                Value::object(m).with_prov(keys)
-            }
+            Expression::FunctionCall(f) => self.eval_function(f, sc),
+            Expression::Tuple(t) => self
+                .values(t.elements.iter().map(|x| self.eval(x, sc)))
+                .map(|values| Value::list(values.finish()))
+                .unwrap_or_else(|v| v),
+            Expression::Object(o) => self.eval_object(o, sc),
             Expression::For(f) => self.eval_for(f, sc),
             Expression::Conditional(c) => {
                 let cond = self.eval(&c.condition, sc);
@@ -276,15 +257,20 @@ impl<'r, 'a> Evaluator<'r, 'a> {
             }
             Expression::Unary(u) => {
                 let v = self.eval(&u.operand, sc);
-                lift1(&v, &|x| match u.operator {
-                    UnaryOperator::Not => match x.as_bool() {
-                        Some(b) => Value::bool(!b),
-                        None => Value::error("operand of ! is not a bool"),
-                    },
-                    UnaryOperator::Negate => match x.as_number() {
-                        Some(n) => Value::number(-n),
-                        None => Value::error("operand of - is not a number"),
-                    },
+                self.lift_value(&v, &|x| {
+                    if !x.is_known() {
+                        return x.clone();
+                    }
+                    match u.operator {
+                        UnaryOperator::Not => match x.as_bool() {
+                            Some(b) => Value::bool(!b),
+                            None => Value::error("operand of ! is not a bool"),
+                        },
+                        UnaryOperator::Negate => match x.as_number() {
+                            Some(n) => Value::number(-n),
+                            None => Value::error("operand of - is not a number"),
+                        },
+                    }
                 })
             }
             Expression::Binary(b) => {
@@ -313,11 +299,49 @@ impl<'r, 'a> Evaluator<'r, 'a> {
                     }
                     _ => {}
                 }
-                binary(b.operator, &l, &r)
+                match dominant_non_known([&l, &r]) {
+                    Some(value) => value.inherit_sensitive(&l).inherit_sensitive(&r),
+                    None => self.lift_pair(&l, &r, &|a, bvalue| binary(b.operator, a, bvalue)),
+                }
             }
             Expression::Parenthesized(p) => self.eval(&p.expression, sc),
             Expression::Error(_) => Value::error("syntax error in expression"),
         }
+    }
+
+    fn eval_function(&self, f: &'a tf_ast::FunctionCall<'a>, sc: Scope<'_>) -> Value {
+        let name = if f.namespace.is_empty() {
+            f.name.name.to_string()
+        } else {
+            f.full_name()
+        };
+        match name.as_str() {
+            "try" => return self.eval_try(&f.arguments, sc),
+            "can" => return self.eval_can(&f.arguments, sc),
+            _ => {}
+        }
+        let mut args = match self.values(f.arguments.iter().map(|a| self.eval(a, sc))) {
+            Ok(args) => args,
+            Err(value) => return value,
+        };
+        if f.expand_final
+            && let Some(last) = args.pop()
+        {
+            match last.as_list() {
+                Some(items) => {
+                    if let Err(value) = args.reserve(items.len()) {
+                        return failure(value, args.iter().chain([&last]));
+                    }
+                    for item in items {
+                        if let Err(value) = args.push(item.child_of(&last)) {
+                            return failure(value, args.iter().chain([&last]));
+                        }
+                    }
+                }
+                None => return non_known_or(&last, "cannot expand non-list"),
+            }
+        }
+        self.resolver.call(&name, args.finish(), &self.budget)
     }
 
     /// Choose a branch by `cond` (a Known bool), or both (`OneOf`) when the
@@ -334,25 +358,37 @@ impl<'r, 'a> Evaluator<'r, 'a> {
                 Some(false) => f(),
                 None => Value::error("condition is not a bool"),
             },
-            Kind::Tainted(_) => Value::one_of(vec![t(), f()], true),
+            Kind::Tainted(_) => self.branch_alternatives(cond, t, f, true),
             Kind::OneOf(o) => {
-                let bools: Vec<Option<bool>> = o.alternatives.iter().map(|a| a.as_bool()).collect();
-                if bools.iter().all(|b| *b == Some(true)) {
+                if o.alternatives.iter().all(|a| a.as_bool() == Some(true)) {
                     t()
-                } else if bools.iter().all(|b| *b == Some(false)) {
+                } else if o.alternatives.iter().all(|a| a.as_bool() == Some(false)) {
                     f()
                 } else {
-                    Value::one_of(vec![t(), f()], o.tainted)
+                    self.branch_alternatives(cond, t, f, o.tainted)
                 }
             }
-            Kind::Unknown(_) if cond.is_error() => cond.clone(),
-            Kind::Unknown(_) => Value::one_of(vec![t(), f()], false),
+            Kind::Unknown(_)
+                if cond.is_error() || matches!(cond.origin(), Some(crate::Origin::Limit(_))) =>
+            {
+                cond.clone()
+            }
+            Kind::Unknown(_) => self.branch_alternatives(cond, t, f, false),
         };
         value.inherit_sensitive(cond)
     }
 
     /// Apply traversal operators to a value.
-    pub fn apply_ops(
+    pub fn apply_ops(&self, v: Value, ops: &'a [TraversalOperator<'a>], sc: Scope<'_>) -> Value {
+        let span = ops.first().map_or(Span::EMPTY, |op| op.span());
+        let guard = match self.enter(span, ops.len() as u64) {
+            Ok(guard) => guard,
+            Err(limit) => return limit,
+        };
+        self.finish(&guard, self.apply_ops_inner(v, ops, sc), span)
+    }
+
+    fn apply_ops_inner(
         &self,
         mut v: Value,
         ops: &'a [TraversalOperator<'a>],
@@ -361,12 +397,16 @@ impl<'r, 'a> Evaluator<'r, 'a> {
         let mut i = 0;
         while i < ops.len() {
             match &ops[i] {
-                TraversalOperator::GetAttr(g) => v = v.get_attr(&g.name.name),
+                TraversalOperator::GetAttr(g) => {
+                    v = self.lift_value(&v, &|value| value.get_attr(&g.name.name))
+                }
                 TraversalOperator::Index(ix) => {
                     let k = self.eval(&ix.index, sc);
-                    v = v.index(&k);
+                    v = self.lift_pair(&v, &k, &Value::index);
                 }
-                TraversalOperator::LegacyIndex(l) => v = v.index(&Value::number(l.index as f64)),
+                TraversalOperator::LegacyIndex(l) => {
+                    v = self.lift_pair(&v, &Value::number(l.index as f64), &Value::index)
+                }
                 TraversalOperator::FullSplat(_) => {
                     let rest = &ops[i + 1..];
                     return self.splat(v, rest, sc);
@@ -395,378 +435,32 @@ impl<'r, 'a> Evaluator<'r, 'a> {
     }
 
     fn splat(&self, v: Value, rest: &'a [TraversalOperator<'a>], sc: Scope<'_>) -> Value {
-        let sensitive = v.is_sensitive();
-        let result = match &v.kind {
-            Kind::Known(Known::Null) => Value::list(vec![]),
-            Kind::Known(Known::List(items)) => Value::list(
-                items
-                    .iter()
-                    .map(|x| self.apply_ops(x.child_of(&v), rest, sc))
-                    .collect(),
-            ),
-            Kind::Known(_) => Value::list(vec![self.apply_ops(v, rest, sc)]),
-            Kind::OneOf(o) => Value::one_of(
-                o.alternatives
-                    .iter()
-                    .map(|a| self.splat(a.child_of(&v), rest, sc))
-                    .collect(),
-                o.tainted,
-            ),
-            Kind::Unknown(_) | Kind::Tainted(_) => v,
+        let attempt = match &v.kind {
+            Kind::Known(Known::Null) => Ok(Value::list(vec![])),
+            Kind::Known(Known::List(items)) => self
+                .values(
+                    items
+                        .iter()
+                        .map(|x| self.apply_ops(x.child_of(&v), rest, sc)),
+                )
+                .map(|values| Value::list(values.finish())),
+            Kind::Known(_) => self
+                .values(std::iter::once_with(|| self.apply_ops(v.clone(), rest, sc)))
+                .map(|values| Value::list(values.finish())),
+            Kind::OneOf(o) => self
+                .values(
+                    o.alternatives
+                        .iter()
+                        .map(|a| self.splat(a.child_of(&v), rest, sc)),
+                )
+                .and_then(|values| self.alternatives(values.finish(), o.tainted)),
+            Kind::Unknown(_) | Kind::Tainted(_) => return v,
         };
-        if sensitive {
-            result.sensitive()
-        } else {
-            result
+        match attempt {
+            Ok(result) => result.inherit_sensitive(&v),
+            Err(result) => failure(result, [&v]),
         }
     }
-
-    fn eval_try(&self, args: &'a [Expression<'a>], sc: Scope<'_>) -> Value {
-        let mut last = Value::error("try: no arguments succeeded");
-        let mut successes = Vec::new();
-        let mut tainted = false;
-        let mut sensitive = false;
-        for a in args {
-            let value = self.eval(a, sc);
-            sensitive |= value.is_sensitive();
-            let outcome = try_outcome(&value);
-            if let Some(value) = outcome.value {
-                successes.push(value);
-                tainted |= outcome.tainted;
-            }
-            match outcome.error {
-                // No failing alternatives remain: do not evaluate any fallback.
-                None => {
-                    let result = Value::one_of(successes, tainted);
-                    return if sensitive {
-                        result.sensitive()
-                    } else {
-                        result
-                    };
-                }
-                Some(error) => last = error,
-            }
-        }
-        successes.push(last);
-        let result = Value::one_of(successes, tainted);
-        if sensitive {
-            result.sensitive()
-        } else {
-            result
-        }
-    }
-
-    fn eval_can(&self, args: &'a [Expression<'a>], sc: Scope<'_>) -> Value {
-        let Some(a) = args.first() else {
-            return Value::error("can: missing argument");
-        };
-        let v = self.eval(a, sc);
-        let result = if contains_error(&v) {
-            Value::bool(false)
-        } else if v.is_wholly_known() {
-            Value::bool(true)
-        } else {
-            // Unknown results (including analysis limits) do not establish
-            // whether evaluation will succeed once their inputs are known.
-            v.clone()
-        };
-        result.inherit_sensitive(&v)
-    }
-
-    fn eval_for(&self, f: &'a ForExpr<'a>, sc: Scope<'_>) -> Value {
-        let coll = self.eval(&f.collection, sc);
-        let items: Vec<(Value, Value)> = match &coll.kind {
-            Kind::Known(Known::List(l)) => l
-                .iter()
-                .enumerate()
-                .map(|(i, x)| (Value::number(i as f64), x.child_of(&coll)))
-                .collect(),
-            Kind::Known(Known::Object(m)) => m
-                .iter()
-                .map(|(k, x)| (Value::string(k.clone()), x.child_of(&coll)))
-                .collect(),
-            Kind::Known(Known::Null) => return Value::error("for: iterating over null"),
-            Kind::Known(_) => return Value::error("for: collection is not iterable"),
-            Kind::OneOf(o) => {
-                // Iterate each alternative separately.
-                let alts: Vec<Value> = o
-                    .alternatives
-                    .iter()
-                    .map(|a| self.eval_for_over(f, a.child_of(&coll), sc))
-                    .collect();
-                return Value::one_of(alts, o.tainted);
-            }
-            Kind::Unknown(_) | Kind::Tainted(_) => return coll,
-        };
-        self.eval_for_items(f, items, sc).inherit_sensitive(&coll)
-    }
-
-    fn eval_for_over(&self, f: &'a ForExpr<'a>, coll: Value, sc: Scope<'_>) -> Value {
-        let items: Vec<(Value, Value)> = match &coll.kind {
-            Kind::Known(Known::List(l)) => l
-                .iter()
-                .enumerate()
-                .map(|(i, x)| (Value::number(i as f64), x.child_of(&coll)))
-                .collect(),
-            Kind::Known(Known::Object(m)) => m
-                .iter()
-                .map(|(k, x)| (Value::string(k.clone()), x.child_of(&coll)))
-                .collect(),
-            Kind::Known(_) => return Value::error("for: collection is not iterable"),
-            _ => return coll,
-        };
-        self.eval_for_items(f, items, sc).inherit_sensitive(&coll)
-    }
-
-    fn eval_for_items(
-        &self,
-        f: &'a ForExpr<'a>,
-        items: Vec<(Value, Value)>,
-        sc: Scope<'_>,
-    ) -> Value {
-        let mut alternatives = vec![ForResult::default()];
-        let mut tainted = false;
-        let mut prov = Prov::EMPTY;
-        for (k, v) in items {
-            let mut binds: Vec<(&str, Value)> = Vec::with_capacity(2);
-            if let Some(kv) = &f.key_var {
-                binds.push((kv.name.as_str(), k));
-            }
-            binds.push((f.value_var.name.as_str(), v));
-            let res = sc.with_all(&binds, |s| {
-                let condition = f
-                    .condition
-                    .as_ref()
-                    .map_or_else(|| Value::bool(true), |c| self.eval(c, s));
-                prov = prov
-                    .clone()
-                    .with_sensitive(prov.is_sensitive() || condition.is_sensitive());
-                if condition.is_error() {
-                    return Err(condition);
-                }
-                if condition.is_known() && condition.as_bool().is_none() {
-                    return Err(Value::error("for: condition is not a bool"));
-                }
-                if condition.as_bool() == Some(false) {
-                    return Ok(None);
-                }
-                let val = self.eval(&f.value_expr, s);
-                let key = match &f.key_expr {
-                    Some(ke) => {
-                        let kv = self.eval(ke, s);
-                        prov = prov
-                            .clone()
-                            .with_sensitive(prov.is_sensitive() || kv.is_sensitive());
-                        match kv.to_str() {
-                            Some(x) => Some(x),
-                            None => return Err(non_known_or(&kv, "for: key is not a string")),
-                        }
-                    }
-                    None => None,
-                };
-                Ok(Some((key, val, condition)))
-            });
-            match res {
-                Err(e) => return e,
-                Ok(None) => {}
-                Ok(Some((key, val, condition))) => {
-                    // Absence changes the collection itself, including its
-                    // length and keys. A null element would still be present.
-                    let skipped = if condition.as_bool().is_none() {
-                        tainted |=
-                            crate::truth::uncertainty(&condition) == crate::truth::Truth::Tainted;
-                        prov = prov.joined(&condition.prov);
-                        if alternatives.len() * 2 > MAX_ALTERNATIVES {
-                            return if tainted {
-                                Value::tainted("(conditional for filter)")
-                            } else {
-                                Value::limit("for: too many filter alternatives")
-                            }
-                            .with_prov(prov);
-                        }
-                        Some(alternatives.clone())
-                    } else {
-                        None
-                    };
-                    for result in &mut alternatives {
-                        result.push(key.clone(), val.clone(), f.grouping);
-                    }
-                    alternatives.extend(skipped.into_iter().flatten());
-                }
-            }
-        }
-        Value::one_of(
-            alternatives.into_iter().map(|r| r.finish(f)).collect(),
-            tainted,
-        )
-        .with_prov(prov)
-    }
-
-    // -- templates --------------------------------------------------------
-
-    pub fn eval_template(&self, t: &'a Template<'a>, sc: Scope<'_>) -> Value {
-        // A template that is a single interpolation yields the value itself
-        // (type preserved), as in Terraform.
-        if t.elements.len() == 1
-            && let TemplateElement::Interpolation(i) = &t.elements[0]
-        {
-            return self.eval(&i.expression, sc);
-        }
-        let mut parts = Vec::new();
-        if let Err(v) = self.template_parts(t, sc, false, false, &mut parts) {
-            return v;
-        }
-        concat_parts(&parts)
-    }
-
-    fn template_parts(
-        &self,
-        t: &'a Template<'a>,
-        sc: Scope<'_>,
-        lead: bool,
-        trail: bool,
-        out: &mut Vec<Part>,
-    ) -> Result<(), Value> {
-        let els = &t.elements;
-        let n = els.len();
-        let mut trim_start = vec![false; n];
-        let mut trim_end = vec![false; n];
-        for (i, el) in els.iter().enumerate() {
-            let (before, after) = match el {
-                TemplateElement::Literal(_) => (false, false),
-                TemplateElement::Interpolation(x) => (x.strip.start, x.strip.end),
-                TemplateElement::If(x) => (x.if_strip.start, x.endif_strip.end),
-                TemplateElement::For(x) => (x.for_strip.start, x.endfor_strip.end),
-            };
-            if before && i > 0 {
-                trim_end[i - 1] = true;
-            }
-            if after && i + 1 < n {
-                trim_start[i + 1] = true;
-            }
-        }
-        if n > 0 {
-            trim_start[0] |= lead;
-            trim_end[n - 1] |= trail;
-        }
-        for (i, el) in els.iter().enumerate() {
-            match el {
-                TemplateElement::Literal(l) => {
-                    let mut s: &str = &l.value;
-                    if trim_start[i] {
-                        s = s.trim_start();
-                    }
-                    if trim_end[i] {
-                        s = s.trim_end();
-                    }
-                    if !s.is_empty() {
-                        out.push(Part::Lit(s.to_string()));
-                    }
-                }
-                TemplateElement::Interpolation(x) => {
-                    out.push(Part::Val(self.eval(&x.expression, sc)))
-                }
-                TemplateElement::If(x) => {
-                    let c = self.eval(&x.condition, sc);
-                    match c.as_bool() {
-                        Some(true) => {
-                            let trail =
-                                x.else_strip.map(|s| s.start).unwrap_or(x.endif_strip.start);
-                            self.template_parts(&x.then_template, sc, x.if_strip.end, trail, out)?;
-                        }
-                        Some(false) => {
-                            if let (Some(es), Some(et)) = (&x.else_strip, &x.else_template) {
-                                self.template_parts(et, sc, es.end, x.endif_strip.start, out)?;
-                            }
-                        }
-                        None => {
-                            return Err(non_known_or(&c, "template if: condition is not a bool"));
-                        }
-                    }
-                }
-                TemplateElement::For(x) => {
-                    let coll = self.eval(&x.collection, sc);
-                    let items: Vec<(Value, Value)> = match &coll.kind {
-                        Kind::Known(Known::List(l)) => l
-                            .iter()
-                            .enumerate()
-                            .map(|(i, v)| (Value::number(i as f64), v.child_of(&coll)))
-                            .collect(),
-                        Kind::Known(Known::Object(m)) => m
-                            .iter()
-                            .map(|(k, v)| (Value::string(k.clone()), v.child_of(&coll)))
-                            .collect(),
-                        _ => return Err(non_known_or(&coll, "template for: not iterable")),
-                    };
-                    for (k, v) in items {
-                        let mut binds: Vec<(&str, Value)> = Vec::new();
-                        if let Some(kv) = &x.key_var {
-                            binds.push((kv.name.as_str(), k));
-                        }
-                        binds.push((x.value_var.name.as_str(), v));
-                        sc.with_all(&binds, |s| {
-                            self.template_parts(
-                                &x.template,
-                                s,
-                                x.for_strip.end,
-                                x.endfor_strip.start,
-                                out,
-                            )
-                        })?;
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
-pub(crate) enum Part {
-    Lit(String),
-    Val(Value),
-}
-
-fn concat_parts(parts: &[Part]) -> Value {
-    // Lift over OneOf parts (bounded).
-    let mut alts: Vec<(String, Prov, bool)> = vec![(String::new(), Prov::EMPTY, false)];
-    for p in parts {
-        match p {
-            Part::Lit(s) => alts.iter_mut().for_each(|a| a.0.push_str(s)),
-            Part::Val(v) => {
-                let (choices, tainted): (Vec<Value>, bool) = match &v.kind {
-                    Kind::OneOf(o) => (
-                        o.alternatives.iter().map(|a| a.child_of(v)).collect(),
-                        o.tainted,
-                    ),
-                    _ => (vec![v.clone()], false),
-                };
-                if alts.len() * choices.len() > MAX_ALTERNATIVES {
-                    return Value::limit("template: too many alternatives");
-                }
-                let mut next = Vec::with_capacity(alts.len() * choices.len());
-                for a in &alts {
-                    for c in &choices {
-                        match c.to_str() {
-                            Some(s) => {
-                                let mut t = a.0.clone();
-                                t.push_str(&s);
-                                next.push((t, a.1.joined(&c.prov), a.2 || tainted));
-                            }
-                            None => return non_known_or(c, "template: value is not a string"),
-                        }
-                    }
-                }
-                alts = next;
-            }
-        }
-    }
-    let tainted = alts.iter().any(|a| a.2);
-    Value::one_of(
-        alts.into_iter()
-            .map(|(s, p, _)| Value::string(s).with_prov(p))
-            .collect(),
-        tainted,
-    )
 }
 
 /// `v` itself when it is not Known (Unknown / Tainted / ambiguous OneOf),
@@ -799,83 +493,6 @@ pub fn contains_error(v: &Value) -> bool {
     }
 }
 
-/// Successful alternatives of one `try` argument, plus an error if some
-/// alternatives fail. Errors inside a container fail the whole argument;
-/// the fallback must not be substituted into just the failing element.
-struct TryOutcome {
-    value: Option<Value>,
-    error: Option<Value>,
-    tainted: bool,
-}
-
-fn try_outcome(v: &Value) -> TryOutcome {
-    let mut outcome = match &v.kind {
-        Kind::OneOf(o) => {
-            let mut values = Vec::new();
-            let mut error = None;
-            let mut tainted = o.tainted;
-            for alternative in &o.alternatives {
-                let result = try_outcome(alternative);
-                values.extend(result.value);
-                error = error.or(result.error);
-                tainted |= result.tainted;
-            }
-            let mixed = !values.is_empty() && error.is_some();
-            TryOutcome {
-                value: (!values.is_empty()).then(|| Value::one_of(values, tainted)),
-                error,
-                // Uncertainty within successful values is already carried
-                // by `value`; only a choice between success and failure
-                // controls whether a later fallback can be taken.
-                tainted: tainted && mixed,
-            }
-        }
-        Kind::Known(Known::List(items)) => try_container(items.iter(), Value::list),
-        Kind::Known(Known::Object(items)) => try_container(items.values(), |values| {
-            Value::object(items.keys().cloned().zip(values).collect())
-        }),
-        Kind::Known(Known::Json(inner)) => {
-            let mut result = try_outcome(inner);
-            result.value = result.value.map(|v| Value::known(Known::Json(Arc::new(v))));
-            result
-        }
-        _ => {
-            return TryOutcome {
-                value: (!v.is_error()).then(|| v.clone()),
-                error: v.is_error().then(|| v.clone()),
-                tainted: false,
-            };
-        }
-    };
-    outcome.value = outcome.value.map(|value| value.child_of(v));
-    outcome.error = outcome.error.map(|error| error.child_of(v));
-    outcome
-}
-
-fn try_container<'v>(
-    items: impl Iterator<Item = &'v Value>,
-    build: impl FnOnce(Vec<Value>) -> Value,
-) -> TryOutcome {
-    let mut values = Vec::new();
-    let mut error = None;
-    let mut tainted = false;
-    let mut can_succeed = true;
-    for item in items {
-        let result = try_outcome(item);
-        match result.value {
-            Some(value) => values.push(value),
-            None => can_succeed = false,
-        }
-        error = error.or(result.error);
-        tainted |= result.tainted;
-    }
-    TryOutcome {
-        value: can_succeed.then(|| build(values)),
-        error,
-        tainted,
-    }
-}
-
 /// The dominant non-Known input among `vals`: Error > Unknown > Tainted.
 pub fn dominant_non_known<'v>(vals: impl IntoIterator<Item = &'v Value>) -> Option<Value> {
     let mut unknown = None;
@@ -897,6 +514,9 @@ pub fn dominant_non_known<'v>(vals: impl IntoIterator<Item = &'v Value>) -> Opti
 
 /// Lift a unary operation over OneOf / non-Known values.
 pub fn lift1(v: &Value, f: &dyn Fn(&Value) -> Value) -> Value {
+    if v.alternative_count() > MAX_ALTERNATIVES {
+        return Value::limit_from("too many unary alternatives", [v]);
+    }
     let result = match &v.kind {
         Kind::Known(_) => f(v),
         Kind::OneOf(o) => Value::one_of(
@@ -915,6 +535,10 @@ pub fn lift1(v: &Value, f: &dyn Fn(&Value) -> Value) -> Value {
 pub fn lift2(a: &Value, b: &Value, f: &dyn Fn(&Value, &Value) -> Value) -> Value {
     if let Some(nk) = dominant_non_known([a, b]) {
         return nk.inherit_sensitive(a).inherit_sensitive(b);
+    }
+    let count = a.alternative_count().checked_mul(b.alternative_count());
+    if count.is_none_or(|count| count > MAX_ALTERNATIVES) {
+        return Value::limit_from("too many binary alternatives", [a, b]);
     }
     let result = match (&a.kind, &b.kind) {
         (Kind::OneOf(o), _) => Value::one_of(

@@ -25,6 +25,50 @@ def terraform_env():
     return env
 
 
+def test_file_template_and_hash_values_match_terraform(tmp_path):
+    terraform = terraform_reference()
+    (tmp_path / "child").mkdir()
+    (tmp_path / "text.txt").write_text("héllo\n")
+    (tmp_path / "binary.bin").write_bytes(bytes([255, 0, 128]))
+    (tmp_path / "child/value.tftpl").write_text("${value}")
+    (tmp_path / "child/list.tftpl").write_text("%{ for item in items ~}\n${upper(item)};\n%{ endfor ~}")
+    (tmp_path / "child/unused.tftpl").write_text('${true ? "ok" : missing}')
+    (tmp_path / "child/main.tf").write_text('''
+locals {
+  values = {
+    text = file("text.txt")
+    binary = filebase64("binary.bin")
+    filehash = filesha256("text.txt")
+    encodedhash = filebase64sha256("binary.bin")
+    md5 = filemd5("binary.bin")
+    sha1 = sha1("héllo")
+    sha512 = sha512("héllo")
+    base64sha512 = base64sha512("héllo")
+    typed = templatefile("${path.module}/value.tftpl", { value = [true, 3], true = 1, null = 2 })
+    list = templatefile("${path.module}/list.tftpl", { items = ["a", "b"] })
+    caught = try(file("missing.txt"), "missing")
+    invalid_utf8 = can(file("binary.bin"))
+    missing_unused_var = can(templatefile("${path.module}/unused.tftpl", {}))
+    absolute = abspath("child/../text.txt")
+  }
+}
+output "values" { value = local.values }
+''')
+    (tmp_path / "main.tf").write_text('''
+module "child" { source = "./child" }
+resource "terraform_data" "r" { input = module.child.values }
+''')
+    subprocess.run([terraform, "get", "-no-color"], cwd=tmp_path, env=terraform_env(),
+                   check=True, capture_output=True)
+    reference = subprocess.run([terraform, "console", "-no-color"],
+                               input="jsonencode(module.child.values)\n", cwd=tmp_path,
+                               env=terraform_env(), text=True, check=True, capture_output=True)
+    expected = json.loads(json.loads(reference.stdout))
+    actual = tfscan.scan(tmp_path, builtin=False, bundled=False)
+    assert actual.status == "complete", actual.to_json()
+    assert actual.resources[0]["input"].py() == expected
+
+
 def test_terraform_json_configuration_values_and_source_locations(tmp_path):
     terraform = terraform_reference()
     (tmp_path / "child").mkdir()

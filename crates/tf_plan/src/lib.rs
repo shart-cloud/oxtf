@@ -67,6 +67,8 @@ use crate::refs::{Ref, classify, parent_module, strip_keys};
 /// Options for reading a plan.
 #[derive(Clone, Debug, Default)]
 pub struct PlanOptions {
+    /// Scan input admission and per-root evaluation/rule allowances.
+    pub limits: tf_limits::Limits,
     /// Root module source directory used to map findings back to `.tf`
     /// spans. `None`: the plan file's directory if it contains `.tf` files,
     /// else no source (spans point into the plan JSON).
@@ -127,6 +129,7 @@ pub fn load_plan(
         analyze_module(
             d,
             &AnalyzeOptions {
+                limits: opts.limits,
                 data_dir: opts.data_dir.clone(),
                 ..AnalyzeOptions::default()
             },
@@ -183,7 +186,13 @@ pub fn scan_plan(
     path: &Path,
     opts: &PlanOptions,
 ) -> Result<ScanResult, PlanError> {
-    scan_plan_with_model(linter, path, opts, Arc::new(FileTable::new())).map(|(r, _)| r)
+    scan_plan_with_model(
+        linter,
+        path,
+        opts,
+        Arc::new(FileTable::with_limits(opts.limits)),
+    )
+    .map(|(r, _)| r)
 }
 
 /// [`scan_plan`], also returning the analysed model built from the plan.
@@ -197,7 +206,7 @@ pub fn scan_plan_with_model(
 ) -> Result<(ScanResult, Analysis), PlanError> {
     let start = Instant::now();
     let a = load_plan(path, opts, &files)?;
-    let mut out = linter.run(&a);
+    let mut out = linter.run_with_limits(&a, None, opts.limits);
     tf_linter::engine::protect_fix_hints(&mut out.findings, &a, &files);
     // No parsed modules here: only skips in a resource's own block apply.
     let (findings, suppressed) = tf_linter::suppress::checkov_skips(out.findings, &a, &files, None);
@@ -209,7 +218,9 @@ pub fn scan_plan_with_model(
         elapsed: start.elapsed(),
         ..ScanStats::from_findings(&findings)
     };
-    let diagnostics = a.diagnostics.clone();
+    let mut diagnostics = a.diagnostics.clone();
+    diagnostics.retain(|d| d.code != "coverage-storage");
+    diagnostics.extend(files.limit_diagnostic());
     Ok((
         ScanResult {
             findings,
@@ -389,6 +400,8 @@ impl<'p> Builder<'p> {
             })
             .collect();
         let mut stats = AnalysisStats {
+            loader_steps: self.source.map_or(0, |a| a.stats.loader_steps),
+            evaluation_steps: self.source.map_or(0, |a| a.stats.evaluation_steps),
             files: 0,
             module_instances: modules.len(),
             resources: 0,

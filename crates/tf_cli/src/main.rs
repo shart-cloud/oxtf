@@ -14,7 +14,7 @@
 //! printed; see `status`, `diagnostics` and `rule_errors`). 3 wins over 1:
 //! an incomplete scan is reported as such even when it found something.
 
-use std::io::{IsTerminal, Read, Write};
+use std::io::{IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -47,11 +47,12 @@ const USAGE: &str = "usage:
                                   if it has configuration, else locations point into the plan JSON)
   oxtf fix FINGERPRINT [PATH...] [scan options] [--at default|attribute] [--write] [-f diff|json]
                                   apply the fix hint of the finding with FINGERPRINT in
-                                  memory, rescan to check the finding is gone, and print
+                                  memory, rescan to check the target is resolved without
+                                  new findings, and print the finding delta and
                                   the edit as a diff (or JSON); --write writes it, only
                                   when verified. A value written as var.x is fixed at the
                                   variable's default first, else at the attribute (--at
-                                  picks one). Exit 0 verified, 1 the finding remains,
+                                  picks one). Exit 0 verified, 1 unverified,
                                   2 no such finding, no fix hint, or the scan failed
   oxtf rules [--rule-file PATH]... [-f json]
                                   list built-in and loaded rules: level, category, engine,
@@ -98,7 +99,8 @@ scan options:
       --overlay PATH=FILE scan FILE's contents as if it were at PATH (repeatable;
                           FILE `-` reads stdin). PATH may be a file that does not exist,
                           in a directory that does not exist. Unsaved buffers, patches.
-      --threads N         worker threads (default: all CPUs)
+      --limits PATH       input, analysis and rule allowances as JSON
+      --threads N         worker threads, 1..64 (default: CPUs, capped by roots and 64)
       --color             force colored output
       --no-diagnostics    do not print parse / strict-bool / module diagnostics
   -q, --quiet             text format: print only the summary
@@ -129,7 +131,44 @@ struct Args {
     quiet: bool,
 }
 
-fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
+#[derive(Debug)]
+enum ArgsError {
+    Invalid(String),
+    InputLimit(tf_limits::Exhaustion),
+}
+
+impl From<String> for ArgsError {
+    fn from(message: String) -> Self {
+        Self::Invalid(message)
+    }
+}
+
+impl From<&str> for ArgsError {
+    fn from(message: &str) -> Self {
+        Self::Invalid(message.into())
+    }
+}
+
+impl std::fmt::Display for ArgsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Invalid(message) => f.write_str(message),
+            Self::InputLimit(limit) => write!(f, "coverage-storage: {limit}"),
+        }
+    }
+}
+
+impl ArgsError {
+    fn exit_code(&self) -> ExitCode {
+        ExitCode::from(if matches!(self, Self::InputLimit(_)) {
+            3
+        } else {
+            2
+        })
+    }
+}
+
+fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, ArgsError> {
     let mut paths: Vec<PathBuf> = Vec::new();
     let mut recursive = false;
     let mut plan: Option<PathBuf> = None;
@@ -139,6 +178,7 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut var_files = Vec::new();
     let mut data_dir = None;
     let mut threads = None;
+    let mut limits = tf_scan::Limits::default();
     let mut overlay = Vec::new();
     let mut a = Args {
         request: ScanRequest::dirs(Vec::new(), false),
@@ -157,7 +197,7 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
                     Some("json") => Format::Json,
                     Some("ndjson") => Format::Ndjson,
                     Some("sarif") => Format::Sarif,
-                    other => return Err(format!("unknown format {other:?}")),
+                    other => return Err(format!("unknown format {other:?}").into()),
                 }
             }
             "--fail-on" => {
@@ -166,7 +206,7 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
                     Some("conditional") => Some(Certainty::Conditional),
                     Some("indeterminate") => Some(Certainty::Indeterminate),
                     Some("never") => None,
-                    other => return Err(format!("unknown --fail-on {other:?}")),
+                    other => return Err(format!("unknown --fail-on {other:?}").into()),
                 }
             }
             "--data-dir" => data_dir = Some(it.next().ok_or("--data-dir needs a value")?.into()),
@@ -186,7 +226,7 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
                         "security" | "audit" | "hygiene" => {
                             profiles.push(tf_linter::Profile::parse(name).expect("a profile name"))
                         }
-                        other => return Err(format!("unknown profile {other:?}")),
+                        other => return Err(format!("unknown profile {other:?}").into()),
                     }
                 }
             }
@@ -224,17 +264,11 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
                 let (path, file) = spec
                     .split_once('=')
                     .ok_or_else(|| format!("--overlay {spec:?}: expected PATH=FILE"))?;
-                let text = if file == "-" {
-                    let mut s = String::new();
-                    std::io::stdin()
-                        .read_to_string(&mut s)
-                        .map_err(|e| format!("--overlay {path}: stdin: {e}"))?;
-                    s
-                } else {
-                    std::fs::read_to_string(file)
-                        .map_err(|e| format!("--overlay {path}: {file}: {e}"))?
-                };
-                overlay.push((PathBuf::from(path), std::sync::Arc::from(text)));
+                overlay.push((PathBuf::from(path), file.to_owned()));
+            }
+            "--limits" => {
+                let path = it.next().ok_or("--limits needs a JSON file path")?;
+                limits = read_limits(&path)?;
             }
             "--threads" => {
                 threads = Some(
@@ -247,7 +281,7 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
             "--no-color" => a.color = false,
             "--no-diagnostics" => a.diagnostics = false,
             "-q" | "--quiet" => a.quiet = true,
-            s if s.starts_with('-') => return Err(format!("unknown option {s}")),
+            s if s.starts_with('-') => return Err(format!("unknown option {s}").into()),
             p => paths.push(p.into()),
         }
     }
@@ -275,11 +309,51 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
         var_files,
         data_dir,
         threads,
-        overlay,
+        limits,
+        overlay: read_overlays(overlay, limits)?,
         // The CLI prints findings; it never reads the models.
         keep_models: false,
     };
     Ok(a)
+}
+
+fn read_overlays(
+    specs: Vec<(PathBuf, String)>,
+    limits: tf_scan::Limits,
+) -> Result<Vec<(PathBuf, std::sync::Arc<str>)>, ArgsError> {
+    let budget = tf_limits::input::InputBudget::new(limits);
+    let mut overlay = Vec::new();
+    for (path, file) in specs {
+        let bytes = if file == "-" {
+            budget.read_from(std::io::stdin().lock())
+        } else {
+            budget.read(std::path::Path::new(&file))
+        }
+        .map_err(|error| match tf_limits::input::exhaustion(&error) {
+            Some(limit) => ArgsError::InputLimit(limit),
+            None => ArgsError::Invalid(format!("--overlay {}: {file}: {error}", path.display())),
+        })?;
+        let text = String::from_utf8(bytes)
+            .map_err(|_| format!("--overlay {}: {file}: not UTF-8", path.display()))?;
+        overlay.push((path, std::sync::Arc::from(text)));
+    }
+    Ok(overlay)
+}
+
+fn read_limits(path: &str) -> Result<tf_scan::Limits, String> {
+    use std::io::Read;
+    const CONFIG_BYTES_MAX: u64 = 16 * 1024;
+    let file = std::fs::File::open(path).map_err(|e| format!("--limits {path}: {e}"))?;
+    let mut text = String::new();
+    file.take(CONFIG_BYTES_MAX + 1)
+        .read_to_string(&mut text)
+        .map_err(|e| format!("--limits {path}: {e}"))?;
+    if text.len() as u64 > CONFIG_BYTES_MAX {
+        return Err(format!(
+            "--limits {path}: config exceeds {CONFIG_BYTES_MAX} bytes"
+        ));
+    }
+    tf_scan::limits::from_json(&text).map_err(|e| format!("--limits {path}: {e}"))
 }
 
 fn main() -> ExitCode {
@@ -289,7 +363,7 @@ fn main() -> ExitCode {
             Ok(a) => scan(a),
             Err(e) => {
                 eprintln!("error: {e}\n\n{USAGE}");
-                ExitCode::from(2)
+                e.exit_code()
             }
         },
         Some("fix") => fix(args),
@@ -311,7 +385,7 @@ fn main() -> ExitCode {
                     .catalog
                     .resolve()
                     .map(|r| (r, json))
-                    .map_err(|e| e.to_string())
+                    .map_err(|e| ArgsError::Invalid(e.to_string()))
             }) {
                 Ok((resolved, json)) => {
                     for w in &resolved.warnings {
@@ -338,6 +412,8 @@ fn main() -> ExitCode {
                             "resource_types": r.resource_types.iter().map(|t| &**t).collect::<Vec<_>>(),
                             "runs_on_module": r.runs_on_module,
                             "guideline": r.guideline.as_deref(),
+                            "rationale": r.rationale.as_deref(),
+                            "remediation": r.remediation.as_deref(),
                             "source": tf_linter::record::SourceRef::from(&r.source),
                             "aliases": r.aliases.iter().map(|a| &**a).collect::<Vec<_>>(),
                             "profile": r.profile.as_str(),
@@ -474,8 +550,8 @@ fn rules_test(args: impl Iterator<Item = String>) -> ExitCode {
 }
 
 /// `oxtf fix`: the finding's fix, verified by a rescan. Exit codes: 0 the
-/// edit removes the finding (and was written with `--write`), 1 the
-/// finding remains after the edit (nothing written), 2 no such finding, no
+/// edit resolves the target without new findings (written with `--write`),
+/// 1 the edit is unverified (nothing written), 2 no such finding, no
 /// fix hint, or the scan could not run.
 fn fix(mut args: impl Iterator<Item = String>) -> ExitCode {
     let fail = |e: String| {
@@ -529,6 +605,9 @@ fn fix(mut args: impl Iterator<Item = String>) -> ExitCode {
                 "action": hint.action.as_str(),
                 "value": hint.value,
                 "site": outcome.site.as_str(),
+                "target_resolved": outcome.target_resolved,
+                "no_new_findings": outcome.no_new_findings,
+                "finding_delta": outcome.finding_delta,
                 "verified": outcome.verified,
                 "verification_errors": outcome.verification_errors,
                 "written": written,
@@ -545,11 +624,15 @@ fn fix(mut args: impl Iterator<Item = String>) -> ExitCode {
                 tf_scan::FixSite::Attribute => "",
             },
             if outcome.verified {
-                "the edit removes the finding"
+                "target resolved; no new findings"
             } else if !outcome.verification_errors.is_empty() {
                 "the edit could not be verified because analysis did not complete"
+            } else if outcome.target_resolved {
+                "target resolved; new findings introduced"
+            } else if outcome.no_new_findings {
+                "target remains; no new findings"
             } else {
-                "the finding remains after the edit"
+                "target remains; new findings introduced"
             },
             if written {
                 "(written)"
@@ -559,6 +642,38 @@ fn fix(mut args: impl Iterator<Item = String>) -> ExitCode {
                 "(not written; --write to apply)"
             }
         );
+        let delta = &outcome.finding_delta;
+        eprintln!(
+            "  findings: {} before, {} after; {} added, {} removed, {} changed, {} unchanged",
+            delta.before,
+            delta.after,
+            delta.added.len(),
+            delta.removed.len(),
+            delta.changed.len(),
+            delta.unchanged,
+        );
+        for (label, findings) in [("added", &delta.added), ("removed", &delta.removed)] {
+            for finding in findings {
+                eprintln!("  {label}: {} ({})", finding.fingerprint, finding.rule);
+                for occurrence in &finding.occurrences {
+                    eprintln!("    {} in {}", occurrence.address, occurrence.root);
+                }
+            }
+        }
+        for change in &delta.changed {
+            eprintln!(
+                "  changed: {} ({})",
+                change.after.fingerprint, change.after.rule
+            );
+            for (label, occurrences) in [
+                ("added", &change.added_occurrences),
+                ("removed", &change.removed_occurrences),
+            ] {
+                for occurrence in occurrences {
+                    eprintln!("    {label}: {} in {}", occurrence.address, occurrence.root);
+                }
+            }
+        }
         for error in &outcome.verification_errors {
             eprintln!("  {error}");
         }

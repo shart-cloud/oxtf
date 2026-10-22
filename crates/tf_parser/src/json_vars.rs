@@ -19,7 +19,9 @@ pub fn parse_json_vars<'a>(alloc: &'a Allocator, source: &'a str) -> ParseResult
         reject_duplicates: true,
     };
     let mut items = Vec::new_in(alloc);
-    if let Err(e) = serde_json::from_str::<serde_json::Value>(source) {
+    if let Some(limit) = crate::limits::json_depth(source) {
+        p.errors.push(limit);
+    } else if let Err(e) = serde_json::from_str::<serde::de::IgnoredAny>(source) {
         let start = source
             .split_inclusive('\n')
             .take(e.line().saturating_sub(1))
@@ -31,6 +33,7 @@ pub fn parse_json_vars<'a>(alloc: &'a Allocator, source: &'a str) -> ParseResult
             start -= 1;
         }
         p.errors.push(Diagnostic {
+            kind: crate::DiagnosticKind::Syntax,
             span: Span::new(start as u32, start as u32),
             message: format!("invalid JSON variable file: {e}"),
         });
@@ -38,10 +41,37 @@ pub fn parse_json_vars<'a>(alloc: &'a Allocator, source: &'a str) -> ParseResult
         p.ws();
         if p.byte() != b'{' {
             p.errors.push(Diagnostic {
+                kind: crate::DiagnosticKind::Syntax,
                 span,
                 message: "JSON variable file must be an object".into(),
             });
-        } else if let Expression::Object(mut object) = p.value(true) {
+        } else if let Err(error) = p.attributes(&mut items) {
+            p.errors
+                .push(Diagnostic::limit(span, crate::ParseLimit::Storage(error)));
+        }
+    }
+    ParseResult {
+        file: File {
+            span,
+            body: Body { span, items },
+        },
+        comments: std::vec::Vec::new(),
+        errors: p.errors,
+    }
+    .bounded(alloc)
+}
+
+struct Json<'a> {
+    alloc: &'a Allocator,
+    source: &'a str,
+    pos: usize,
+    errors: std::vec::Vec<Diagnostic>,
+    reject_duplicates: bool,
+}
+
+impl<'a> Json<'a> {
+    fn attributes(&mut self, items: &mut Vec<'a, BodyItem<'a>>) -> tf_allocator::AllocResult<()> {
+        if let Expression::Object(mut object) = self.value(true)? {
             for item in object.items.drain(..) {
                 let ObjectKey::Expression(Expression::String(key)) = item.key else {
                     unreachable!()
@@ -58,30 +88,13 @@ pub fn parse_json_vars<'a>(alloc: &'a Allocator, source: &'a str) -> ParseResult
                         },
                         value: item.value,
                     },
-                    alloc,
-                )));
+                    self.alloc,
+                )?))?;
             }
         }
+        Ok(())
     }
-    ParseResult {
-        file: File {
-            span,
-            body: Body { span, items },
-        },
-        comments: std::vec::Vec::new(),
-        errors: p.errors,
-    }
-}
 
-struct Json<'a> {
-    alloc: &'a Allocator,
-    source: &'a str,
-    pos: usize,
-    errors: std::vec::Vec<Diagnostic>,
-    reject_duplicates: bool,
-}
-
-impl<'a> Json<'a> {
     fn byte(&self) -> u8 {
         self.source.as_bytes().get(self.pos).copied().unwrap_or(0)
     }
@@ -96,7 +109,7 @@ impl<'a> Json<'a> {
         Span::new(start as u32, self.pos as u32)
     }
 
-    fn string(&mut self) -> StringLiteral<'a> {
+    fn string(&mut self) -> tf_allocator::AllocResult<StringLiteral<'a>> {
         let start = self.pos;
         self.pos += 1;
         while self.byte() != b'"' {
@@ -108,19 +121,19 @@ impl<'a> Json<'a> {
         self.pos += 1;
         let decoded: String =
             serde_json::from_str(&self.source[start..self.pos]).expect("validated JSON string");
-        StringLiteral {
+        Ok(StringLiteral {
             span: self.span(start),
-            value: Atom::from_in(&decoded, self.alloc),
-        }
+            value: Atom::from_in(&decoded, self.alloc)?,
+        })
     }
 
-    fn value(&mut self, root: bool) -> Expression<'a> {
+    fn value(&mut self, root: bool) -> tf_allocator::AllocResult<Expression<'a>> {
         self.ws();
         let start = self.pos;
-        match self.byte() {
+        Ok(match self.byte() {
             b'"' => {
-                let string = self.string();
-                Expression::String(Box::new_in(string, self.alloc))
+                let string = self.string()?;
+                Expression::String(Box::new_in(string, self.alloc)?)
             }
             b'{' => {
                 self.pos += 1;
@@ -128,11 +141,12 @@ impl<'a> Json<'a> {
                 let mut items = Vec::new_in(self.alloc);
                 let mut keys = HashSet::new();
                 while self.byte() != b'}' {
-                    let key = self.string();
+                    let key = self.string()?;
                     let comment = root && key.value == "//";
                     if self.reject_duplicates && !comment && !keys.insert(key.value) {
                         // Do not echo a possibly sensitive object key.
                         self.errors.push(Diagnostic {
+                            kind: crate::DiagnosticKind::Syntax,
                             span: key.span,
                             message: "duplicate JSON object key".into(),
                         });
@@ -140,7 +154,7 @@ impl<'a> Json<'a> {
                     self.ws();
                     self.pos += 1; // colon, checked by serde
                     let errors = self.errors.len();
-                    let value = self.value(false);
+                    let value = self.value(false)?;
                     if comment {
                         self.errors.truncate(errors);
                     }
@@ -148,9 +162,9 @@ impl<'a> Json<'a> {
                         span: Span::new(key.span.start, self.pos as u32),
                         key: ObjectKey::Expression(Expression::String(Box::new_in(
                             key, self.alloc,
-                        ))),
+                        )?)),
                         value,
-                    });
+                    })?;
                     self.ws();
                     if self.byte() == b',' {
                         self.pos += 1;
@@ -164,14 +178,14 @@ impl<'a> Json<'a> {
                         items,
                     },
                     self.alloc,
-                ))
+                )?)
             }
             b'[' => {
                 self.pos += 1;
                 self.ws();
                 let mut elements = Vec::new_in(self.alloc);
                 while self.byte() != b']' {
-                    elements.push(self.value(false));
+                    elements.push(self.value(false)?)?;
                     self.ws();
                     if self.byte() == b',' {
                         self.pos += 1;
@@ -185,7 +199,7 @@ impl<'a> Json<'a> {
                         elements,
                     },
                     self.alloc,
-                ))
+                )?)
             }
             b'n' => {
                 self.pos += 4;
@@ -194,7 +208,7 @@ impl<'a> Json<'a> {
                         span: self.span(start),
                     },
                     self.alloc,
-                ))
+                )?)
             }
             b't' | b'f' => {
                 let value = self.byte() == b't';
@@ -205,7 +219,7 @@ impl<'a> Json<'a> {
                         value,
                     },
                     self.alloc,
-                ))
+                )?)
             }
             _ => {
                 while matches!(self.byte(), b'0'..=b'9' | b'-' | b'+' | b'.' | b'e' | b'E') {
@@ -216,10 +230,11 @@ impl<'a> Json<'a> {
                 let span = self.span(start);
                 if !value.is_finite() {
                     self.errors.push(Diagnostic {
+                        kind: crate::DiagnosticKind::Syntax,
                         span,
                         message: "JSON number exceeds the evaluator's numeric range".into(),
                     });
-                    Expression::Error(Box::new_in(ErrorExpr { span }, self.alloc))
+                    Expression::Error(Box::new_in(ErrorExpr { span }, self.alloc)?)
                 } else {
                     Expression::Number(Box::new_in(
                         NumberLiteral {
@@ -228,10 +243,10 @@ impl<'a> Json<'a> {
                             raw: raw.into(),
                         },
                         self.alloc,
-                    ))
+                    )?)
                 }
             }
-        }
+        })
     }
 }
 
@@ -242,7 +257,10 @@ pub fn parse_json_value<'a>(
     alloc: &'a Allocator,
     source: &'a str,
 ) -> (Option<Expression<'a>>, std::vec::Vec<Diagnostic>) {
-    if let Err(e) = serde_json::from_str::<serde_json::Value>(source) {
+    if let Some(limit) = crate::limits::json_depth(source) {
+        return (None, vec![limit]);
+    }
+    if let Err(e) = serde_json::from_str::<serde::de::IgnoredAny>(source) {
         let start = source
             .split_inclusive('\n')
             .take(e.line().saturating_sub(1))
@@ -256,6 +274,7 @@ pub fn parse_json_value<'a>(
         return (
             None,
             vec![Diagnostic {
+                kind: crate::DiagnosticKind::Syntax,
                 span: Span::new(start as u32, start as u32),
                 message: format!("invalid JSON configuration: {e}"),
             }],
@@ -268,6 +287,19 @@ pub fn parse_json_value<'a>(
         errors: std::vec::Vec::new(),
         reject_duplicates: false,
     };
-    let value = p.value(false);
-    (Some(value), p.errors)
+    let value = match p.value(false) {
+        Ok(value) => Some(value),
+        Err(error) => {
+            p.errors.push(Diagnostic::limit(
+                Span::new(0, source.len() as u32),
+                crate::ParseLimit::Storage(error),
+            ));
+            None
+        }
+    };
+    let (value, errors) = crate::limits::bounded_expression(alloc, value, p.errors);
+    let limited = errors
+        .iter()
+        .any(|e| matches!(e.kind, crate::DiagnosticKind::Limit(_)));
+    (if limited { None } else { value }, errors)
 }

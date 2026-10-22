@@ -307,7 +307,9 @@ fn provider_metadata_keeps_its_provider_label() {
     )]);
     assert_eq!(out.result.status(), ScanStatus::Complete);
     let store = tf_semantic::ModuleStore::new();
-    let def = store.module(&out.result.files, &out.analyses[0].root_dir);
+    let def = store
+        .module(&out.result.files, &out.analyses[0].root_dir)
+        .unwrap();
     let meta = def.files[0]
         .1
         .body

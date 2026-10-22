@@ -7,6 +7,7 @@ use tf_scan::{ScanRequest, scan};
 fn request(files: &[(&str, &str)], recursive: bool) -> ScanRequest {
     let root = PathBuf::from("/nonexistent/oxtf-coverage");
     let mut req = ScanRequest::dirs(vec![root.clone()], recursive);
+    req.catalog = tf_scan::Catalog::seed();
     req.overlay = files
         .iter()
         .map(|(path, text)| (root.join(path), Arc::from(*text)))

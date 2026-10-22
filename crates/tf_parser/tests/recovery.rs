@@ -161,7 +161,7 @@ fn recovery_quality_table() {
     for case in CASES {
         let alloc = tf_allocator::Allocator::new();
         let ret = tf_parser::parse(&alloc, case.src);
-        let file = alloc.alloc(ret.file);
+        let file = alloc.alloc(ret.file).unwrap();
         let mut keys = Keys::default();
         keys.visit_file(file);
         let recovered = case.valid.iter().filter(|v| keys.names.contains(v)).count();

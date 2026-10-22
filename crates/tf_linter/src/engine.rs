@@ -9,6 +9,7 @@ use tf_semantic::Analysis;
 use tf_semantic::source::FileTable;
 use tf_semantic::store::ModuleStore;
 
+use crate::RuleBudget;
 use crate::record::RuleError;
 use crate::rule::{ConfigFile, DynRule, Engine, Finding, Judgement, RuleInfo, Subject};
 
@@ -41,6 +42,7 @@ fn failure(message: String, sensitive: bool) -> String {
 /// judge whole files.
 #[derive(Clone, Copy)]
 pub struct Sources<'s> {
+    pub limits: tf_limits::Limits,
     pub store: &'s ModuleStore,
     pub files: &'s FileTable,
 }
@@ -48,6 +50,11 @@ pub struct Sources<'s> {
 /// What one module-instance pass produced.
 #[derive(Default)]
 pub struct RunOutput {
+    /// Successful rule charges for this root; refused charges are excluded.
+    pub rule_steps: u64,
+    /// Admitted elapsed Rego execution, capped at its configured allowance on timeout.
+    pub rego_elapsed: std::time::Duration,
+    pub rule_exhaustion: Option<tf_limits::Exhaustion>,
     pub findings: Vec<Finding>,
     /// Hooks that returned `Err`, one per (rule, resource) or (rule, module).
     pub rule_errors: Vec<RuleError>,
@@ -128,16 +135,42 @@ impl Linter {
     /// [`Linter::run`] with the parsed source available to whole-file
     /// rules.
     pub fn run_with(&self, analysis: &Analysis, sources: Option<Sources<'_>>) -> RunOutput {
-        let root = analysis.root_dir.as_path();
-        let sensitive = analysis
-            .modules
-            .iter()
-            .any(tf_semantic::Module::is_sensitive);
-        let mut out = Vec::new();
-        let mut rule_errors = Vec::new();
-        // A graph rule judges only resources of its declared types (data
-        // sources as `data.TYPE`), so one with none of them in this root
-        // has nothing to judge; nor is the graph built for no rule.
+        let limits = sources.map(|s| s.limits).unwrap_or_default();
+        self.run_with_limits(analysis, sources, limits)
+    }
+
+    /// Explicit root allowance, also used for plan inputs without parsed sources.
+    pub fn run_with_limits(
+        &self,
+        analysis: &Analysis,
+        sources: Option<Sources<'_>>,
+        limits: tf_limits::Limits,
+    ) -> RunOutput {
+        let mut run = RuleRun {
+            linter: self,
+            analysis,
+            budget: RuleBudget::new(limits),
+            out: RunOutput::default(),
+            sensitive: analysis
+                .modules
+                .iter()
+                .any(tf_semantic::Module::is_sensitive),
+        };
+        run.graphs();
+        run.files(sources);
+        run.modules();
+        attach_packages(&mut run.out.findings, analysis);
+        if let Some(sources) = sources {
+            protect_fix_hints(&mut run.out.findings, analysis, sources.files);
+        }
+        run.out.rule_steps = run.budget.used();
+        run.out.rego_elapsed = run.budget.rego_elapsed();
+        run.out.rule_exhaustion = run.budget.exhaustion();
+        run.out
+    }
+
+    fn graph_rules(&self, analysis: &Analysis) -> Vec<usize> {
+        // A graph is needed only when at least one graph rule has a target.
         let present: std::collections::HashSet<String> = analysis
             .modules
             .iter()
@@ -147,7 +180,7 @@ impl Linter {
                 _ => r.ty.to_string(),
             })
             .collect();
-        let graph_rules: Vec<usize> = (0..self.rules.len())
+        (0..self.rules.len())
             .filter(|&i| {
                 let types = &self.infos[i].resource_types;
                 self.rules[i].needs_graph()
@@ -156,161 +189,219 @@ impl Linter {
                             .iter()
                             .any(|t| &**t == ANY_TYPE || present.contains(&**t)))
             })
-            .collect();
-        let graph =
-            (!graph_rules.is_empty()).then(|| tf_semantic::graph::ResourceGraph::new(analysis));
-        for i in graph_rules {
-            let rule = &self.rules[i];
-            match rule.judge_graph(graph.as_ref().expect("graph requested")) {
-                Ok(judgements) => {
-                    for (r, j) in judgements {
-                        out.extend(Finding::build(
-                            &self.infos[i],
-                            r,
-                            protect(&self.infos[i], j, sensitive),
-                            root,
-                        ));
-                    }
-                }
-                Err(message) => rule_errors.push(RuleError {
-                    rule: self.infos[i].name.to_string(),
-                    resource: None,
-                    message: failure(message, sensitive),
-                }),
-            }
-        }
-        if self.rules.iter().any(|r| r.needs_files()) {
-            static RUN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-            let run = RUN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let mut config = Vec::new();
-            if let Some(src) = sources {
-                for m in &analysis.modules {
-                    let definition = src.store.module(src.files, &m.dir);
-                    for (sf, ast) in &definition.files {
-                        if tf_semantic::module::is_override(&sf.path) && ast.body.items.is_empty() {
-                            continue;
-                        }
-                        config.push(ConfigFile {
-                            module: m,
-                            definition,
-                            source: sf.clone(),
-                            ast,
-                            run,
-                        });
-                    }
-                }
-            }
-            for (i, rule) in self
-                .rules
-                .iter()
-                .enumerate()
-                .filter(|(_, r)| r.needs_files())
-            {
-                match rule.judge_files(analysis, &config) {
-                    Ok(judgements) => {
-                        for (subject, j) in judgements {
-                            let j = protect(&self.infos[i], j, sensitive);
-                            match subject {
-                                Subject::Resource(r) => {
-                                    out.extend(Finding::build(&self.infos[i], r, j, root))
-                                }
-                                Subject::File { module, file } => {
-                                    let sf = config
-                                        .iter()
-                                        .find(|c| c.source.id == file)
-                                        .map(|c| c.source.clone())
-                                        .expect("a file subject names a loaded file");
-                                    out.push(Finding::for_file(
-                                        &self.infos[i],
-                                        module,
-                                        &sf,
-                                        j,
-                                        root,
-                                    ));
-                                }
-                            }
-                        }
-                    }
-                    Err(message) => rule_errors.push(RuleError {
-                        rule: self.infos[i].name.to_string(),
-                        resource: None,
-                        message: failure(message, sensitive),
-                    }),
-                }
-            }
-        }
-        for m in &analysis.modules {
-            for &i in &self.module_rules {
-                let judged = match self.rules[i].judge_module(m) {
-                    Ok(j) => j,
-                    Err(message) => {
-                        rule_errors.push(RuleError {
-                            rule: self.infos[i].name.to_string(),
-                            resource: None,
-                            message: failure(message, m.is_sensitive()),
-                        });
-                        continue;
-                    }
+            .collect()
+    }
+}
+
+struct RuleRun<'a> {
+    linter: &'a Linter,
+    analysis: &'a Analysis,
+    budget: RuleBudget,
+    out: RunOutput,
+    sensitive: bool,
+}
+
+impl RuleRun<'_> {
+    fn stopped(&self) -> bool {
+        self.budget.exhaustion().is_some()
+    }
+
+    fn invoke<T>(
+        &mut self,
+        i: usize,
+        resource: Option<&tf_semantic::Resource>,
+        sensitive: bool,
+        call: impl FnOnce(&dyn DynRule, &RuleBudget) -> Result<T, String>,
+    ) -> Option<T> {
+        assert!(!self.stopped());
+        let result = self
+            .budget
+            .charge(1)
+            .and_then(|()| call(&*self.linter.rules[i], &self.budget));
+        match self.budget.finish(result) {
+            Ok(result) => Some(result),
+            Err(message) => {
+                // Exhaustion text contains only the resource name and allowance,
+                // so sensitivity must not hide the reason a root stopped.
+                let message = match self.budget.exhaustion() {
+                    Some(exhaustion) => exhaustion.to_string(),
+                    None => failure(message, sensitive),
                 };
-                for (r, j) in judged {
-                    out.extend(Finding::build(
-                        &self.infos[i],
-                        r,
-                        protect(&self.infos[i], j, m.is_sensitive()),
-                        root,
-                    ));
+                self.out.rule_errors.push(RuleError {
+                    rule: self.linter.infos[i].name.to_string(),
+                    resource: resource.map(|r| r.address.to_string()),
+                    message,
+                });
+                None
+            }
+        }
+    }
+
+    fn finding(
+        &mut self,
+        i: usize,
+        resource: &tf_semantic::Resource,
+        j: Judgement,
+        sensitive: bool,
+    ) {
+        let info = &self.linter.infos[i];
+        self.out.findings.extend(Finding::build(
+            info,
+            resource,
+            protect(info, j, sensitive),
+            &self.analysis.root_dir,
+        ));
+    }
+
+    fn graphs(&mut self) {
+        let rules = self.linter.graph_rules(self.analysis);
+        if rules.is_empty() {
+            return;
+        }
+        let graph = tf_semantic::graph::ResourceGraph::new(self.analysis);
+        for i in rules {
+            if self.stopped() {
+                return;
+            }
+            if let Some(judgements) = self.invoke(i, None, self.sensitive, |rule, budget| {
+                rule.judge_graph_with_budget(&graph, budget)
+            }) {
+                for (r, j) in judgements {
+                    self.finding(i, r, j, self.sensitive);
                 }
             }
-            for r in &m.resources {
-                if r.existence == Truth::False || r.mode != tf_semantic::Mode::Managed {
+        }
+    }
+
+    fn files(&mut self, sources: Option<Sources<'_>>) {
+        if self.stopped() || !self.linter.needs_files() {
+            return;
+        }
+        let config = config_files(self.analysis, sources);
+        for (i, rule) in self.linter.rules.iter().enumerate() {
+            if self.stopped() {
+                return;
+            }
+            if !rule.needs_files() {
+                continue;
+            }
+            if let Some(judgements) = self.invoke(i, None, self.sensitive, |rule, budget| {
+                rule.judge_files_with_budget(self.analysis, &config, budget)
+            }) {
+                for (subject, j) in judgements {
+                    match subject {
+                        Subject::Resource(r) => self.finding(i, r, j, self.sensitive),
+                        Subject::File { module, file } => {
+                            let source = config
+                                .iter()
+                                .find(|c| c.source.id == file)
+                                .expect("a file subject names a loaded file");
+                            self.out.findings.push(Finding::for_file(
+                                &self.linter.infos[i],
+                                module,
+                                &source.source,
+                                protect(&self.linter.infos[i], j, self.sensitive),
+                                &self.analysis.root_dir,
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn modules(&mut self) {
+        for module in &self.analysis.modules {
+            if self.stopped() {
+                return;
+            }
+            for &i in &self.linter.module_rules {
+                if self.stopped() {
+                    return;
+                }
+                if let Some(judgements) =
+                    self.invoke(i, None, module.is_sensitive(), |rule, budget| {
+                        rule.judge_module_with_budget(module, budget)
+                    })
+                {
+                    for (r, j) in judgements {
+                        self.finding(i, r, j, module.is_sensitive());
+                    }
+                }
+            }
+            for resource in &module.resources {
+                if self.stopped() {
+                    return;
+                }
+                self.resource(resource);
+            }
+        }
+    }
+
+    fn resource(&mut self, resource: &tf_semantic::Resource) {
+        if resource.existence == Truth::False || resource.mode != tf_semantic::Mode::Managed {
+            return;
+        }
+        let typed = self.linter.by_type.get(&*resource.ty).into_iter().flatten();
+        for &i in typed.chain(&self.linter.any_type) {
+            if self.stopped() {
+                return;
+            }
+            let sensitive = resource.body.is_sensitive();
+            if let Some(judgements) = self.invoke(i, Some(resource), sensitive, |rule, budget| {
+                rule.judge_resource_with_budget(resource, budget)
+            }) {
+                for j in judgements {
+                    self.finding(i, resource, j, sensitive);
+                }
+            }
+        }
+    }
+}
+
+fn config_files<'a>(analysis: &'a Analysis, sources: Option<Sources<'a>>) -> Vec<ConfigFile<'a>> {
+    static RUN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let run = RUN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let mut config = Vec::new();
+    if let Some(src) = sources {
+        for module in &analysis.modules {
+            let Ok(definition) = src
+                .store
+                .module_with_limits(src.files, &module.dir, src.limits)
+            else {
+                break;
+            };
+            for (source, ast) in &definition.files {
+                if tf_semantic::module::is_override(&source.path) && ast.body.items.is_empty() {
                     continue;
                 }
-                let typed = self.by_type.get(&*r.ty).into_iter().flatten();
-                for &i in typed.chain(&self.any_type) {
-                    let judged = match self.rules[i].judge_resource(r) {
-                        Ok(j) => j,
-                        Err(message) => {
-                            rule_errors.push(RuleError {
-                                rule: self.infos[i].name.to_string(),
-                                resource: Some(r.address.to_string()),
-                                message: failure(message, r.body.is_sensitive()),
-                            });
-                            continue;
-                        }
-                    };
-                    for j in judged {
-                        out.extend(Finding::build(
-                            &self.infos[i],
-                            r,
-                            protect(&self.infos[i], j, r.body.is_sensitive()),
-                            root,
-                        ));
-                    }
-                }
+                config.push(ConfigFile {
+                    module,
+                    definition,
+                    source: source.clone(),
+                    ast,
+                    run,
+                });
             }
         }
-        let packages: HashMap<_, _> = analysis
-            .modules
-            .iter()
-            .filter_map(|m| m.package.as_ref().map(|p| (m.address.as_ref(), p)))
-            .collect();
-        for f in &mut out {
-            f.package = packages.get(f.module.as_ref()).map(|p| (*p).clone());
-            if f.package.is_some()
-                || f.fix_hint
-                    .as_ref()
-                    .is_some_and(|h| packages.contains_key(h.resource.module.as_ref()))
-            {
-                f.fix_hint = None;
-            }
-        }
-        if let Some(sources) = sources {
-            protect_fix_hints(&mut out, analysis, sources.files);
-        }
-        RunOutput {
-            findings: out,
-            rule_errors,
-            suppressed: Vec::new(),
+    }
+    config
+}
+
+fn attach_packages(findings: &mut [Finding], analysis: &Analysis) {
+    let packages: HashMap<_, _> = analysis
+        .modules
+        .iter()
+        .filter_map(|m| m.package.as_ref().map(|p| (m.address.as_ref(), p)))
+        .collect();
+    for f in findings {
+        f.package = packages.get(f.module.as_ref()).map(|p| (*p).clone());
+        if f.package.is_some()
+            || f.fix_hint
+                .as_ref()
+                .is_some_and(|h| packages.contains_key(h.resource.module.as_ref()))
+        {
+            f.fix_hint = None;
         }
     }
 }

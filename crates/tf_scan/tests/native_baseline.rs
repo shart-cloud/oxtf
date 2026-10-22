@@ -25,9 +25,10 @@ fn normalize(value: &mut Value, repo: &str) {
     }
 }
 
-/// One request, as the CLI would build it for `--threads 1`, as JSON with
+/// One request, as the CLI would build it for `--no-bundled --threads 1`, as JSON with
 /// the checkout location and timing removed.
 fn run(repo: &Path, mut req: ScanRequest) -> Value {
+    req.catalog = tf_scan::Catalog::seed();
     req.threads = Some(1);
     let out = scan(req).unwrap();
     assert!(out.result.rule_errors.is_empty());

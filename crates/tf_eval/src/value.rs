@@ -247,6 +247,37 @@ impl Value {
     pub fn limit(msg: impl Into<Arc<str>>) -> Self {
         Value::unknown(Origin::Limit(msg.into()))
     }
+
+    /// Preserve evidence when work stops, without claiming any omitted dependency is definite.
+    pub(crate) fn limit_from<'v>(
+        msg: impl Into<Arc<str>>,
+        inputs: impl IntoIterator<Item = &'v Value>,
+    ) -> Self {
+        let mut prov = Prov::EMPTY;
+        for input in inputs {
+            prov = prov.joined(&input.prov);
+        }
+        let mut dependencies = Vec::with_capacity(prov.dependencies().len());
+        for dependency in prov.dependencies() {
+            let dependency = crate::prov::ResourceDependency {
+                certainty: dependency.certainty.and(crate::Truth::Unknown),
+                ..dependency.clone()
+            };
+            // A nested refusal may meet the original definite dependency again.
+            // Normalize before deduplication so repeated boundaries stay idempotent.
+            if !dependencies.contains(&dependency) {
+                dependencies.push(dependency);
+            }
+        }
+        Value::limit(msg).with_prov(prov.referencing(dependencies))
+    }
+
+    pub(crate) fn alternative_count(&self) -> usize {
+        match &self.kind {
+            Kind::OneOf(alternatives) => alternatives.alternatives.len(),
+            _ => 1,
+        }
+    }
     pub fn error(msg: impl Into<Arc<str>>) -> Self {
         Value::unknown(Origin::Error(msg.into()))
     }
@@ -258,44 +289,22 @@ impl Value {
 
     /// `OneOf` over `alts`: nested OneOfs are flattened, alternatives that
     /// are structurally equal Known values are merged, and a single
-    /// alternative collapses to itself.
+    /// alternative collapses to itself. Work is bounded before deduplication.
     pub fn one_of(alts: Vec<Value>, tainted: bool) -> Self {
-        let sensitive = alts.iter().any(Value::is_sensitive);
-        // A traversal present in only some alternatives is only a possible
-        // graph edge. Compute this before structurally equal values collapse.
-        let mut dependencies = Vec::<crate::prov::ResourceDependency>::new();
-        for a in &alts {
-            for d in a.prov.dependencies() {
-                if dependencies
-                    .iter()
-                    .any(|old| old.resource == d.resource && old.key == d.key)
-                {
-                    continue;
-                }
-                let outcomes: Vec<_> = alts
-                    .iter()
-                    .map(|a| {
-                        a.prov
-                            .dependencies()
-                            .iter()
-                            .filter(|x| x.resource == d.resource && x.key == d.key)
-                            .fold(crate::Truth::False, |t, x| t.or(x.certainty))
-                    })
-                    .collect();
-                let certainty = if outcomes.iter().all(|t| *t == outcomes[0]) {
-                    outcomes[0]
-                } else if tainted || outcomes.contains(&crate::Truth::Tainted) {
-                    crate::Truth::Tainted
-                } else {
-                    crate::Truth::Unknown
-                };
-                dependencies.push(crate::prov::ResourceDependency {
-                    certainty,
-                    ..d.clone()
-                });
-            }
+        if alts.len() > crate::eval::MAX_ALTERNATIVES {
+            return Value::limit_from("too many alternatives", alts.iter());
         }
-        let mut flat: Vec<Value> = Vec::with_capacity(alts.len());
+        let count = alts.iter().try_fold(0usize, |count, value| {
+            count
+                .checked_add(value.alternative_count())
+                .filter(|&count| count <= crate::eval::MAX_ALTERNATIVES)
+        });
+        let Some(count) = count else {
+            return Value::limit_from("too many alternatives", alts.iter());
+        };
+        let sensitive = alts.iter().any(Value::is_sensitive);
+        let dependencies = one_of_dependencies(&alts, tainted);
+        let mut flat: Vec<Value> = Vec::with_capacity(count);
         let mut tainted = tainted;
         for a in alts {
             match &a.kind {
@@ -308,6 +317,8 @@ impl Value {
                 _ => push_unique(&mut flat, a),
             }
         }
+        assert!(flat.len() <= count);
+        assert!(count <= crate::eval::MAX_ALTERNATIVES);
         if flat.len() == 1 {
             let mut value = flat.pop().unwrap();
             if !dependencies.is_empty() {
@@ -580,6 +591,46 @@ impl Value {
             Kind::OneOf(_) => "one-of",
         }
     }
+}
+
+/// A traversal present in only some alternatives is only a possible graph edge.
+/// Compute this before structurally equal values collapse.
+fn one_of_dependencies(alts: &[Value], tainted: bool) -> Vec<crate::prov::ResourceDependency> {
+    assert!(alts.len() <= crate::eval::MAX_ALTERNATIVES);
+    let mut dependencies = Vec::<crate::prov::ResourceDependency>::new();
+    for a in alts {
+        for d in a.prov.dependencies() {
+            if dependencies
+                .iter()
+                .any(|old| old.resource == d.resource && old.key == d.key)
+            {
+                continue;
+            }
+            let outcomes: Vec<_> = alts
+                .iter()
+                .map(|a| {
+                    a.prov
+                        .dependencies()
+                        .iter()
+                        .filter(|x| x.resource == d.resource && x.key == d.key)
+                        .fold(crate::Truth::False, |t, x| t.or(x.certainty))
+                })
+                .collect();
+            assert!(!outcomes.is_empty());
+            let certainty = if outcomes.iter().all(|t| *t == outcomes[0]) {
+                outcomes[0]
+            } else if tainted || outcomes.contains(&crate::Truth::Tainted) {
+                crate::Truth::Tainted
+            } else {
+                crate::Truth::Unknown
+            };
+            dependencies.push(crate::prov::ResourceDependency {
+                certainty,
+                ..d.clone()
+            });
+        }
+    }
+    dependencies
 }
 
 fn push_unique(v: &mut Vec<Value>, x: Value) {

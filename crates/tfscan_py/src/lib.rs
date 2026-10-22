@@ -1110,6 +1110,8 @@ fn build_catalog(
                 resource_types: types.iter().map(|t| Arc::from(t.as_str())).collect(),
                 runs_on_module: false,
                 guideline: None,
+                rationale: None,
+                remediation: None,
                 source: tf_linter::RuleSource {
                     engine: tf_linter::Engine::Python,
                     file: None,
@@ -1153,7 +1155,7 @@ fn scan_error(e: tf_scan::ScanError) -> PyErr {
 /// one entry. `overlay`: `(path, text)` pairs that shadow the disk for this
 /// scan.
 #[pyfunction]
-#[pyo3(signature = (paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], callbacks=vec![], policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, _release_gil=true, rule_files=vec![], data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], rego_v0=false, bundled=true, profiles=None, data_dir=None))]
+#[pyo3(signature = (paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], callbacks=vec![], policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, _release_gil=true, rule_files=vec![], data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], rego_v0=false, bundled=true, profiles=None, data_dir=None, limits=None))]
 #[allow(clippy::too_many_arguments)]
 fn scan(
     py: Python<'_>,
@@ -1181,6 +1183,7 @@ fn scan(
     bundled: bool,
     profiles: Option<Vec<String>>,
     data_dir: Option<PathBuf>,
+    limits: Option<Bound<'_, PyDict>>,
 ) -> PyResult<(ScanResult, u64)> {
     if !_release_gil && !callbacks.is_empty() {
         // Workers would block on the GIL held by this thread.
@@ -1195,6 +1198,7 @@ fn scan(
         source,
         var_files,
         data_dir,
+        limits: parse_limits(limits.as_ref())?,
         builtin,
         select,
         ir_rules,
@@ -1233,6 +1237,7 @@ fn scan(
 /// The arguments of [`scan`] and [`fix_finding`], which build the same
 /// request.
 struct ScanArgs<'py, 's> {
+    limits: tf_scan::Limits,
     paths: Vec<PathBuf>,
     recursive: bool,
     plan: Option<PathBuf>,
@@ -1256,6 +1261,48 @@ struct ScanArgs<'py, 's> {
     rego_v0: bool,
     bundled: bool,
     profiles: Option<Vec<String>>,
+}
+
+fn parse_limits(limits: Option<&Bound<'_, PyDict>>) -> PyResult<tf_scan::Limits> {
+    let Some(limits) = limits else {
+        return Ok(tf_scan::Limits::default());
+    };
+    let mut parsed = tf_scan::Limits::default();
+    for (key, value) in limits.iter() {
+        let key: String = key
+            .extract()
+            .map_err(|_| PyValueError::new_err("invalid limits key"))?;
+        if value.is_instance_of::<pyo3::types::PyBool>() {
+            return Err(PyValueError::new_err(format!(
+                "{key} must be a positive integer"
+            )));
+        }
+        let value: u64 = value.extract().map_err(|_| {
+            PyValueError::new_err(format!("{key} must be a positive integer fitting u64"))
+        })?;
+        parsed = match key.as_str() {
+            "evaluation_steps" => parsed.with_evaluation_steps(value),
+            "loader_steps" => parsed.with_loader_steps(value),
+            "rule_steps" => parsed.with_rule_steps(value),
+            "rego_time_ms" => parsed.with_rego_time_ms(value),
+            "input_bytes" => parsed.with_input_bytes(value),
+            "source_bytes" => parsed.with_source_bytes(value),
+            "file_entries" => parsed.with_file_entries(value),
+            "directory_entries" => parsed.with_directory_entries(value),
+            "roots" => parsed.with_roots(value),
+            "arena_bytes" => parsed.with_arena_bytes(value),
+            "ast_nodes" => parsed.with_ast_nodes(value),
+            "text_bytes" => parsed.with_text_bytes(value),
+            "collection_bytes" => parsed.with_collection_bytes(value),
+            _ => {
+                return Err(PyValueError::new_err(format!(
+                    "unknown limits field {key:?}"
+                )));
+            }
+        }
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    }
+    Ok(parsed)
 }
 
 fn scan_request(a: ScanArgs<'_, '_>) -> PyResult<(ScanRequest, CallbackError, CallCount)> {
@@ -1314,6 +1361,7 @@ fn scan_request(a: ScanArgs<'_, '_>) -> PyResult<(ScanRequest, CallbackError, Ca
         },
     };
     let request = ScanRequest {
+        limits: a.limits,
         input,
         catalog,
         selection: a.select,
@@ -1337,11 +1385,12 @@ fn scan_request(a: ScanArgs<'_, '_>) -> PyResult<(ScanRequest, CallbackError, Ca
 /// `resource`, `attribute`, `action`, `value`, `site` (`attribute` or
 /// `default`: where the literal went; `at` picks one, else a variable's
 /// default is tried first), `original` and `text` (the file before and
-/// after), `diff` (unified) and `verified` (the rule no longer fails on the
-/// declaration). Nothing is written. Raises `ValueError` when no
+/// after), `diff` (unified), `finding_delta`, `target_resolved`,
+/// `no_new_findings`, and `verified` (both checks passed with complete scans).
+/// Nothing is written. Raises `ValueError` when no
 /// finding has the fingerprint, it has no fix hint, or the scan fails.
 #[pyfunction]
-#[pyo3(signature = (fingerprint, paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, rule_files=vec![], data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], rego_v0=false, bundled=true, profiles=None, at=None, data_dir=None))]
+#[pyo3(signature = (fingerprint, paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, rule_files=vec![], data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], rego_v0=false, bundled=true, profiles=None, at=None, data_dir=None, limits=None))]
 #[allow(clippy::too_many_arguments)]
 fn fix_finding<'py>(
     py: Python<'py>,
@@ -1369,6 +1418,7 @@ fn fix_finding<'py>(
     profiles: Option<Vec<String>>,
     at: Option<&str>,
     data_dir: Option<PathBuf>,
+    limits: Option<Bound<'_, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let site = match at {
         None => None,
@@ -1387,6 +1437,7 @@ fn fix_finding<'py>(
         source,
         var_files,
         data_dir,
+        limits: parse_limits(limits.as_ref())?,
         builtin,
         select,
         ir_rules,
@@ -1420,13 +1471,20 @@ fn fix_finding<'py>(
     d.set_item("diff", &o.diff)?;
     d.set_item("original", &o.original)?;
     d.set_item("text", &o.edit.text)?;
+    d.set_item("target_resolved", o.target_resolved)?;
+    d.set_item("no_new_findings", o.no_new_findings)?;
+    d.set_item(
+        "finding_delta",
+        json_to_py(py, &serde_json::json!(o.finding_delta))?,
+    )?;
     d.set_item("verified", o.verified)?;
     d.set_item("verification_errors", &o.verification_errors)?;
     Ok(d)
 }
 
 /// One rule's metadata as a dict: `name`, `level`, `category`,
-/// `description`, `resource_types`, `runs_on_module`, `guideline`, `source`
+/// `description`, `resource_types`, `runs_on_module`, `guideline`, `rationale`,
+/// `remediation`, `source`
 /// (`engine`, `file`, `line`).
 fn rule_dict<'py>(py: Python<'py>, r: &RuleInfo) -> PyResult<Bound<'py, PyDict>> {
     let d = PyDict::new(py);
@@ -1443,6 +1501,8 @@ fn rule_dict<'py>(py: Python<'py>, r: &RuleInfo) -> PyResult<Bound<'py, PyDict>>
     )?;
     d.set_item("runs_on_module", r.runs_on_module)?;
     d.set_item("guideline", r.guideline.as_deref())?;
+    d.set_item("rationale", r.rationale.as_deref())?;
+    d.set_item("remediation", r.remediation.as_deref())?;
     let src = PyDict::new(py);
     src.set_item("engine", r.source.engine.as_str())?;
     src.set_item(

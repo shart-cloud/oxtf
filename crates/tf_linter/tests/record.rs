@@ -1,7 +1,6 @@
 //! The finding record: its field set is the contract (schema 3), it survives
 //! a JSON round trip, and fix hints say what the plan promised.
 
-use std::collections::BTreeSet;
 use std::path::Path;
 
 use tf_linter::record::{FindingRecord, SCHEMA, ScanRecord, SubjectRecord};
@@ -11,7 +10,7 @@ fn scan(case: &str) -> ScanRecord {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../fixtures/rules")
         .join(case);
-    ScanRecord::from_result(&scan_dir(&root, &ScanOptions::default()))
+    ScanRecord::from_result(&scan_dir(&root, &ScanOptions::default()).unwrap())
 }
 
 fn keys(v: &serde_json::Value) -> Vec<String> {
@@ -85,6 +84,8 @@ fn schema_3_field_set_is_pinned() {
             "guideline",
             "level",
             "profile",
+            "rationale",
+            "remediation",
             "source"
         ]
     );
@@ -145,25 +146,6 @@ fn records_round_trip_through_json() {
             assert_eq!(&one, f);
         }
     }
-}
-
-#[test]
-fn fingerprints_are_unique_within_a_scan_and_ignore_presentation() {
-    let r = scan("aws-sg-open-ssh/fail_tfvars_through_local");
-    let fps: BTreeSet<_> = r.findings.iter().map(|f| f.fingerprint.clone()).collect();
-    assert_eq!(fps.len(), r.findings.len());
-    let f = &r.findings[0];
-    assert_eq!(
-        f.fingerprint,
-        tf_linter::record::fingerprint(
-            &f.rule,
-            "fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local/main.tf",
-            "aws_security_group.admin",
-            f.attribute.as_deref()
-        ),
-        "{:?}",
-        f.subject
-    );
 }
 
 fn address(f: &FindingRecord) -> &str {

@@ -13,7 +13,7 @@ fn raw_rendering_matches_conftest_parse() {
     let alloc = tf_allocator::Allocator::new();
     let parsed = tf_parser::parse(&alloc, &text);
     assert!(parsed.errors.is_empty());
-    let file = alloc.alloc(parsed.file);
+    let file = alloc.alloc(parsed.file).unwrap();
     assert_eq!(tf_rego::hcl2json::raw(file, &text).unwrap(), expected);
 }
 
@@ -48,7 +48,7 @@ fn evaluated_overrides_render_syntax_and_settings_from_their_original_files() {
         "{:?}",
         analysis.diagnostics
     );
-    let definition = store.module(&files, &root);
+    let definition = store.module(&files, &root).unwrap();
     let (source, ast) = definition
         .files
         .iter()
@@ -123,7 +123,7 @@ fn json_provider_nested_blocks_match_hcl_policy_input() {
                 "{:?}",
                 analysis.diagnostics
             );
-            let definition = store.module(&files, &root);
+            let definition = store.module(&files, &root).unwrap();
             let (source, ast) = &definition.files[0];
             docs.push(
                 tf_rego::hcl2json::evaluated(&tf_linter::ConfigFile {

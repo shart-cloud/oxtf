@@ -28,6 +28,7 @@ jobs:
       - run: rustup default 1.96.0
       - run: bash corpus/fetch.sh
       - run: cargo fmt --all --check
+      - run: python3 -m unittest discover -s bench -p test_signal.py
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
 

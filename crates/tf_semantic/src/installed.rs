@@ -12,6 +12,39 @@ use tf_span::FileSpan;
 use crate::module::ModuleCall;
 use crate::source::{FileTable, normalize};
 
+mod decode;
+#[cfg(test)]
+mod storage_tests;
+
+#[derive(Clone, Debug)]
+pub enum ResolveError {
+    Storage(tf_limits::Exhaustion),
+    Invalid(String),
+}
+
+impl From<String> for ResolveError {
+    fn from(message: String) -> Self {
+        Self::Invalid(message)
+    }
+}
+
+impl From<&str> for ResolveError {
+    fn from(message: &str) -> Self {
+        Self::Invalid(message.into())
+    }
+}
+
+impl std::fmt::Display for ResolveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Storage(error) => error.fmt(f),
+            Self::Invalid(message) => message.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for ResolveError {}
+
 /// Provenance of installed source, inherited by its local child modules.
 #[derive(Clone, Debug)]
 pub struct InstalledPackage {
@@ -20,6 +53,8 @@ pub struct InstalledPackage {
     /// Resolved revision recorded by explicit fetching; Terraform manifests
     /// without this extension provide no revision identity.
     pub revision: Option<String>,
+    /// Explicit fetch snapshots bound contextual file reads to their package.
+    pub package_root: Option<PathBuf>,
     /// The selected module directory, an anchor for stable relative filenames.
     pub dir: PathBuf,
     /// Calls from the scanned root to this module.
@@ -74,20 +109,16 @@ struct Record {
     version: Option<String>,
     #[serde(default, rename = "OxtfRevision")]
     revision: Option<String>,
+    #[serde(default, rename = "OxtfPackageRoot")]
+    package_root: Option<PathBuf>,
     dir: PathBuf,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "PascalCase")]
-struct Snapshot {
-    modules: Vec<Record>,
 }
 
 pub struct InstalledModules<'a> {
     root: PathBuf,
     manifest: PathBuf,
     files: &'a FileTable,
-    records: OnceCell<Result<HashMap<String, Record>, String>>,
+    records: OnceCell<Result<HashMap<String, Record>, ResolveError>>,
 }
 
 /// Relative data directories are resolved against each scanned root.
@@ -107,105 +138,113 @@ impl<'a> InstalledModules<'a> {
         }
     }
 
-    fn records(&self) -> Result<&HashMap<String, Record>, String> {
+    fn records(&self) -> Result<&HashMap<String, Record>, ResolveError> {
         self.records
             .get_or_init(|| {
-                let sf = self.files.load(&self.manifest).map_err(|e| {
-                    format!(
-                        "cannot read installed module manifest {}: {e}",
-                        self.manifest.display()
-                    )
-                })?;
-                let snapshot: Snapshot = serde_json::from_str(&sf.text).map_err(|e| {
-                    format!(
-                        "invalid installed module manifest at line {}, column {}",
-                        e.line(),
-                        e.column()
-                    )
-                })?;
-                let mut records = HashMap::new();
-                for record in snapshot.modules {
-                    if records.insert(record.key.clone(), record).is_some() {
-                        return Err("duplicate module key in installed module manifest".into());
+                let sf = self.files.load(&self.manifest).map_err(|error| {
+                    if let Some(error) = tf_limits::input::exhaustion(&error) {
+                        ResolveError::Storage(error)
+                    } else {
+                        ResolveError::Invalid(format!(
+                            "cannot read installed module manifest {}: {error}",
+                            self.manifest.display()
+                        ))
                     }
-                }
-                Ok(records)
+                })?;
+                decode::records(&sf.text, self.files.input_budget())
             })
             .as_ref()
             .map_err(Clone::clone)
     }
 
-    pub fn resolve(&self, calls: &[&ModuleCall<'_>]) -> Result<InstalledPackage, String> {
+    pub fn resolve(&self, calls: &[&ModuleCall<'_>]) -> Result<InstalledPackage, ResolveError> {
+        self.files
+            .input_budget()
+            .admit_collection(0)
+            .map_err(ResolveError::Storage)?;
         let records = self.records()?;
-        let mut key = String::new();
-        let mut selected = None;
-        // Validate local ancestors too: a changed local source invalidates the
-        // old installed descendants even when the final call's source matches.
-        for call in calls {
-            if !key.is_empty() {
-                key.push('.');
-            }
-            key.push_str(call.name);
-            let record = records
-                .get(&key)
-                .ok_or_else(|| format!("module {key} is not installed"))?;
-            let source = call
-                .block
-                .body
-                .find_attribute("source")
-                .and_then(|a| a.value.as_string_literal())
-                .ok_or("module source must be a literal string")?;
-            if normalize_source(source) != normalize_source(&record.source) {
-                return Err(format!("installed source for module {key} is stale"));
-            }
-            let constraint = call
-                .block
-                .body
-                .find_attribute("version")
-                .map(|a| {
-                    a.value
-                        .as_string_literal()
-                        .ok_or("module version must be a literal string")
-                })
-                .transpose()?;
-            if constraint.is_some_and(|c| c.trim().is_empty()) {
-                return Err("module version constraint must not be empty".into());
-            }
-            match (&record.version, constraint) {
-                (Some(version), constraint) => {
-                    if !version_matches(version, constraint.unwrap_or(""))? {
-                        return Err(format!(
-                            "installed version for module {key} does not satisfy its constraint"
-                        ));
-                    }
-                }
-                (None, Some(c)) if !c.trim().is_empty() => {
-                    return Err(format!("installed version for module {key} is missing"));
-                }
-                _ => {}
-            }
-            if record.dir.as_os_str().is_empty() {
-                return Err(format!("installed directory for module {key} is missing"));
-            }
-            selected = Some(record);
-        }
-        let record = selected.ok_or("empty module path")?;
+        let (record, key) = select_record(records, calls)?;
         let dir = normalize(&self.root.join(&record.dir));
         if !self.files.is_dir(&dir) {
-            return Err(format!("installed directory for module {key} is missing"));
+            return Err(format!("installed directory for module {key} is missing").into());
         }
         self.files.protect_dir(&dir);
         Ok(InstalledPackage {
             source: normalize_source(&record.source),
             version: record.version.clone(),
             revision: record.revision.clone(),
+            package_root: record
+                .package_root
+                .as_ref()
+                .map(|p| normalize(&self.root.join(p))),
             dir,
-            calls: calls
-                .iter()
-                .map(|c| FileSpan::new(c.file, c.block.span))
-                .collect(),
+            calls: tf_eval::collections::collect(
+                calls.iter().map(|c| FileSpan::new(c.file, c.block.span)),
+                self.files.input_budget(),
+            )
+            .map_err(|_| ResolveError::Storage(self.files.input_budget().collection_refused()))?,
         })
     }
+}
+
+fn select_record<'a>(
+    records: &'a HashMap<String, Record>,
+    calls: &[&ModuleCall<'_>],
+) -> Result<(&'a Record, String), ResolveError> {
+    let mut key = String::new();
+    let mut selected = None;
+    // Validate local ancestors too: a changed local source invalidates the
+    // old installed descendants even when the final call's source matches.
+    for call in calls {
+        if !key.is_empty() {
+            key.push('.');
+        }
+        key.push_str(call.name);
+        let record = records
+            .get(&key)
+            .ok_or_else(|| format!("module {key} is not installed"))?;
+        let source = call
+            .block
+            .body
+            .find_attribute("source")
+            .and_then(|a| a.value.as_string_literal())
+            .ok_or("module source must be a literal string")?;
+        if normalize_source(source) != normalize_source(&record.source) {
+            return Err(format!("installed source for module {key} is stale").into());
+        }
+        let constraint = call
+            .block
+            .body
+            .find_attribute("version")
+            .map(|a| {
+                a.value
+                    .as_string_literal()
+                    .ok_or("module version must be a literal string")
+            })
+            .transpose()?;
+        if constraint.is_some_and(|c| c.trim().is_empty()) {
+            return Err("module version constraint must not be empty".into());
+        }
+        match (&record.version, constraint) {
+            (Some(version), constraint) => {
+                if !version_matches(version, constraint.unwrap_or(""))? {
+                    return Err(format!(
+                        "installed version for module {key} does not satisfy its constraint"
+                    )
+                    .into());
+                }
+            }
+            (None, Some(c)) if !c.trim().is_empty() => {
+                return Err(format!("installed version for module {key} is missing").into());
+            }
+            _ => {}
+        }
+        if record.dir.as_os_str().is_empty() {
+            return Err(format!("installed directory for module {key} is missing").into());
+        }
+        selected = Some(record);
+    }
+    Ok((selected.ok_or("empty module path")?, key))
 }
 
 /// Normalize the registry default host and common GitHub shorthand without
@@ -229,9 +268,9 @@ pub fn normalize_source(source: &str) -> String {
         }
     }
     let base = address.split("//").next().unwrap_or(address);
-    let parts: Vec<_> = base.split('/').collect();
-    if parts.len() == 3
-        && parts.iter().all(|s| {
+    let parts = base.split('/');
+    if parts.clone().count() == 3
+        && parts.clone().all(|s| {
             !s.is_empty()
                 && s.bytes()
                     .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))

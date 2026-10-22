@@ -1098,6 +1098,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4050469837a6ff301cd14c1f8f24f88549e6d548f24f64e2148eb0f72cebc51f"
 
 [[package]]
+name = "md-5"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d89e7ee0cfbedfc4da3340218492196241d89eefb6dab27de5df917a6d2e78cf"
+dependencies = [
+ "cfg-if",
+ "digest",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1867,6 +1877,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha1"
+version = "0.10.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a978451301f4db1d02937a4ab3ccce137717b81826e79b7d49ffe3244a13c3b8"
+dependencies = [
+ "cfg-if",
+ "cpufeatures 0.2.17",
+ "digest",
+]
+
+[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2079,6 +2100,7 @@ name = "tf_allocator"
 version = "0.0.0"
 dependencies = [
  "bumpalo",
+ "tf_limits",
 ]
 
 [[package]]
@@ -2106,6 +2128,7 @@ dependencies = [
  "miette",
  "mimalloc",
  "serde_json",
+ "tf_limits",
  "tf_linter",
  "tf_scan",
 ]
@@ -2114,10 +2137,14 @@ dependencies = [
 name = "tf_eval"
 version = "0.0.0"
 dependencies = [
+ "md-5",
  "regex",
  "serde_json",
+ "sha1",
+ "sha2",
  "tf_allocator",
  "tf_ast",
+ "tf_limits",
  "tf_parser",
  "tf_span",
 ]
@@ -2140,6 +2167,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "tf_limits"
+version = "0.0.0"
+
+[[package]]
 name = "tf_linter"
 version = "0.0.0"
 dependencies = [
@@ -2149,6 +2180,7 @@ dependencies = [
  "serde_json",
  "tf_ast",
  "tf_eval",
+ "tf_limits",
  "tf_schema",
  "tf_semantic",
  "tf_span",
@@ -2160,9 +2192,11 @@ version = "0.0.0"
 dependencies = [
  "hcl-edit",
  "insta",
+ "serde",
  "serde_json",
  "tf_allocator",
  "tf_ast",
+ "tf_limits",
  "tf_span",
 ]
 
@@ -2172,6 +2206,7 @@ version = "0.0.0"
 dependencies = [
  "serde_json",
  "tf_eval",
+ "tf_limits",
  "tf_linter",
  "tf_schema",
  "tf_semantic",
@@ -2189,6 +2224,7 @@ dependencies = [
  "tf_allocator",
  "tf_ast",
  "tf_eval",
+ "tf_limits",
  "tf_linter",
  "tf_parser",
  "tf_semantic",
@@ -2205,6 +2241,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tf_eval",
+ "tf_limits",
  "tf_linter",
  "tf_semantic",
  "tf_yaml",
@@ -2215,9 +2252,11 @@ dependencies = [
 name = "tf_scan"
 version = "0.0.0"
 dependencies = [
+ "serde",
  "serde_json",
  "tf_eval",
  "tf_fetch",
+ "tf_limits",
  "tf_linter",
  "tf_plan",
  "tf_rego",
@@ -2258,6 +2297,7 @@ dependencies = [
  "tf_allocator",
  "tf_ast",
  "tf_eval",
+ "tf_limits",
  "tf_parser",
  "tf_schema",
  "tf_span",

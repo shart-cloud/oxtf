@@ -17,6 +17,14 @@ use crate::rule::{Category, Level, Rule, RuleMeta};
 pub struct AwsSgOpenSsh;
 
 impl RuleMeta for AwsSgOpenSsh {
+    const RATIONALE: Option<&'static str> = Some(
+        "World-open SSH permits attempts against an administrative service if an attached resource is reachable. The security-group rule alone does not establish a public IP, route, or exploitable service.",
+    );
+    const REMEDIATION: Option<&'static str> = Some(
+        "Remove internet-wide IPv4 and IPv6 SSH ingress. Restrict port 22 to required trusted CIDRs or security groups, or use private administrative access such as Systems Manager Session Manager. Check attached resources and preserve a tested administrative access path.",
+    );
+    const GUIDELINE: Option<&'static str> =
+        Some("https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html");
     const NAME: &'static str = "aws-sg-open-ssh";
     const CATEGORY: Category = Category::Network;
     const LEVEL: Level = Level::High;

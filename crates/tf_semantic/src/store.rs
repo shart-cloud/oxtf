@@ -2,9 +2,10 @@
 //!
 //! A recursive scan reaches most module directories from several roots:
 //! every `examples/*` root calls the repository's module, and that module
-//! directory is a root of its own. The [`ModuleStore`] parses and indexes
-//! each directory once, into an arena the entry owns, and hands every root
-//! a shared `&ModuleDef`. Entries are appended and never removed while the
+//! directory is a root of its own. The [`ModuleStore`] caches each directory
+//! per loader allowance, in an arena the entry owns, and hands every root
+//! a shared `&ModuleDef`. Concurrent misses share one initialization cell.
+//! Entries are appended and never removed while the
 //! store lives, so a reference into one is valid for the store's lifetime,
 //! which is what lets one analysis borrow definitions from many entries
 //! under a single lifetime.
@@ -12,12 +13,32 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use elsa::sync::FrozenMap;
 use tf_allocator::Allocator;
 use tf_span::FileSpan;
 
-use crate::module::{ModuleDef, load_module, parse_file};
+use crate::module::{ModuleDef, load_module_with_limits, parse_file};
 use crate::source::{FileTable, SourceFile, normalize};
+
+mod cache;
+use cache::ParsedCache;
+
+/// Admission can fail before a cache cell exists; parse failures borrow the cell.
+#[derive(Debug)]
+pub enum FileError<'a> {
+    Storage(tf_limits::Exhaustion),
+    Parse(&'a std::io::Error),
+}
+
+impl std::fmt::Display for FileError<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Storage(error) => error.fmt(f),
+            Self::Parse(error) => error.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for FileError<'_> {}
 
 /// A module directory parsed and indexed into its own arena.
 ///
@@ -42,9 +63,9 @@ unsafe impl Sync for LoadedModule {}
 unsafe impl Send for LoadedModule {}
 
 impl LoadedModule {
-    fn new(files: &FileTable, dir: &Path) -> Self {
-        let alloc = Box::new(Allocator::new());
-        let def = load_module(&alloc, files, dir);
+    fn new(files: &FileTable, dir: &Path, limits: tf_limits::Limits) -> Self {
+        let alloc = Box::new(files.allocator());
+        let def = load_module_with_limits(&alloc, files, dir, limits);
         // SAFETY: `def` borrows only from `*alloc`, whose heap allocation
         // outlives `def` because the field order drops `def` first and the
         // box is never moved out. The borrow is shortened again in `def()`;
@@ -66,6 +87,7 @@ impl LoadedModule {
 pub struct ParsedFile<'a> {
     pub file: &'a tf_ast::File<'a>,
     pub errors: Vec<(FileSpan, String)>,
+    pub limits: Vec<(FileSpan, tf_parser::Diagnostic)>,
 }
 
 pub struct LoadedFile {
@@ -78,28 +100,38 @@ unsafe impl Sync for LoadedFile {}
 unsafe impl Send for LoadedFile {}
 
 impl LoadedFile {
-    fn new(sf: &Arc<SourceFile>) -> Self {
-        let alloc = Box::new(Allocator::new());
+    fn new(sf: &Arc<SourceFile>) -> std::io::Result<Self> {
+        let alloc = Box::new(sf.allocator());
         let mut errors = Vec::new();
+        let mut limits = Vec::new();
         let file = if sf.path.extension().is_some_and(|ext| ext == "json") {
-            let text = alloc.alloc_str(&sf.text);
+            sf.reserve_text_copy()?;
+            let text = alloc.alloc_str(&sf.text).map_err(std::io::Error::other)?;
             let ret = tf_parser::parse_json_vars(&alloc, text);
-            errors.extend(
-                ret.errors
-                    .into_iter()
-                    .map(|e| (FileSpan::new(sf.id, e.span), e.message)),
-            );
-            alloc.alloc(ret.file)
+            for e in ret.errors {
+                let at = FileSpan::new(sf.id, e.span);
+                match e.kind {
+                    tf_parser::DiagnosticKind::Syntax => errors.push((at, e.message)),
+                    tf_parser::DiagnosticKind::Limit(tf_parser::ParseLimit::Storage(_)) => {}
+                    tf_parser::DiagnosticKind::Limit(_) => limits.push((at, e)),
+                }
+            }
+            alloc.alloc(ret.file).map_err(std::io::Error::other)?
         } else {
-            parse_file(&alloc, sf, &mut errors)
+            parse_file(&alloc, sf, &mut errors, &mut limits)?
         };
         // SAFETY: as for `LoadedModule::new`.
-        let parsed: ParsedFile<'static> =
-            unsafe { std::mem::transmute(ParsedFile { file, errors }) };
-        LoadedFile {
+        let parsed: ParsedFile<'static> = unsafe {
+            std::mem::transmute(ParsedFile {
+                file,
+                errors,
+                limits,
+            })
+        };
+        Ok(LoadedFile {
             parsed,
             _alloc: alloc,
-        }
+        })
     }
 
     pub fn parsed<'s>(&'s self) -> &'s ParsedFile<'s> {
@@ -112,8 +144,8 @@ impl LoadedFile {
 /// Append-only; shared between the roots analysed in parallel.
 #[derive(Default)]
 pub struct ModuleStore {
-    modules: FrozenMap<PathBuf, Box<LoadedModule>>,
-    files: FrozenMap<PathBuf, Box<LoadedFile>>,
+    modules: ParsedCache<(u64, PathBuf, u64), LoadedModule>,
+    files: ParsedCache<(u64, PathBuf), std::io::Result<LoadedFile>>,
 }
 
 impl ModuleStore {
@@ -121,30 +153,53 @@ impl ModuleStore {
         Self::default()
     }
 
-    /// The parsed, indexed module in `dir`, loaded on first request. Two
-    /// threads asking for a new directory at once may both parse it; the
-    /// first to insert wins and the other copy is dropped.
-    pub fn module(&self, files: &FileTable, dir: &Path) -> &ModuleDef<'_> {
+    /// The parsed, indexed module in `dir`, initialized once even on concurrent access.
+    pub fn module(
+        &self,
+        files: &FileTable,
+        dir: &Path,
+    ) -> Result<&ModuleDef<'_>, tf_limits::Exhaustion> {
+        self.module_with_limits(files, dir, tf_limits::Limits::default())
+    }
+
+    /// Loader allowance is part of the cache identity: an exhausted entry must not
+    /// poison a later request with a larger allowance. Runtime work is not cached here.
+    /// Admission failure creates no entry. Once admitted, the definition retains
+    /// load diagnostics and failed initialization is reused without another charge.
+    pub fn module_with_limits(
+        &self,
+        files: &FileTable,
+        dir: &Path,
+        limits: tf_limits::Limits,
+    ) -> Result<&ModuleDef<'_>, tf_limits::Exhaustion> {
         let dir = normalize(dir);
-        if let Some(m) = self.modules.get(&dir) {
-            return m.def();
-        }
-        let loaded = LoadedModule::new(files, &dir);
-        self.modules.insert(dir, Box::new(loaded)).def()
+        let key = (
+            files.input_budget().identity(),
+            dir.clone(),
+            limits.loader_steps(),
+        );
+        let cell = self.modules.entry(key, files.input_budget())?;
+        // Loading one definition does not call back into ModuleStore: child modules
+        // are instantiated only after this returns. No map lock is held while parsing.
+        Ok(cell
+            .get_or_init(|| LoadedModule::new(files, &dir, limits))
+            .def())
     }
 
     /// `sf` parsed as a variable file, loaded on first request. JSON strings
     /// are literal here; configuration uses the module loader instead.
-    pub fn variable_file(&self, sf: &Arc<SourceFile>) -> &ParsedFile<'_> {
-        if let Some(f) = self.files.get(&sf.path) {
-            return f.parsed();
-        }
-        self.files
-            .insert(sf.path.clone(), Box::new(LoadedFile::new(sf)))
-            .parsed()
+    pub fn variable_file(&self, sf: &Arc<SourceFile>) -> Result<&ParsedFile<'_>, FileError<'_>> {
+        let cell = self
+            .files
+            .entry((sf.input_identity(), sf.path.clone()), sf.input_budget())
+            .map_err(FileError::Storage)?;
+        cell.get_or_init(|| LoadedFile::new(sf))
+            .as_ref()
+            .map(LoadedFile::parsed)
+            .map_err(FileError::Parse)
     }
 
-    /// Module directories loaded so far.
+    /// Cached module entries, including separate entries for different loader allowances.
     pub fn len(&self) -> usize {
         self.modules.len()
     }

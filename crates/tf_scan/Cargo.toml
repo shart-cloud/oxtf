@@ -7,6 +7,8 @@ publish.workspace = true
 description = "The one scan request: input, catalog, selection and policies in, a scan result out"
 
 [dependencies]
+tf_limits.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 tf_semantic.workspace = true
 tf_fetch.workspace = true

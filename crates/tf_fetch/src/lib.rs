@@ -233,8 +233,18 @@ impl Session<'_> {
         {
             return Err("local module escapes its fetched package".into());
         }
-        let def = self.store.module(&self.files, &canonical);
-        if !def.parse_errors.is_empty() || !def.load_errors.is_empty() {
+        let def = self
+            .store
+            .module(&self.files, &canonical)
+            .map_err(|e| e.to_string())?;
+        if let Some(error) = self.files.input_budget().exhaustion() {
+            return Err(error.to_string());
+        }
+        if !def.parse_errors.is_empty()
+            || !def.parse_limits.is_empty()
+            || def.loader_limit.is_some()
+            || !def.load_errors.is_empty()
+        {
             return Err("module configuration contains parse or load errors".into());
         }
         if def.files.is_empty() {

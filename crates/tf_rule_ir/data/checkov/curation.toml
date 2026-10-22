@@ -14,13 +14,18 @@
 #           hygiene   operations, cost, tags, style, reliability
 #                     (--profile hygiene or all)
 #           Rules not listed are `unreviewed` and run by default.
-# level     critical  direct public exposure or full administrative access
-#           high      a likely exposure or a credential path
-#           medium    defence in depth
+# level     critical  broad administrative grants with account-wide potential impact
+#           high      broad data access, dangerous permissions, or administrative ingress
+#           medium    missing guardrails, public endpoints, scoped over-grants, encryption gaps
 #           low       hardening, or a finding that rarely matters alone
 # category  network | storage | iam | encryption | other (optional: keeps
 #           the translated category when absent)
-# why       one line: the reason for the call, for review
+# why       severity rationale, exported to consumers as `rationale`
+# remediation  actionable steps and material migration or compatibility limits
+# guideline    official HTTPS documentation supporting the guidance
+# description  optional corrected title and finding message; predicates stay unchanged
+# remediation and guideline must be supplied together. Legacy entries without
+# them remain visibly incomplete in the signal metrics. Review pass: 2026-10-20.
 #
 # Order: the most frequent rules on the 17-repository corpus first
 # (docs/plans/SIGNAL_PLAN.md, workstream D), then well-known critical
@@ -35,14 +40,20 @@
 # - a customer-managed key where the provider already encrypts the data
 #   is a compliance choice: `low`, `hygiene`. Data not encrypted at all
 #   is `security`.
+# - a public endpoint or absent guardrail is not proof of anonymous data access;
+# - a wildcard permission is evaluated in its action, resource and condition context;
+# - severity labels describe potential impact, not certainty or proven exploitability.
 
 # -- most frequent on the corpus ----------------------------------------
 
 [CKV2_GCP_18]
-level = "medium"
-profile = "security"
+level = "low"
+profile = "hygiene"
 category = "network"
-why = "a network with no firewall rules of its own falls back to permissive defaults"
+why = "No associated firewall rule was found in this configuration. GCP has implied deny-ingress and allow-egress rules; missing an explicit rule does not establish open ingress, and inherited policies may apply."
+remediation = "Review effective VPC and hierarchical firewall policies. Declare narrowly scoped rules only for required traffic and restrictive egress where needed. Do not add an allow rule merely to satisfy this presence check."
+guideline = "https://docs.cloud.google.com/firewall/docs/firewalls"
+description = "GCP network has no explicit associated firewall rule in the scanned configuration"
 
 [CKV_GCP_26]
 level = "low"
@@ -56,22 +67,28 @@ category = "network"
 why = "Private Google Access lets IP-less VMs reach Google APIs: connectivity, not exposure"
 
 [CKV_AWS_355]
-level = "high"
+level = "medium"
 profile = "security"
 category = "iam"
-why = "a restrictable action on Resource \"*\" grants it on every resource of the account"
+why = "Resource = * broadens a restrictable action to all matching resources. Impact depends on the action; a read-only scope issue is not equivalent to administrative access."
+remediation = "Scope restrictable actions to required resource ARNs. Put actions without resource-level permission support in separate statements retaining Resource = *, and constrain them with applicable conditions. Validate against the service authorization reference."
+guideline = "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_resource.html"
 
 [CKV2_AZURE_31]
 level = "medium"
 profile = "security"
 category = "network"
-why = "a subnet without an NSG has no network filtering"
+why = "A missing subnet NSG removes one network-filtering boundary. NIC NSGs, routing, and other controls can still restrict traffic; this check does not prove public reachability."
+remediation = "Associate an appropriate NSG with the subnet using azurerm_subnet_network_security_group_association. Review NIC rules and required service traffic first; do not attach a permissive NSG just to satisfy the check."
+guideline = "https://learn.microsoft.com/en-us/azure/virtual-network/network-security-groups-overview"
 
 [CKV_GCP_20]
-level = "high"
+level = "medium"
 profile = "security"
 category = "network"
-why = "without master authorized networks the GKE API server is reachable from anywhere"
+why = "Missing authorized-network restrictions weakens IP endpoint filtering. Actual reachability depends on the configured endpoint type and network isolation, and API authentication is still required."
+remediation = "Review the cluster control-plane endpoint configuration. For an enabled IP endpoint, configure master_authorized_networks_config with required client CIDRs or use a supported private or DNS endpoint design. Test administrative connectivity before tightening access."
+guideline = "https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation"
 
 [CKV_GCP_65]
 level = "low"
@@ -82,13 +99,17 @@ why = "Google Groups for RBAC is an access-management convenience"
 [CKV_GCP_66]
 level = "medium"
 profile = "security"
-why = "Binary Authorization blocks unsigned images: supply-chain defence in depth"
+why = "The check detects whether Binary Authorization enforcement is configured, not whether the admission policy rejects untrusted images. The default project policy allows all images."
+remediation = "Enable binary_authorization with evaluation_mode = PROJECT_SINGLETON_POLICY_ENFORCE and configure the project admission policy with required attestations or an approved image policy. Test in dry-run mode and review exemptions before enforcement; enabling the cluster switch alone does not restrict images."
+guideline = "https://docs.cloud.google.com/binary-authorization/docs/configure-policy-gke"
 
 [CKV_GCP_69]
 level = "high"
 profile = "security"
 category = "iam"
-why = "without the GKE metadata server, pods can read node credentials from instance metadata"
+why = "Without workload-specific identity isolation, pods may use node credentials. Impact depends on node permissions and the cluster metadata configuration."
+remediation = "Enable Workload Identity Federation and the GKE metadata server for supported node pools. Grant each workload only its required permissions and test identity migration before updating existing workloads."
+guideline = "https://docs.cloud.google.com/kubernetes-engine/docs/concepts/workload-identity"
 
 [CKV_GCP_21]
 level = "low"
@@ -99,7 +120,10 @@ why = "labels"
 level = "medium"
 profile = "security"
 category = "network"
-why = "without network policy every pod can reach every pod"
+why = "Missing network-policy enforcement can permit lateral traffic between workloads. This predicate does not inspect NetworkPolicy objects and recognizes Dataplane V2 only when a network_policy block is also present."
+remediation = "Confirm the cluster dataplane first: Dataplane V2 and Autopilot provide network-policy enforcement. Otherwise enable enforcement and plan for node recreation. Apply and test NetworkPolicy objects, allowing required DNS, metadata and application traffic; the enforcement switch alone does not isolate pods."
+guideline = "https://docs.cloud.google.com/kubernetes-engine/docs/how-to/network-policy"
+description = "GKE network-policy enforcement is not established by the checked configuration"
 
 [CKV_GCP_61]
 level = "low"
@@ -110,29 +134,41 @@ why = "flow logs and intranode visibility are visibility, not exposure"
 level = "medium"
 profile = "security"
 category = "iam"
-why = "project-wide SSH keys grant access to every VM of the project"
+why = "Accepting project metadata SSH keys can broaden login access to reachable VMs. The check does not establish whether OS Login already governs access, whether project keys exist, or whether SSH is reachable."
+remediation = "For metadata-based SSH, set metadata.block-project-ssh-keys = true and retain tested instance-specific or emergency access before rollout. If OS Login is enabled, verify effective IAM login permissions instead: metadata SSH keys are not used. Review inherited instance-template settings and firewall access."
+guideline = "https://docs.cloud.google.com/compute/docs/connect/restrict-ssh-keys"
 
 [CKV_AWS_27]
 level = "medium"
 profile = "security"
 category = "encryption"
-why = "SQS messages unencrypted at rest"
+why = "Explicitly disabling queue encryption leaves message bodies without at-rest protection. Missing attributes alone do not prove this: new SQS queues have service-side encryption defaults."
+remediation = "Set sqs_managed_sse_enabled = true, or configure kms_master_key_id when KMS is required. Check the effective queue settings and provider version before interpreting omitted attributes. Verify publisher and consumer permissions when changing keys."
+guideline = "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-configure-sse-existing-queue.html"
+description = "SQS encryption is disabled or not explicit in this configuration"
 
 [CKV_GCP_68]
 level = "low"
 profile = "security"
-why = "Secure Boot is node hardening against boot-level rootkits"
+why = "Secure Boot verifies boot components and reduces bootkit persistence. It is disabled by default on GKE Standard node pools for compatibility; omission is a hardening gap, not evidence of compromise."
+remediation = "Use a supported Shielded GKE node image and enable node_config.shielded_instance_config.enable_secure_boot after testing drivers and kernel modules. Plan node updates within maintenance and disruption budgets. Verify effective settings for Autopilot or inherited node configuration before changing it."
+guideline = "https://docs.cloud.google.com/kubernetes-engine/docs/how-to/shielded-gke-nodes"
 
 [CKV_GCP_38]
 level = "low"
 profile = "hygiene"
 category = "encryption"
-why = "customer-supplied keys are a compliance choice; disks are encrypted at rest by default"
+why = "Google Cloud encrypts stored data by default. Customer-supplied disk keys add a key-custody requirement rather than baseline encryption."
+remediation = "Configure customer-supplied disk encryption only when required by your key-management policy. Plan key retention, recovery, and any required disk migration; loss of the key can make data inaccessible."
+guideline = "https://docs.cloud.google.com/docs/security/encryption/default-encryption"
 
 [CKV_GCP_39]
 level = "low"
 profile = "security"
-why = "Shielded VM is instance hardening"
+why = "The check detects an absent Shielded VM configuration or explicitly disabled vTPM/integrity monitoring; it does not check Secure Boot. Supported Shielded VM images enable vTPM and integrity monitoring by default, so omission alone does not establish they are off."
+remediation = "Verify the boot image supports Shielded VM and inspect effective vTPM and integrity-monitoring settings. Set shielded_instance_config.enable_vtpm and enable_integrity_monitoring to true when needed. Schedule required stop/start or instance-template rollout; consider boot and BitLocker recovery implications. Review Secure Boot separately."
+guideline = "https://docs.cloud.google.com/compute/shielded-vm/docs/modifying-shielded-vm"
+description = "Compute Shielded VM vTPM and integrity monitoring are disabled or not explicit"
 
 [CKV2_AWS_41]
 level = "low"
@@ -154,7 +190,9 @@ why = "EBS optimisation is performance"
 level = "medium"
 profile = "security"
 category = "encryption"
-why = "EBS volumes of launch configurations and instances unencrypted at rest"
+why = "Absent or disabled volume encryption weakens protection for storage copies. Account-level EBS encryption defaults and source snapshots may still encrypt newly created volumes."
+remediation = "Set encrypted = true on the applicable EBS block devices and review regional EBS encryption-by-default settings. Existing unencrypted volumes need an encrypted snapshot copy and replacement or migration; inspect the Terraform plan before rollout."
+guideline = "https://docs.aws.amazon.com/ebs/latest/userguide/encryption-by-default.html"
 
 [CKV_AWS_338]
 level = "low"
@@ -165,7 +203,10 @@ why = "log retention of a year is a compliance choice"
 level = "low"
 profile = "hygiene"
 category = "encryption"
-why = "log groups are encrypted by default; a customer key adds key control"
+why = "CloudWatch Logs encrypts log data by default. A configured KMS key adds customer key control, not baseline encryption."
+remediation = "Associate kms_key_id with the log group only when customer key control is required. Configure the CloudWatch Logs service permissions and encryption context, and retain access to keys needed for older data."
+guideline = "https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/encrypt-log-data-kms.html"
+description = "CloudWatch log group does not configure a customer-controlled KMS key"
 
 [CKV_GCP_123]
 level = "low"
@@ -175,19 +216,26 @@ why = "inline node pools are a configuration style"
 [CKV_GCP_22]
 level = "low"
 profile = "security"
-why = "Container-Optimized OS is node hardening"
+why = "This legacy check prefers COS only for older GKE versions and does not establish a vulnerable node image. Supported Ubuntu and Windows images can be legitimate choices; the pinned checker also errors on null versions."
+remediation = "Review node OS support and patching for the deployed GKE version. Prefer an appropriate supported containerd image such as COS_CONTAINERD or UBUNTU_CONTAINERD; use supported Windows images when required. Plan and test node-pool migration instead of selecting legacy COS merely to pass this check."
+guideline = "https://docs.cloud.google.com/kubernetes-engine/docs/concepts/node-images"
+description = "Legacy GKE node-image preference requires version and workload review"
 
 [CKV_AWS_290]
 level = "high"
 profile = "security"
 category = "iam"
-why = "unconstrained write access in an IAM policy"
+why = "Broad write permissions can modify resources beyond the workload need. The affected actions and resources determine blast radius; this is not evidence of an actual compromise."
+remediation = "Limit write actions to the operations and resource ARNs the workload needs. Apply supported conditions, validate effective permissions, and test deployment and runtime operations before rollout."
+guideline = "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_resource.html"
 
 [CKV_AWS_79]
 level = "high"
 profile = "security"
 category = "iam"
-why = "IMDSv1 lets an SSRF in the instance read its role credentials"
+why = "IMDSv1 can expose instance-role credentials through some SSRF or proxy paths. An exploitable path and useful instance permissions are still prerequisites."
+remediation = "Require IMDSv2 with metadata_options.http_tokens = required after checking SDK and application support. Review metadata endpoint access, required hop limits, and the instance role permissions."
+guideline = "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html"
 
 [CKV2_AWS_5]
 level = "low"
@@ -208,16 +256,22 @@ category = "network"
 why = "rule descriptions are documentation"
 
 [CKV_GCP_25]
-level = "high"
+level = "medium"
 profile = "security"
 category = "network"
-why = "a public GKE cluster puts nodes and the control plane on the internet"
+why = "This predicate only checks for private_cluster_config. It does not inspect enable_private_nodes, control-plane endpoint settings or effective public reachability."
+remediation = "Inspect effective node and control-plane networking. Configure private nodes and the required private or DNS control-plane access for the deployment, with Cloud NAT or other necessary egress and tested administrator connectivity. Do not add an empty private_cluster_config block merely to satisfy this presence-only check."
+guideline = "https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation"
+description = "GKE private-cluster configuration block is absent"
 
 [CKV_GCP_64]
 level = "medium"
 profile = "security"
 category = "network"
-why = "nodes with public IPs"
+why = "Despite the private-nodes title, the pinned predicate only checks for private_cluster_config. A present block can pass with enable_private_nodes = false; absence does not prove node exposure."
+remediation = "Verify enable_private_nodes and effective node external IPs, including inherited configuration. When private nodes are needed, configure them explicitly and plan required egress, node migration and administrative access. A configuration block by itself is not evidence of private nodes."
+guideline = "https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation"
+description = "GKE private-node configuration is not established by the block-presence check"
 
 [CKV_K8S_21]
 level = "low"
@@ -228,7 +282,10 @@ why = "the default namespace is an organisation choice"
 level = "medium"
 profile = "security"
 category = "network"
-why = "an instance with a public IP is reachable from the internet subject to firewall rules"
+why = "The check detects IPv4 access_config on the first network interface. An external IP creates an exposure path only with permissive firewall rules and a listening service; this is not a complete inventory of interfaces or IPv6 exposure."
+remediation = "Remove external access_config where direct public connectivity is unnecessary, after arranging Cloud NAT, load balancing, IAP or other required access paths. Review every interface, external IPv6 configuration and ingress firewall policy. Validate operational connectivity before applying changes."
+guideline = "https://docs.cloud.google.com/compute/docs/ip-addresses/configure-static-external-ip-address"
+description = "Compute instance has an external IPv4 access configuration"
 
 [CKV2_AZURE_32]
 level = "medium"
@@ -267,13 +324,17 @@ why = "a customer key without rotation stays in use indefinitely"
 level = "critical"
 profile = "security"
 category = "iam"
-why = "AdministratorAccess attached to a role, user or group"
+why = "An administrative policy grant has account-wide potential impact. Effective access still depends on attachment, trust, conditions, explicit denies, boundaries, and organization policies."
+remediation = "Replace administrative grants or AdministratorAccess attachments with a workload-specific policy. Limit actions and supported resource ARNs, validate with IAM Access Analyzer, and test required operations. Keep any intentional break-glass access separately controlled."
+guideline = "https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html"
 
 [CKV_AWS_26]
 level = "medium"
 profile = "security"
 category = "encryption"
-why = "SNS messages unencrypted at rest"
+why = "A topic without configured server-side encryption lacks at-rest protection for message bodies. This is separate from transport encryption and does not establish public topic access."
+remediation = "Configure kms_master_key_id on the SNS topic. Verify the chosen key policy permits required publishers and AWS service integrations, and test publishing and delivery. Enforce transport encryption separately."
+guideline = "https://docs.aws.amazon.com/sns/latest/dg/sns-server-side-encryption.html"
 
 [CKV_AZURE_112]
 level = "low"
@@ -295,40 +356,53 @@ why = "a hop limit above 1 lets containers on the instance reach its metadata cr
 # -- well-known critical checks ------------------------------------------
 
 [CKV_AWS_20]
-level = "critical"
+level = "high"
 profile = "security"
 category = "storage"
-why = "an S3 ACL granting public read"
+why = "A public-read ACL grants broad read permissions if ACLs are enabled and effective public-access controls allow it. Data sensitivity and actual access are not established by this check."
+remediation = "Remove public-read and public-read-write ACLs. Prefer bucket-owner-enforced ownership and Block Public Access for private buckets; verify existing policies, account controls, and intentional public-content requirements."
+guideline = "https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html"
 
 [CKV_AWS_57]
-level = "critical"
+level = "high"
 profile = "security"
 category = "storage"
-why = "an S3 ACL granting public write"
+why = "A public-write ACL can allow untrusted uploads or modifications when effective. ACL ownership settings and public-access controls may block the grant; the finding does not prove successful writes."
+remediation = "Remove public-read-write ACLs and grant upload rights only to intended identities. Review bucket ownership and Block Public Access, then verify anonymous writes are denied without disrupting authorized uploads."
+guideline = "https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html"
 
 [CKV_AWS_24]
 level = "high"
 profile = "security"
 category = "network"
-why = "SSH open to 0.0.0.0/0"
+why = "Internet-wide ingress to 22 broadens the attack surface of attached resources. A security-group rule alone does not establish a public IP, route, or exploitable service."
+remediation = "Remove internet-wide IPv4 and IPv6 ingress for 22; allow only required ports from trusted CIDRs or security groups. Review attached resources and test a private administrative access path before applying."
+guideline = "https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html"
 
 [CKV_AWS_25]
 level = "high"
 profile = "security"
 category = "network"
-why = "RDP open to 0.0.0.0/0"
+why = "Internet-wide ingress to 3389 broadens the attack surface of attached resources. A security-group rule alone does not establish a public IP, route, or exploitable service."
+remediation = "Remove internet-wide IPv4 and IPv6 ingress for 3389; allow only required ports from trusted CIDRs or security groups. Review attached resources and test a private administrative access path before applying."
+guideline = "https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html"
 
 [CKV_AWS_277]
-level = "critical"
+level = "high"
 profile = "security"
 category = "network"
-why = "every port open to 0.0.0.0/0"
+why = "Internet-wide ingress to all ports and protocols broadens the attack surface of attached resources. A security-group rule alone does not establish a public IP, route, or exploitable service."
+remediation = "Remove internet-wide IPv4 and IPv6 ingress for all ports and protocols; allow only required ports from trusted CIDRs or security groups. Review attached resources and test a private administrative access path before applying."
+guideline = "https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html"
 
 [CKV_AWS_17]
-level = "critical"
+level = "high"
 profile = "security"
 category = "network"
-why = "an RDS instance publicly accessible"
+why = "A public database endpoint increases exposure, but security groups and routing still govern reachability and database authentication still applies. This is not proof of public data access."
+remediation = "Set publicly_accessible = false and provide private application connectivity. Restrict database security-group ingress to required clients. Plan the connectivity change and verify applications can reconnect before rollout."
+guideline = "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/infrastructure-security.html"
+description = "RDS instance enables a public endpoint"
 
 [CKV_AWS_45]
 level = "high"
@@ -344,37 +418,49 @@ why = "a hard-coded secret in EC2 user data"
 level = "critical"
 profile = "security"
 category = "iam"
-why = "an IAM policy granting \"*\" on \"*\""
+why = "An administrative policy grant has account-wide potential impact. Effective access still depends on attachment, trust, conditions, explicit denies, boundaries, and organization policies."
+remediation = "Replace administrative grants or AdministratorAccess attachments with a workload-specific policy. Limit actions and supported resource ARNs, validate with IAM Access Analyzer, and test required operations. Keep any intentional break-glass access separately controlled."
+guideline = "https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html"
 
 [CKV_AWS_63]
 level = "high"
 profile = "security"
 category = "iam"
-why = "an IAM policy allowing every action"
+why = "Wildcard actions allow a broad set of operations on the permitted resources. This check does not establish account-wide administration or evaluate every effective-permission restriction."
+remediation = "Replace unrestricted Action wildcards with required actions and scope Resource to supported ARNs. Separate actions requiring Resource = * and apply supported conditions. Validate the policy and test the workload."
+guideline = "https://docs.aws.amazon.com/config/latest/developerguide/iam-policy-no-statements-with-full-access.html"
 
 [CKV_AWS_286]
 level = "high"
 profile = "security"
 category = "iam"
-why = "an IAM policy allowing privilege escalation"
+why = "The policy contains actions or combinations associated with privilege escalation. Exploitability depends on accessible roles, services, conditions, and other effective-permission controls."
+remediation = "Remove unnecessary escalation-related actions. Restrict iam:PassRole to required role ARNs and services, and review permissions to create workloads or change policies. Validate the complete principal permissions and test the intended workflow."
+guideline = "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_passrole.html"
 
 [CKV_AWS_287]
 level = "high"
 profile = "security"
 category = "iam"
-why = "an IAM policy allowing credentials exposure"
+why = "The policy permits actions that can expose credentials. Resource scope, conditions, and effective permissions determine which credentials can actually be obtained."
+remediation = "Remove credential-reading or credential-creation actions the workload does not need. Scope remaining permissions to required resources and trusted principals. Review affected credential access and rotate credentials if unauthorized disclosure is confirmed."
+guideline = "https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html"
 
 [CKV_AWS_288]
 level = "high"
 profile = "security"
 category = "iam"
-why = "an IAM policy allowing data exfiltration"
+why = "The policy includes actions that can read or export data. This is a permission-risk finding, not proof that data was exfiltrated; resources, conditions, and other controls determine impact."
+remediation = "Restrict data-read and export actions to required resources and destinations. Review relevant service, network, and organization conditions, then validate the policy and test legitimate data access."
+guideline = "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html"
 
 [CKV_AWS_70]
-level = "critical"
+level = "high"
 profile = "security"
-category = "iam"
-why = "an S3 bucket policy allowing any principal"
+category = "storage"
+why = "A broad principal in a bucket policy can grant public access. Allowed actions, conditions, and effective public-access controls determine what is accessible; a wildcard is not automatically full bucket compromise."
+remediation = "Limit Allow principals, actions, and resources to the required access. Validate service and organization conditions and review IAM Access Analyzer results. Do not remove wildcard principals from Deny statements that enforce protections."
+guideline = "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html"
 
 [CKV_GCP_2]
 level = "high"
@@ -389,16 +475,20 @@ category = "network"
 why = "RDP open to the internet"
 
 [CKV_GCP_28]
-level = "critical"
-profile = "security"
-category = "storage"
-why = "a Cloud Storage bucket readable by allUsers or allAuthenticatedUsers"
-
-[CKV_GCP_60]
 level = "high"
 profile = "security"
+category = "storage"
+why = "Public principals grant broad access to a storage bucket when effective. Public access prevention can override these grants; the check does not establish data sensitivity or successful anonymous access."
+remediation = "Remove unintended allUsers and allAuthenticatedUsers grants. Enforce public_access_prevention where public access is not required, and test intended clients. Uniform bucket-level access alone does not block public IAM grants."
+guideline = "https://docs.cloud.google.com/storage/docs/public-access-prevention"
+
+[CKV_GCP_60]
+level = "medium"
+profile = "security"
 category = "network"
-why = "a Cloud SQL instance with a public IP"
+why = "A Cloud SQL public IP exposes a network endpoint, not unauthenticated database contents. Authorized networks, connectors, and database authentication still govern connections."
+remediation = "Use private connectivity and disable the public IP when feasible. For required public connectivity, restrict authorized networks or use a supported connector, enforce encrypted connections, and verify clients before removing the endpoint."
+guideline = "https://docs.cloud.google.com/sql/docs/mysql/configure-ip"
 
 [CKV_GCP_7]
 level = "high"
@@ -419,10 +509,13 @@ category = "network"
 why = "SSH open to the internet"
 
 [CKV_AZURE_190]
-level = "critical"
+level = "medium"
 profile = "security"
 category = "storage"
-why = "storage blobs allowing public access"
+why = "Allowing public containers is a guardrail setting, not an existing anonymous grant. Containers must separately enable public access; private containers remain private."
+remediation = "Set allow_nested_items_to_be_public = false after reviewing intentional public content. Audit container access levels and require authenticated access for private data. Review static website access separately because it uses a different endpoint."
+guideline = "https://learn.microsoft.com/en-us/azure/storage/blobs/anonymous-read-access-prevent"
+description = "Azure Storage permits containers to enable anonymous blob access"
 
 # -- the rest of a default corpus scan, by service ---------------------
 
@@ -430,19 +523,26 @@ why = "storage blobs allowing public access"
 level = "medium"
 profile = "security"
 category = "network"
-why = "an instance with a public IP is reachable from the internet subject to its security groups"
+why = "A public IP creates a possible internet path; security groups and routes determine whether inbound connections are allowed. The address alone is not a public service or data leak."
+remediation = "Remove associate_public_ip_address where direct public access is unnecessary. Provide required egress and administrative access privately, and review security groups and routes for intentionally public instances."
+guideline = "https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html"
 
 [CKV_AWS_61]
-level = "high"
+level = "medium"
 profile = "security"
 category = "iam"
-why = "a trust policy that lets any principal assume the role"
+why = "This check detects an AWS account ID or root ARN in a trust policy, not an anonymous principal. Account trust delegates authorization within that account; conditions and identity policies may restrict assumption."
+remediation = "Prefer intended role ARNs or constrain account trust with appropriate aws:PrincipalArn and other trust conditions. For third-party access, review ExternalId requirements. Test intended role assumption before changing trust."
+guideline = "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html"
+description = "IAM role trust delegates to an AWS account principal"
 
 [CKV_AWS_289]
 level = "high"
 profile = "security"
 category = "iam"
-why = "an IAM policy allowing permissions management or resource exposure"
+why = "Unconstrained permission-management actions can change who can access resources. Conditions and other effective-permission controls may limit that ability."
+remediation = "Remove unnecessary policy and permission-management actions. Restrict the remaining actions to intended resources and administrative roles, and validate applicable boundaries and organization controls."
+guideline = "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html"
 
 [CKV_AWS_258]
 level = "high"
@@ -638,10 +738,12 @@ profile = "audit"
 why = "EKS control plane logs"
 
 [CKV_AWS_16]
-level = "high"
+level = "medium"
 profile = "security"
 category = "encryption"
-why = "RDS storage unencrypted at rest"
+why = "Unencrypted database storage lacks protection for storage and snapshot copies. This does not establish public reachability or unauthorized database access."
+remediation = "Set storage_encrypted = true for new databases. For an existing unencrypted DB instance, copy a snapshot with encryption enabled, restore a new instance, and plan a tested cutover. Review engine-specific migration, Terraform replacement, and KMS permissions before applying."
+guideline = "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.Encryption.html"
 
 [CKV2_AWS_69]
 level = "medium"
@@ -762,7 +864,10 @@ why = "bucket ACLs left enabled can grant access outside the bucket policy"
 level = "low"
 profile = "hygiene"
 category = "encryption"
-why = "S3 encrypts objects by default; a KMS key adds key control"
+why = "S3 already encrypts new uploads with SSE-S3. Requiring KMS adds key-policy and audit control; missing KMS is not equivalent to unencrypted storage."
+remediation = "If KMS key control is required, configure the bucket encryption algorithm and key and grant clients the required KMS permissions. Test integrations and review request cost. Existing objects are not rewritten by changing the bucket default."
+guideline = "https://docs.aws.amazon.com/AmazonS3/latest/userguide/default-bucket-encryption.html"
+description = "S3 bucket does not explicitly use the policy-required KMS encryption"
 
 [CKV_AWS_18]
 level = "low"
@@ -942,13 +1047,18 @@ why = "a GKE control plane reachable from the internet"
 level = "high"
 profile = "security"
 category = "iam"
-why = "Service Account User or Token Creator at project level can act as every service account"
+why = "Project-wide Service Account User or Token Creator grants can extend access across service accounts. Token Creator can mint credentials; Service Account User requires another path such as deploying a workload. IAM conditions and target-account privileges affect actual impact."
+remediation = "Move these grants to the individual service accounts that callers need, using google_service_account_iam_member or an equivalent carefully managed policy. Review principals, conditions and workload deployment permissions. Validate deployment and impersonation flows before removing project grants; avoid overwriting unrelated authoritative IAM bindings."
+guideline = "https://docs.cloud.google.com/iam/docs/attach-service-accounts"
 
 [CKV_GCP_49]
-level = "high"
+level = "medium"
 profile = "security"
 category = "iam"
-why = "project-level roles that impersonate or manage service accounts"
+why = "This role-name list flags project grants associated with service-account management or impersonation, including service-agent roles. It does not inspect the principal, conditions or an exploitable permission chain; legitimate service-agent bindings can match."
+remediation = "Review the role and recipient before editing. Keep required service-agent roles on their designated Google-managed agents, never on unrelated principals. For user or workload access, replace broad grants with least-privilege roles and service-account-level bindings where supported. Test dependent services before removing permissions."
+guideline = "https://docs.cloud.google.com/iam/docs/roles-permissions/iam"
+description = "Project IAM role warrants review for service-account management or impersonation"
 
 [CKV_GCP_42]
 level = "high"
@@ -1200,3 +1310,67 @@ why = "liveness probes are reliability"
 level = "low"
 profile = "hygiene"
 why = "readiness probes are reliability"
+
+[CKV_AWS_53]
+level = "medium"
+profile = "security"
+category = "storage"
+why = "A bucket-level public-access guardrail is disabled or not explicit. This does not prove public access; new-bucket defaults and account or organization controls may already prevent it."
+remediation = "Set block_public_acls = true in the bucket public-access block and review all four protection flags. Confirm effective account controls and any intentional public-content workflow before applying."
+guideline = "https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html"
+
+
+[CKV_AWS_54]
+level = "medium"
+profile = "security"
+category = "storage"
+why = "A bucket-level public-access guardrail is disabled or not explicit. This does not prove public access; new-bucket defaults and account or organization controls may already prevent it."
+remediation = "Set block_public_policy = true in the bucket public-access block and review all four protection flags. Confirm effective account controls and any intentional public-content workflow before applying."
+guideline = "https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html"
+
+
+[CKV_AWS_55]
+level = "medium"
+profile = "security"
+category = "storage"
+why = "A bucket-level public-access guardrail is disabled or not explicit. This does not prove public access; new-bucket defaults and account or organization controls may already prevent it."
+remediation = "Set ignore_public_acls = true in the bucket public-access block and review all four protection flags. Confirm effective account controls and any intentional public-content workflow before applying."
+guideline = "https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html"
+
+
+[CKV_AWS_56]
+level = "medium"
+profile = "security"
+category = "storage"
+why = "A bucket-level public-access guardrail is disabled or not explicit. This does not prove public access; new-bucket defaults and account or organization controls may already prevent it."
+remediation = "Set restrict_public_buckets = true in the bucket public-access block and review all four protection flags. Confirm effective account controls and any intentional public-content workflow before applying."
+guideline = "https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html"
+
+
+[CKV_AWS_19]
+level = "low"
+profile = "hygiene"
+category = "encryption"
+why = "S3 automatically encrypts new object uploads with SSE-S3. A missing or nonmatching explicit encryption declaration does not prove new objects are unencrypted; older objects need separate inventory."
+remediation = "Use an explicit bucket encryption configuration when your policy requires a chosen algorithm or key. Review legacy objects separately and migrate unencrypted ones using encrypted copies. A customer-managed KMS key is an additional key-control requirement."
+guideline = "https://docs.aws.amazon.com/AmazonS3/latest/userguide/default-encryption-faq.html"
+description = "S3 explicit encryption configuration does not match the supported policy choices"
+
+
+[CKV_GCP_29]
+level = "medium"
+profile = "security"
+category = "storage"
+why = "Separate ACL and IAM authorization increases access-control complexity. Disabled uniform access does not itself make a bucket public."
+remediation = "Audit object ACLs, migrate required access to IAM, then set uniform_bucket_level_access = true. It becomes irreversible after 90 consecutive days. Review public IAM bindings and public access prevention separately."
+guideline = "https://docs.cloud.google.com/storage/docs/uniform-bucket-level-access"
+
+
+[CKV_AZURE_59]
+level = "medium"
+profile = "security"
+category = "network"
+why = "A public storage endpoint can accept network connections; it does not imply anonymous blob access. Firewall rules, identity permissions, and container access still matter."
+remediation = "Disable public_network_access_enabled when private connectivity is required, and configure private endpoints and DNS first. Otherwise restrict public network rules to required sources and review anonymous blob access separately."
+guideline = "https://learn.microsoft.com/en-us/azure/storage/common/storage-network-security"
+description = "Azure Storage public network endpoint is enabled or not explicitly disabled"

@@ -730,6 +730,11 @@ fn fix_prints_writes_and_refuses() {
         (v["verified"].clone(), v["written"].clone()),
         (true.into(), true.into())
     );
+    assert_eq!(v["target_resolved"], true);
+    assert_eq!(v["no_new_findings"], true);
+    assert_eq!(v["finding_delta"]["before"], 1);
+    assert_eq!(v["finding_delta"]["after"], 0);
+    assert_eq!(v["finding_delta"]["removed"][0]["fingerprint"], fp);
     assert!(
         std::fs::read_to_string(&main)
             .unwrap()
@@ -769,6 +774,68 @@ fn fix_prints_writes_and_refuses() {
         String::from_utf8_lossy(&out.stderr).contains("has no fix hint"),
         "{out:?}"
     );
+}
+
+#[test]
+fn fix_reports_regressions_and_refuses_to_write_them() {
+    let dir = std::env::temp_dir().join(format!("oxtf-cli-fix-delta-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let main = dir.join("main.tf");
+    let original = r#"
+variable "encrypted" { default = false }
+resource "aws_db_instance" "target" { storage_encrypted = var.encrypted }
+resource "aws_db_instance" "other" { storage_encrypted = !var.encrypted }
+"#;
+    std::fs::write(&main, original).unwrap();
+    let oxtf = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_oxtf"))
+            .args(args)
+            .arg(&dir)
+            .args(["--rule", "aws-rds-unencrypted"])
+            .output()
+            .unwrap()
+    };
+    let scan = oxtf(&["scan", "-f", "json"]);
+    let before: serde_json::Value = serde_json::from_slice(&scan.stdout).unwrap();
+    let fp = before["findings"][0]["fingerprint"].as_str().unwrap();
+    let result = oxtf(&["fix", fp, "--at", "default", "--write", "-f", "json"]);
+    assert_eq!(result.status.code(), Some(1), "{result:?}");
+    let fixed: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(fixed["target_resolved"], true);
+    assert_eq!(fixed["no_new_findings"], false);
+    assert_eq!(fixed["verified"], false);
+    assert_eq!(fixed["written"], false);
+    assert_eq!(fixed["verification_errors"], serde_json::json!([]));
+    assert_eq!(fixed["finding_delta"]["before"], 1);
+    assert_eq!(fixed["finding_delta"]["after"], 1);
+    assert_eq!(fixed["finding_delta"]["removed"][0]["fingerprint"], fp);
+    assert_eq!(
+        fixed["finding_delta"]["added"][0]["occurrences"][0]["address"],
+        "aws_db_instance.other"
+    );
+    assert_eq!(std::fs::read_to_string(&main).unwrap(), original);
+
+    let result = oxtf(&["fix", fp, "--at", "default", "--write"]);
+    assert_eq!(result.status.code(), Some(1));
+    let text = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        text.contains("target resolved; new findings introduced"),
+        "{text}"
+    );
+    assert!(
+        text.contains("1 before, 1 after; 1 added, 1 removed"),
+        "{text}"
+    );
+    assert!(text.contains("aws_db_instance.other"), "{text}");
+    assert_eq!(std::fs::read_to_string(&main).unwrap(), original);
+
+    let result = oxtf(&["fix", fp, "--write", "-f", "json"]);
+    assert_eq!(result.status.code(), Some(0), "{result:?}");
+    let fixed: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(fixed["site"], "attribute");
+    assert_eq!(fixed["verified"], true);
+    assert_eq!(fixed["written"], true);
+    std::fs::remove_dir_all(dir).unwrap();
 }
 
 /// A default scan runs the security profile of the shipped rules; hygiene

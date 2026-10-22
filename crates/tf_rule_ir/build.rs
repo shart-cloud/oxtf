@@ -7,7 +7,8 @@
 //! `tests/bundled.rs` checks every entry against the compiled rule.
 //!
 //! `data/checkov/curation.toml` (hand-maintained) overrides a rule's level
-//! and category and gives it a profile; a rule it does not list is
+//! and category and supplies rationale, optional remediation and a profile;
+//! a rule it does not list is
 //! `unreviewed`. A rule without a guideline gets its Checkov source at the
 //! pinned version.
 
@@ -19,8 +20,15 @@ const LEVELS: &[&str] = &["low", "medium", "high", "critical"];
 const CATEGORIES: &[&str] = &["network", "storage", "iam", "encryption", "other"];
 const PROFILES: &[&str] = &["security", "audit", "hygiene"];
 
-/// One curated rule: (level, category override, profile).
-type Curated = (String, Option<String>, String);
+struct Curated {
+    level: String,
+    category: Option<String>,
+    profile: String,
+    rationale: String,
+    remediation: Option<String>,
+    guideline: Option<String>,
+    description: Option<String>,
+}
 
 fn curation(path: &str) -> std::collections::HashMap<String, Curated> {
     let text = std::fs::read_to_string(path).expect("read the curation");
@@ -46,22 +54,48 @@ fn curation(path: &str) -> std::collections::HashMap<String, Curated> {
                 }
             };
             for key in entry.keys() {
-                if !["level", "category", "profile", "why"].contains(&key.as_str()) {
+                if ![
+                    "level",
+                    "category",
+                    "profile",
+                    "why",
+                    "remediation",
+                    "guideline",
+                    "description",
+                ]
+                .contains(&key.as_str())
+                {
                     panic!("{path}: [{id}] has unknown field {key}");
                 }
             }
-            if entry
-                .get("why")
-                .and_then(|w| w.as_str())
-                .is_none_or(str::is_empty)
-            {
-                panic!("{path}: [{id}] needs a why");
+            let text = |name: &str| {
+                entry.get(name).map(|v| {
+                    v.as_str()
+                        .filter(|s| !s.trim().is_empty())
+                        .unwrap_or_else(|| panic!("{path}: [{id}] {name} needs nonempty text"))
+                        .to_string()
+                })
+            };
+            let guideline = text("guideline");
+            let remediation = text("remediation");
+            if guideline.is_some() != remediation.is_some() {
+                panic!("{path}: [{id}] remediation and guideline must be supplied together");
             }
-            let curated = (
-                field("level", LEVELS, true).expect("required"),
-                field("category", CATEGORIES, false),
-                field("profile", PROFILES, true).expect("required"),
-            );
+            if guideline
+                .as_ref()
+                .is_some_and(|g| !g.starts_with("https://"))
+            {
+                panic!("{path}: [{id}] guideline must be an HTTPS documentation URL");
+            }
+            let curated = Curated {
+                level: field("level", LEVELS, true).expect("required"),
+                category: field("category", CATEGORIES, false),
+                profile: field("profile", PROFILES, true).expect("required"),
+                rationale: text("why").unwrap_or_else(|| panic!("{path}: [{id}] needs a why")),
+                remediation,
+                guideline,
+                description: text("description"),
+            };
             (id, curated)
         })
         .collect()
@@ -104,39 +138,61 @@ fn main() {
         let or = |v: &Value, default: &str| v.as_str().unwrap_or(default).to_string();
         let name = str_of(&rule["name"], "name");
         let file = str_of(&entry["file"], "file");
-        let (level, category, profile) = match curation.remove(&name) {
-            Some((level, category, profile)) => (
-                level,
-                category.unwrap_or_else(|| or(&rule["category"], "network")),
-                profile,
-            ),
-            None => (
-                or(&rule["level"], "medium"),
-                or(&rule["category"], "network"),
-                "unreviewed".to_string(),
-            ),
-        };
-        let guideline = rule["guideline"]
-            .as_str()
-            .map(str::to_string)
+        let curated = curation.remove(&name);
+        let level = curated
+            .as_ref()
+            .map(|c| c.level.clone())
+            .unwrap_or_else(|| or(&rule["level"], "medium"));
+        let category = curated
+            .as_ref()
+            .and_then(|c| c.category.clone())
+            .unwrap_or_else(|| or(&rule["category"], "network"));
+        let profile = curated
+            .as_ref()
+            .map(|c| c.profile.as_str())
+            .unwrap_or("unreviewed");
+        let rationale = curated.as_ref().map(|c| c.rationale.as_str());
+        let remediation = curated.as_ref().and_then(|c| c.remediation.as_deref());
+        let description = curated
+            .as_ref()
+            .and_then(|c| c.description.as_deref())
+            .unwrap_or_else(|| rule["description"].as_str().unwrap_or(""));
+        let guideline = curated
+            .as_ref()
+            .and_then(|c| c.guideline.clone())
+            .or_else(|| rule["guideline"].as_str().map(str::to_string))
             .unwrap_or_else(|| {
                 format!("https://github.com/bridgecrewio/checkov/blob/{version}/{file}")
             });
+        // Keep lazy metadata, compiled metadata, and finding wording in sync.
+        // The generated catalog on disk and its predicates remain unchanged.
+        let mut compiled_rule = rule.clone();
+        compiled_rule["level"] = Value::from(level.clone());
+        compiled_rule["category"] = Value::from(category.clone());
+        compiled_rule["guideline"] = Value::from(guideline.clone());
+        compiled_rule["rationale"] = rationale.into();
+        compiled_rule["remediation"] = remediation.into();
+        compiled_rule["description"] = Value::from(description);
+        if curated.as_ref().is_some_and(|c| c.description.is_some()) {
+            compiled_rule["message"] = Value::from(description);
+        }
         writeln!(
             out,
             "Header {{ name: {:?}, description: {:?}, level: {:?}, category: {:?}, profile: {:?}, \
-             guideline: Some({:?}), file: {:?}, line: {:?}, types: &{:?}, needs_graph: {}, json: {:?} }},",
+             guideline: Some({:?}), rationale: {:?}, remediation: {:?}, file: {:?}, line: {:?}, types: &{:?}, needs_graph: {}, json: {:?} }},",
             name,
-            or(&rule["description"], ""),
+            description,
             level,
             category,
             profile,
             guideline,
+            rationale,
+            remediation,
             file,
             entry["line"].as_u64().map(|l| l as u32),
             types,
             needs_graph,
-            serde_json::to_string(rule).unwrap(),
+            serde_json::to_string(&compiled_rule).unwrap(),
         )
         .unwrap();
     }

@@ -43,7 +43,7 @@ fn visit_collects_references() {
     let alloc = tf_allocator::Allocator::new();
     let ret = tf_parser::parse(&alloc, SRC);
     assert!(ret.errors.is_empty());
-    let file = alloc.alloc(ret.file);
+    let file = alloc.alloc(ret.file).unwrap();
     let mut refs = Refs::default();
     refs.visit_file(file);
     assert_eq!(
@@ -84,7 +84,7 @@ fn ast_kind_enter_leave_balanced_and_spans_nested() {
     }
     let alloc = tf_allocator::Allocator::new();
     let ret = tf_parser::parse(&alloc, SRC);
-    let file = alloc.alloc(ret.file);
+    let file = alloc.alloc(ret.file).unwrap();
     let mut c = Check {
         stack: vec![],
         count: 0,

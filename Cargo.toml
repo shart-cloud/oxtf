@@ -9,6 +9,7 @@ license = "MIT"
 publish = false
 
 [workspace.dependencies]
+tf_limits = { path = "crates/tf_limits" }
 tf_span = { path = "crates/tf_span" }
 tf_allocator = { path = "crates/tf_allocator" }
 tf_ast = { path = "crates/tf_ast" }

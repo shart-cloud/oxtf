@@ -147,6 +147,10 @@ pub trait RuleMeta {
     const CATEGORY: Category;
     const LEVEL: Level;
     const DESCRIPTION: &'static str;
+    /// Reviewed severity rationale and actionable remediation guidance.
+    const RATIONALE: Option<&'static str> = None;
+    const REMEDIATION: Option<&'static str> = None;
+    const GUIDELINE: Option<&'static str> = None;
     /// Resource types [`Rule::verdict`] is called for. The engine builds a
     /// type → rules table from these once.
     const RESOURCE_TYPES: &'static [&'static str] = &[];
@@ -479,6 +483,10 @@ pub struct RuleInfo {
     pub runs_on_module: bool,
     /// A page explaining the rule and its fix, when the rule names one.
     pub guideline: Option<Arc<str>>,
+    /// Severity rationale, including limits of what the check establishes.
+    pub rationale: Option<Arc<str>>,
+    /// Actionable guidance, including material migration constraints.
+    pub remediation: Option<Arc<str>>,
     pub source: RuleSource,
     /// Other IDs of this rule ([`RuleMeta::ALIASES`]).
     pub aliases: Vec<Arc<str>>,
@@ -539,6 +547,37 @@ pub type RuleFailure = String;
 /// the result, so a reader never mistakes it for "no finding".
 pub trait DynRule: Send + Sync {
     fn info(&self) -> RuleInfo;
+    /// The engine charges admission before each hook. Backends with counted
+    /// inner operations borrow this same root allowance instead of resetting it.
+    fn judge_resource_with_budget(
+        &self,
+        resource: &Resource,
+        _budget: &crate::RuleBudget,
+    ) -> Result<Vec<Judgement>, RuleFailure> {
+        self.judge_resource(resource)
+    }
+    fn judge_module_with_budget<'m>(
+        &self,
+        module: &'m Module,
+        _budget: &crate::RuleBudget,
+    ) -> Result<Vec<(&'m Resource, Judgement)>, RuleFailure> {
+        self.judge_module(module)
+    }
+    fn judge_graph_with_budget<'a>(
+        &self,
+        graph: &tf_semantic::graph::ResourceGraph<'a>,
+        _budget: &crate::RuleBudget,
+    ) -> Result<Vec<(&'a Resource, Judgement)>, RuleFailure> {
+        self.judge_graph(graph)
+    }
+    fn judge_files_with_budget<'a>(
+        &self,
+        analysis: &'a Analysis,
+        files: &[ConfigFile<'a>],
+        _budget: &crate::RuleBudget,
+    ) -> Result<Vec<(Subject<'a>, Judgement)>, RuleFailure> {
+        self.judge_files(analysis, files)
+    }
     /// Rules that need connections across module boundaries run once per root.
     fn needs_graph(&self) -> bool {
         false
@@ -581,7 +620,9 @@ impl<T: Rule> DynRule for T {
             description: T::DESCRIPTION.into(),
             resource_types: T::RESOURCE_TYPES.iter().map(|s| Arc::from(*s)).collect(),
             runs_on_module: T::RUNS_ON_MODULE,
-            guideline: None,
+            guideline: T::GUIDELINE.map(Arc::from),
+            rationale: T::RATIONALE.map(Arc::from),
+            remediation: T::REMEDIATION.map(Arc::from),
             source: RuleSource::default(),
             aliases: T::ALIASES.iter().map(|s| Arc::from(*s)).collect(),
             profile: Profile::Security,
@@ -642,6 +683,8 @@ pub struct Finding {
     pub description: Arc<str>,
     pub level: Level,
     pub guideline: Option<Arc<str>>,
+    pub rationale: Option<Arc<str>>,
+    pub remediation: Option<Arc<str>>,
     pub source: RuleSource,
     /// The rule's other IDs ([`RuleInfo::aliases`]).
     pub aliases: Vec<Arc<str>>,
@@ -777,6 +820,8 @@ impl Finding {
             description: info.description.clone(),
             level: info.level,
             guideline: info.guideline.clone(),
+            rationale: info.rationale.clone(),
+            remediation: info.remediation.clone(),
             source: info.source.clone(),
             aliases: info.aliases.clone(),
             profile: info.profile,
@@ -832,6 +877,8 @@ impl Finding {
             description: info.description.clone(),
             level: info.level,
             guideline: info.guideline.clone(),
+            rationale: info.rationale.clone(),
+            remediation: info.remediation.clone(),
             source: info.source.clone(),
             aliases: info.aliases.clone(),
             profile: info.profile,

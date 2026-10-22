@@ -306,6 +306,7 @@ def _run(
     rego_v0: bool = False,
     overlay: Mapping[PathLike, str] = {},
     threads: Optional[int] = None,
+    limits: Mapping[str, int] | None = None,
     profiles: Optional[Sequence[str]] = None,
 ) -> ScanResult:
     ir, callbacks = _split_rules(rules)
@@ -326,6 +327,7 @@ def _run(
         policy_entry=policy_entry,
         overlay=[(os.fspath(p), t) for p, t in overlay.items()],
         threads=threads,
+        limits=None if limits is None else dict(limits),
         rule_files=[os.fspath(p) for p in rule_files],
         data=[os.fspath(p) for p in data],
         namespaces=list(namespaces),
@@ -358,6 +360,7 @@ def scan(
     rego_v0: bool = False,
     overlay: Mapping[PathLike, str] = {},
     threads: Optional[int] = None,
+    limits: Mapping[str, int] | None = None,
     profiles: Optional[Sequence[str]] = None,
 ) -> ScanResult:
     """Scan Terraform root module directories.
@@ -392,7 +395,21 @@ def scan(
     shipped rules run: ``security`` (the default, with bundled rules not
     yet curated), ``audit``, ``hygiene``, or ``all``; rules passed in
     ``rules`` or ``rule_files`` always run, and ``select`` chooses from
-    every profile."""
+    every profile.
+
+    ``limits`` accepts positive integers for ``evaluation_steps`` and
+    ``loader_steps`` (each defaults to 1,000,000 per root), and ``rule_steps``
+    (10,000,000 per root). ``rego_time_ms`` defaults to 10,000 per root.
+    Scan input admission uses ``input_bytes`` (16 MiB), ``source_bytes``
+    (256 MiB), ``file_entries`` (16,384), ``directory_entries`` (262,144),
+    and ``roots`` (4,096). Arena construction uses ``arena_bytes`` (256 MiB)
+    and ``ast_nodes`` (4,000,000) per scan. Evaluator text construction uses
+    ``text_bytes`` (256 MiB) per scan. Builtin collection payload uses
+    ``collection_bytes`` (256 MiB) per scan. Children and template files share
+    the runtime allowance; cached override defaults
+    consume the loader allowance. Analysis exhaustion reports ``incomplete``;
+    rule exhaustion reports ``failed`` and stops later hooks for that root. See
+    ``docs/LIMITS.md`` for the measured units and current accounting scope."""
     return _run(
         paths=_paths(path),
         recursive=recursive,
@@ -413,6 +430,7 @@ def scan(
         rego_v0=rego_v0,
         overlay=overlay,
         threads=threads,
+        limits=None if limits is None else dict(limits),
         profiles=profiles,
     )
 
@@ -439,6 +457,7 @@ def fix(
     rego_v0: bool = False,
     overlay: Mapping[PathLike, str] = {},
     threads: Optional[int] = None,
+    limits: Mapping[str, int] | None = None,
     profiles: Optional[Sequence[str]] = None,
     at: Optional[str] = None,
 ) -> dict[str, Any]:
@@ -448,15 +467,25 @@ def fix(
     rescanned with the edit as an overlay, as ``oxtf fix`` does.
 
     A value written as ``var.x`` is fixed at the variable's default first
-    (keeping the module's interface), and at the attribute when that does
-    not verify; ``at="default"`` or ``at="attribute"`` picks one.
+    (keeping the module's interface), and at the attribute when that leaves
+    the target unresolved or introduces findings; ``at="default"`` or
+    ``at="attribute"`` picks one.
 
     Returns a dict: ``fingerprint``, ``rule``, ``file``, ``resource``,
     ``attribute``, ``action``, ``value``, ``site`` (where the literal
     went), ``original`` and ``text`` (the file before and after the edit),
     ``diff`` (unified, sensitive context masked), ``verification_errors``,
-    and ``verified`` (both scans complete and the rule no longer fails on
-    the declaration in the rescan). ``original`` and ``text`` contain raw
+    ``target_resolved`` (the rule no longer fails on the declaration),
+    ``no_new_findings`` (no added findings or affected instances anywhere in
+    the selected scan), and ``verified`` (both checks passed). Both checks
+    require complete scans; existing unrelated findings may remain.
+
+    ``finding_delta`` contains grouped finding counts ``before`` and ``after``,
+    ``added`` and ``removed`` finding records, ``changed`` records with before/
+    after evidence and added/removed occurrences, and an ``unchanged`` count.
+    It matches fingerprints and root/address occurrences, ignoring shifted
+    source positions. It is only an observed delta if either scan is incomplete.
+    ``original`` and ``text`` contain raw
     source, including secrets. Nothing is written: write
     ``text`` to ``file`` when ``verified`` is what you need. Raises
     ``ValueError`` when no finding has the fingerprint, the finding has no
@@ -479,6 +508,7 @@ def fix(
         policy_entry=policy_entry,
         overlay=[(os.fspath(p), t) for p, t in overlay.items()],
         threads=threads,
+        limits=None if limits is None else dict(limits),
         rule_files=[os.fspath(p) for p in rule_files],
         data=[os.fspath(p) for p in data],
         namespaces=list(namespaces),
@@ -510,6 +540,7 @@ def scan_plan(
     rego_v0: bool = False,
     overlay: Mapping[PathLike, str] = {},
     threads: Optional[int] = None,
+    limits: Mapping[str, int] | None = None,
     profiles: Optional[Sequence[str]] = None,
 ) -> ScanResult:
     """Scan ``terraform show -json`` output. Findings are mapped back to
@@ -536,6 +567,7 @@ def scan_plan(
         rego_v0=rego_v0,
         overlay=overlay,
         threads=threads,
+        limits=None if limits is None else dict(limits),
         profiles=profiles,
     )
 
@@ -547,9 +579,13 @@ def analyze(
     var_files: Sequence[PathLike] = (),
     data_dir: PathLike | None = None,
     threads: Optional[int] = None,
+    limits: Mapping[str, int] | None = None,
 ) -> ScanResult:
     """Build the evaluated model only (no rules); use ``.resources``."""
-    return scan(path, recursive=recursive, var_files=var_files, data_dir=data_dir, builtin=False, threads=threads)
+    return scan(
+        path, recursive=recursive, var_files=var_files, data_dir=data_dir,
+        builtin=False, threads=threads, limits=limits,
+    )
 
 
 def parse(source: str) -> Document:
@@ -574,9 +610,11 @@ def rules(
     ``builtin`` is false: the seed rules and, unless ``bundled`` is false,
     the bundled Checkov catalog) and every rule in ``rule_files`` (any format), each
     a dict with ``name``, ``level``, ``category``, ``description``,
-    ``resource_types``, ``runs_on_module``, ``guideline``, ``source``
+    ``resource_types``, ``runs_on_module``, ``guideline``, ``rationale``
+    (severity justification), ``remediation`` (actionable guidance), ``source``
     (``engine``, ``file``, ``line``) and ``aliases`` (other IDs that select
-    the rule; a seed rule lists the bundled rule it replaces). A rule file
+    the rule; a seed rule lists the bundled rule it replaces). Guidance fields
+    are ``None`` when not supplied. A rule file
     in a directory that does not load is skipped with a ``UserWarning``."""
     import warnings
 

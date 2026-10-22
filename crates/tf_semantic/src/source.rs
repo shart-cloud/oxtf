@@ -5,11 +5,13 @@ use std::io;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
+use tf_limits::input::InputBudget;
 use tf_span::{FileId, FileSpan, LineIndex, Span};
 
 /// A loaded source file.
 #[derive(Debug)]
 pub struct SourceFile {
+    input: Arc<InputBudget>,
     pub id: FileId,
     /// Lexically normalised path (no `.` / `..` components), as given
     /// (relative paths stay relative).
@@ -19,6 +21,22 @@ pub struct SourceFile {
 }
 
 impl SourceFile {
+    pub(crate) fn input_budget(&self) -> &InputBudget {
+        &self.input
+    }
+
+    pub fn allocator(&self) -> tf_allocator::Allocator {
+        tf_allocator::Allocator::with_budget(self.input.clone())
+    }
+
+    /// Reserve another retained copy before moving source text into a parser arena.
+    pub(crate) fn reserve_text_copy(&self) -> io::Result<()> {
+        self.input.admit(self.text.len() as u64)
+    }
+
+    pub(crate) fn input_identity(&self) -> u64 {
+        self.input.identity()
+    }
     /// 1-based line of a byte offset.
     pub fn line(&self, offset: u32) -> u32 {
         self.lines.line_col(offset).0
@@ -41,6 +59,7 @@ impl SourceFile {
 /// a proposed patch is the same code as an analysis of a checkout.
 #[derive(Default, Debug)]
 pub struct FileTable {
+    input: Arc<InputBudget>,
     inner: RwLock<Inner>,
     /// Normalised overlay paths, sorted.
     overlay: Vec<PathBuf>,
@@ -55,6 +74,7 @@ pub struct FileTable {
     sensitive: RwLock<HashMap<FileId, Vec<Span>>>,
     protected: RwLock<HashSet<PathBuf>>,
     canonical: RwLock<HashMap<PathBuf, PathBuf>>,
+    bytes: RwLock<HashMap<PathBuf, Arc<[u8]>>>,
 }
 
 #[derive(Default, Debug)]
@@ -64,8 +84,36 @@ struct Inner {
 }
 
 impl FileTable {
+    pub fn allocator(&self) -> tf_allocator::Allocator {
+        tf_allocator::Allocator::with_budget(self.input.clone())
+    }
+
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn shared_input_budget(&self) -> Arc<InputBudget> {
+        self.input.clone()
+    }
+
+    pub fn input_budget(&self) -> &InputBudget {
+        &self.input
+    }
+
+    pub fn with_limits(limits: tf_limits::Limits) -> Self {
+        Self {
+            input: Arc::new(InputBudget::new(limits)),
+            ..Self::default()
+        }
+    }
+
+    pub fn limit_diagnostic(&self) -> Option<crate::Diagnostic> {
+        Some(crate::Diagnostic {
+            severity: crate::DiagSeverity::Warning,
+            code: "coverage-storage",
+            message: self.input.exhaustion()?.to_string(),
+            at: None,
+        })
     }
 
     /// Installed package files may be scanned but must not be auto-edited.
@@ -143,16 +191,28 @@ impl FileTable {
     /// after normalisation, so give them in the same form (relative or
     /// absolute) as the directories that will be analysed.
     pub fn with_overlay(files: impl IntoIterator<Item = (PathBuf, Arc<str>)>) -> Self {
-        let table = FileTable::default();
-        let mut overlay = Vec::new();
+        Self::with_overlay_and_limits(files, tf_limits::Limits::default())
+    }
+
+    /// Refused input remains visible in `input_budget().exhaustion()`; never scan a
+    /// partial overlay as complete. Scan and analysis entry points retain that evidence.
+    pub fn with_overlay_and_limits(
+        files: impl IntoIterator<Item = (PathBuf, Arc<str>)>,
+        limits: tf_limits::Limits,
+    ) -> Self {
+        let table = FileTable::with_limits(limits);
+        let mut overlay = std::collections::BTreeSet::new();
         for (path, text) in files {
             let path = normalize(&path);
-            table.insert(path.clone(), text);
-            overlay.push(path);
+            if table.insert(path.clone(), text).is_err() {
+                break;
+            }
+            overlay.insert(path);
         }
-        overlay.sort();
-        overlay.dedup();
-        FileTable { overlay, ..table }
+        FileTable {
+            overlay: overlay.into_iter().collect(),
+            ..table
+        }
     }
 
     /// Whether `path` names a file: in the overlay, else on disk. Answered
@@ -179,19 +239,30 @@ impl FileTable {
     /// united, sorted by path.
     pub fn read_dir(&self, dir: &Path) -> Arc<Vec<PathBuf>> {
         let dir = normalize(dir);
-        if let Some(v) = self.listings.read().unwrap().get(&dir) {
+        let mut listings = self.listings.write().unwrap();
+        if let Some(v) = listings.get(&dir) {
             return v.clone();
         }
         let mut v = Vec::new();
         let record_error = |e: io::Error| {
+            if tf_limits::input::exhaustion(&e).is_some() {
+                return;
+            }
             self.listing_errors
                 .write()
                 .unwrap()
                 .insert(dir.clone(), e.to_string());
         };
-        match std::fs::read_dir(&dir) {
+        let read = self
+            .input
+            .directory_entry()
+            .and_then(|()| std::fs::read_dir(&dir));
+        match read {
             Ok(rd) => {
                 for entry in rd {
+                    if self.input.directory_entry().is_err() {
+                        break;
+                    }
                     match entry.and_then(|e| Ok((e.file_type()?, e.path()))) {
                         Ok((t, p)) if t.is_file() || (t.is_symlink() && p.is_file()) => {
                             v.push(normalize(&p))
@@ -204,16 +275,22 @@ impl FileTable {
             Err(e) if e.kind() == io::ErrorKind::NotFound && self.has_overlay_under(&dir) => {}
             Err(e) => record_error(e),
         }
-        v.extend(
-            self.overlay
-                .iter()
-                .filter(|p| p.parent().is_some_and(|parent| normalize(parent) == dir))
-                .cloned(),
-        );
+        for path in self
+            .overlay
+            .iter()
+            .filter(|p| p.parent().is_some_and(|parent| normalize(parent) == dir))
+        {
+            if self.input.directory_entry().is_err() {
+                break;
+            }
+            v.push(path.clone());
+        }
         v.sort();
         v.dedup();
         let v = Arc::new(v);
-        self.listings.write().unwrap().insert(dir, v.clone());
+        if self.input.exhaustion().is_none() {
+            listings.insert(dir, v.clone());
+        }
         v
     }
 
@@ -249,27 +326,55 @@ impl FileTable {
         if let Some(f) = self.get_by_path(&path) {
             return Ok(f);
         }
-        let bytes = std::fs::read(&path)?;
+        let bytes = self.read_bytes(&path)?;
+        let mut inner = self.inner.write().unwrap();
+        if let Some(&id) = inner.by_path.get(&path) {
+            return Ok(inner.files[id.0 as usize].clone());
+        }
+        self.input.admit(decoded_len(&bytes))?;
         let text: Arc<str> = String::from_utf8_lossy(&bytes).into();
-        Ok(self.insert(path, text))
+        Ok(register(&mut inner, path, text, self.input.clone()))
+    }
+
+    /// Strict UTF-8 document loading for rule/policy formats, sharing the same snapshots.
+    pub fn read_text(&self, path: &Path) -> io::Result<Arc<str>> {
+        let bytes = self.read_bytes(path)?;
+        std::str::from_utf8(&bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        Ok(self.load(path)?.text.clone())
+    }
+
+    /// Snapshot raw bytes for file functions. Text overlays win, and binary
+    /// files are never round-tripped through lossy UTF-8 decoding.
+    pub fn read_bytes(&self, path: &Path) -> io::Result<Arc<[u8]>> {
+        let path = normalize(path);
+        let overlay = self.overlay.binary_search(&path).ok().map(|_| {
+            self.get_by_path(&path)
+                .expect("overlay registered before use")
+        });
+        let mut cache = self.bytes.write().unwrap();
+        if let Some(bytes) = cache.get(&path) {
+            return Ok(bytes.clone());
+        }
+        let bytes: Arc<[u8]> = match overlay {
+            Some(file) => {
+                self.input.admit(file.text.len() as u64)?;
+                file.text.as_bytes().into()
+            }
+            None => self.input.read(&path)?.into(),
+        };
+        cache.insert(path, bytes.clone());
+        Ok(bytes)
     }
 
     /// Register in-memory text under `path` (tests, stdin).
-    pub fn insert(&self, path: PathBuf, text: Arc<str>) -> Arc<SourceFile> {
+    pub fn insert(&self, path: PathBuf, text: Arc<str>) -> io::Result<Arc<SourceFile>> {
+        let path = normalize(&path);
         let mut g = self.inner.write().unwrap();
         if let Some(&id) = g.by_path.get(&path) {
-            return g.files[id.0 as usize].clone();
+            return Ok(g.files[id.0 as usize].clone());
         }
-        let id = FileId(g.files.len() as u32);
-        let f = Arc::new(SourceFile {
-            id,
-            lines: LineIndex::new(&text),
-            path: path.clone(),
-            text,
-        });
-        g.files.push(f.clone());
-        g.by_path.insert(path, id);
-        f
+        self.input.admit(text.len() as u64)?;
+        Ok(register(&mut g, path, text, self.input.clone()))
     }
 
     fn get_by_path(&self, path: &Path) -> Option<Arc<SourceFile>> {
@@ -301,6 +406,45 @@ impl FileTable {
     }
 }
 
+fn register(
+    inner: &mut Inner,
+    path: PathBuf,
+    text: Arc<str>,
+    input: Arc<InputBudget>,
+) -> Arc<SourceFile> {
+    assert!(text.len() <= u32::MAX as usize);
+    let id = FileId(u32::try_from(inner.files.len()).expect("admitted file identifier"));
+    let file = Arc::new(SourceFile {
+        input,
+        id,
+        lines: LineIndex::new(&text),
+        path: path.clone(),
+        text,
+    });
+    inner.files.push(file.clone());
+    assert_eq!(inner.files[id.0 as usize].id, id);
+    assert!(inner.by_path.insert(path, id).is_none());
+    file
+}
+
+/// Compute lossy UTF-8 expansion before allocating its retained text snapshot.
+fn decoded_len(mut bytes: &[u8]) -> u64 {
+    let mut length = 0;
+    while !bytes.is_empty() {
+        match std::str::from_utf8(bytes) {
+            Ok(_) => return length + bytes.len() as u64,
+            Err(error) => {
+                length += error.valid_up_to() as u64 + 3;
+                bytes = match error.error_len() {
+                    Some(count) => &bytes[error.valid_up_to() + count..],
+                    None => &[],
+                };
+            }
+        }
+    }
+    length
+}
+
 /// Lexical path normalisation: drop `.`, resolve `..` against preceding
 /// normal components.
 pub fn normalize(p: &Path) -> PathBuf {
@@ -324,6 +468,35 @@ pub fn normalize(p: &Path) -> PathBuf {
     out.iter().collect()
 }
 
+/// A lexical path relative to a module root, including sibling packages.
+pub(crate) fn relative_to(path: &Path, base: &Path) -> PathBuf {
+    let path = normalize(&std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf()));
+    let base = normalize(&std::path::absolute(base).unwrap_or_else(|_| base.to_path_buf()));
+    if path.is_absolute() != base.is_absolute() {
+        return path;
+    }
+    let a: Vec<_> = base
+        .components()
+        .filter(|c| *c != Component::CurDir)
+        .collect();
+    let b: Vec<_> = path
+        .components()
+        .filter(|c| *c != Component::CurDir)
+        .collect();
+    let shared = a.iter().zip(&b).take_while(|(a, b)| a == b).count();
+    let mut result = PathBuf::new();
+    for _ in &a[shared..] {
+        result.push("..");
+    }
+    for c in &b[shared..] {
+        result.push(c.as_os_str());
+    }
+    if result.as_os_str().is_empty() {
+        result.push(".");
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -335,6 +508,17 @@ mod tests {
             normalize(Path::new("a/examples/complete/../../")),
             PathBuf::from("a")
         );
+    }
+
+    #[test]
+    fn relative_module_paths_round_trip_across_parent_components() {
+        for (target, base) in [("shared", "../root"), ("../shared", "root"), (".", ".")] {
+            let path = relative_to(Path::new(target), Path::new(base));
+            assert_eq!(
+                normalize(&std::path::absolute(Path::new(base).join(path)).unwrap()),
+                normalize(&std::path::absolute(target).unwrap()),
+            );
+        }
     }
 }
 

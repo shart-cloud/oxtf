@@ -13,9 +13,14 @@
 //! evaluator can be tested (and reused, e.g. by a plan-JSON front end that
 //! produces `Known` values directly) without module loading or schemas.
 
+pub mod budget;
+pub use budget::EvaluationBudget;
+pub mod collections;
+mod depth;
 pub mod eval;
 pub mod functions;
 pub mod prov;
+pub mod text;
 pub mod truth;
 pub mod value;
 

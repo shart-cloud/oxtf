@@ -389,7 +389,9 @@ fn nested_blocks_replace_by_type_but_lifecycle_attributes_merge() {
             .ends_with("override.tf")
     );
     let store = tf_semantic::ModuleStore::new();
-    let def = store.module(&out.result.files, &out.analyses[0].root_dir);
+    let def = store
+        .module(&out.result.files, &out.analyses[0].root_dir)
+        .unwrap();
     let body = &def.resources[0].block.body;
     let lifecycle = &body.find_block("lifecycle").unwrap().body;
     assert!(lifecycle.find_attribute("prevent_destroy").is_some());
@@ -447,7 +449,9 @@ provider "aws" {
         out.result.diagnostics
     );
     let store = tf_semantic::ModuleStore::new();
-    let def = store.module(&out.result.files, &out.analyses[0].root_dir);
+    let def = store
+        .module(&out.result.files, &out.analyses[0].root_dir)
+        .unwrap();
     let settings: Vec<_> = def
         .files
         .iter()
@@ -631,7 +635,9 @@ fn lifecycle_empty_ignore_list_and_all_follow_the_pinned_loader() {
         .unwrap();
         assert_eq!(out.result.status(), ScanStatus::Complete);
         let store = tf_semantic::ModuleStore::new();
-        let def = store.module(&out.result.files, &out.analyses[0].root_dir);
+        let def = store
+            .module(&out.result.files, &out.analyses[0].root_dir)
+            .unwrap();
         let attribute = def.resources[0]
             .block
             .body
@@ -678,7 +684,9 @@ resource "test" "r" {
     .unwrap();
     assert_eq!(out.result.status(), ScanStatus::Complete);
     let store = tf_semantic::ModuleStore::new();
-    let def = store.module(&out.result.files, &out.analyses[0].root_dir);
+    let def = store
+        .module(&out.result.files, &out.analyses[0].root_dir)
+        .unwrap();
     for a in [
         def.module_calls[0]
             .block

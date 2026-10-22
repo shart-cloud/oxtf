@@ -8,10 +8,10 @@ fn ev(src: &str) -> Value {
 
 fn ev_with(src: &str, bindings: &[(&str, Value)]) -> Value {
     let alloc = Allocator::new();
-    let text = alloc.alloc_str(&format!("x = {src}\n"));
+    let text = alloc.alloc_str(&format!("x = {src}\n")).unwrap();
     let ret = tf_parser::parse(&alloc, text);
     assert!(ret.errors.is_empty(), "{:?}", ret.errors);
-    let file = alloc.alloc(ret.file);
+    let file = alloc.alloc(ret.file).unwrap();
     let attr = file.body.attributes().next().unwrap();
     let r = NoResolver;
     Scope::EMPTY.with_all(bindings, |sc| {
@@ -89,7 +89,10 @@ fn functions() {
     assert_eq!(s("contains([\"a\"], \"a\")"), "true");
     assert_eq!(s("join(\",\", split(\"-\", upper(\"a-b\")))"), "\"A,B\"");
     assert_eq!(s("replace(lower(\"ABC\"), \"b\", \"x\")"), "\"axc\"");
-    assert!(s("sha256(\"x\")").contains("unsupported function sha256"));
+    assert_eq!(
+        s("sha256(\"x\")"),
+        "\"2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881\""
+    );
 }
 
 #[test]
@@ -207,7 +210,7 @@ fn uncertain_filter_expansion_is_bounded_without_claiming_a_known_length() {
             &[("enabled", condition.clone())],
         );
         assert!(!v.is_known(), "{v}");
-        assert_eq!(v.is_tainted(), condition.is_tainted(), "{v}");
+        assert!(matches!(v.origin(), Some(tf_eval::Origin::Limit(_))), "{v}");
     }
 }
 
@@ -287,10 +290,10 @@ fn try_evaluates_a_needed_fallback_once_and_skips_unneeded_ones() {
         ("try((enabled ? {x = true} : {}).x, fallback, fallback)", 1),
     ] {
         let alloc = Allocator::new();
-        let text = alloc.alloc_str(&format!("x = {expression}\n"));
+        let text = alloc.alloc_str(&format!("x = {expression}\n")).unwrap();
         let ret = tf_parser::parse(&alloc, text);
         assert!(ret.errors.is_empty());
-        let file = alloc.alloc(ret.file);
+        let file = alloc.alloc(ret.file).unwrap();
         let attr = file.body.attributes().next().unwrap();
         let r = Fallback(std::cell::Cell::new(0));
         Scope::EMPTY.with("enabled", &Value::tainted("enabled"), |sc| {

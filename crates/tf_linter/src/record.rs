@@ -228,6 +228,12 @@ pub struct RuleRecord {
     /// A page explaining the rule, when it names one.
     #[serde(default)]
     pub guideline: Option<String>,
+    /// Why the assigned severity fits what this check can establish.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rationale: Option<String>,
+    /// Steps to address the finding, including material migration constraints.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remediation: Option<String>,
     /// The front-end the rule came through, and its file and line.
     #[serde(default)]
     pub source: SourceRef,
@@ -247,6 +253,8 @@ impl RuleRecord {
             level: f.level,
             description: f.description.to_string(),
             guideline: f.guideline.as_deref().map(str::to_string),
+            rationale: f.rationale.as_deref().map(str::to_string),
+            remediation: f.remediation.as_deref().map(str::to_string),
             source: SourceRef::from(&f.source),
             aliases: f.aliases.iter().map(|a| a.to_string()).collect(),
             profile: f.profile,

@@ -15,10 +15,14 @@
 pub mod address;
 pub mod analyze;
 pub mod compose;
+mod default_budget;
+mod file_functions;
 pub mod graph;
+mod input_conversion;
 pub mod installed;
 mod json_config;
 pub mod model;
+mod model_budget;
 pub mod module;
 pub mod references;
 pub mod source;
@@ -34,3 +38,6 @@ pub use model::{
 };
 pub use source::{FileTable, SourceFile};
 pub use store::ModuleStore;
+
+#[cfg(test)]
+mod test_allocations;

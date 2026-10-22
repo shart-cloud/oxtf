@@ -7,6 +7,7 @@ publish.workspace = true
 description = "Terraform module assembly, symbol table, reference graph and schema-aware evaluation into an owned resource model"
 
 [dependencies]
+tf_limits.workspace = true
 tf_span.workspace = true
 tf_allocator.workspace = true
 tf_ast.workspace = true

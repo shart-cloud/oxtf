@@ -35,6 +35,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 use tf_eval::truth::{self, Truth};
 use tf_eval::{Kind, Known, Value, Verdict};
+use tf_linter::RuleBudget;
 use tf_semantic::Resource;
 
 use crate::{py, pyre};
@@ -956,6 +957,7 @@ struct Interp<'p> {
     statics: HashMap<String, Py>,
     /// Statements, expressions and copied data nodes so far this run.
     steps: std::cell::Cell<u32>,
+    budget: &'p RuleBudget,
     /// Where the configuration's dicts sit in it.
     paths: Rc<Paths>,
     /// Configuration lookups so far this run, in order.
@@ -973,9 +975,37 @@ type Env = HashMap<String, Py>;
 
 impl<'p> Interp<'p> {
     fn step(&mut self) -> R<()> {
-        self.steps.set(self.steps.get() + 1);
-        if self.steps.get() > STEP_BUDGET {
+        self.charge(1)
+    }
+
+    fn charge(&self, steps: u64) -> R<()> {
+        let used = self.steps.get();
+        assert!(used <= STEP_BUDGET);
+        if steps > u64::from(STEP_BUDGET - used) {
             return unsupported("step budget exhausted");
+        }
+        self.budget.charge(steps).map_err(Flow::Unsupported)?;
+        self.steps.set(used + steps as u32);
+        assert!(self.steps.get() <= STEP_BUDGET);
+        Ok(())
+    }
+
+    fn charge_data(&self, data: &Json) -> R<()> {
+        self.charge(1)?;
+        let mut pending = vec![data];
+        while let Some(node) = pending.pop() {
+            match node {
+                Json::Array(items) => {
+                    self.charge(items.len() as u64)?;
+                    pending.extend(items);
+                }
+                Json::Object(items) => {
+                    self.charge(items.len() as u64)?;
+                    pending.extend(items.values());
+                }
+                _ => {}
+            }
+            assert!(pending.len() <= STEP_BUDGET as usize);
         }
         Ok(())
     }
@@ -1000,11 +1030,7 @@ impl<'p> Interp<'p> {
             // Operations without an in-place form read a copy, which counts
             // against the step budget like the work it is.
             Py::Data(j) => {
-                let nodes = json_nodes(j);
-                self.steps.set(self.steps.get().saturating_add(nodes));
-                if self.steps.get() > STEP_BUDGET {
-                    return unsupported("step budget exhausted");
-                }
+                self.charge_data(j)?;
                 Ok(json_to_py(j))
             }
             Py::OneOf(id, alts) => match self.choices.get(id) {
@@ -3707,14 +3733,6 @@ impl Bounded {
     }
 }
 
-fn json_nodes(j: &Json) -> u32 {
-    match j {
-        Json::Array(a) => 1 + a.iter().map(json_nodes).sum::<u32>(),
-        Json::Object(m) => 1 + m.values().map(json_nodes).sum::<u32>(),
-        _ => 1,
-    }
-}
-
 /// policy_sentry's and cloudsplaining's IAM-database queries, ported
 /// exactly over [`iam::definition`] (see `NATIVE` in the importer).
 impl Interp<'_> {
@@ -4461,11 +4479,19 @@ impl Check {
 
     /// Run the check on `resource`.
     pub fn evaluate(&self, resource: &Resource) -> Result<Verdict, String> {
-        evaluate(self, resource)
+        self.evaluate_with_budget(resource, &RuleBudget::default())
+    }
+
+    pub fn evaluate_with_budget(
+        &self,
+        resource: &Resource,
+        budget: &RuleBudget,
+    ) -> Result<Verdict, String> {
+        budget.finish(evaluate(self, resource, budget))
     }
 }
 
-/// Per-thread state shared by the checks that judge one resource in
+/// Root-owned state shared by the checks that judge one resource in
 /// turn: the resource's configuration as Python values (read by every
 /// check whose program does not mutate it) and the mutable class
 /// attributes (Checkov's class-level caches, shared by every check of the
@@ -4477,12 +4503,14 @@ struct ResourceCache {
     statics: HashMap<String, Py>,
 }
 
-thread_local! {
-    static CACHE: RefCell<ResourceCache> = RefCell::new(ResourceCache {
-        uid: u64::MAX,
-        input: None,
-        statics: HashMap::default(),
-    });
+impl Default for ResourceCache {
+    fn default() -> Self {
+        Self {
+            uid: u64::MAX,
+            input: None,
+            statics: HashMap::default(),
+        }
+    }
 }
 
 /// The resource's configuration as the check receives it. Ids of `OneOf`
@@ -4504,24 +4532,34 @@ fn input(resource: &Resource, conf: &Value) -> (Py, Rc<Paths>) {
     (py_conf, Rc::new(converter.paths))
 }
 
-fn run(check: &Check, resource: &Resource, conf: &Value) -> Result<Verdict, String> {
-    let fresh = CACHE.with(|c| c.borrow().uid != resource.uid);
-    if fresh {
-        CACHE.with(|c| {
-            *c.borrow_mut() = ResourceCache {
+fn run(
+    check: &Check,
+    resource: &Resource,
+    conf: &Value,
+    budget: &RuleBudget,
+) -> Result<Verdict, String> {
+    budget.with_cache(|cache: &mut ResourceCache| {
+        if cache.uid != resource.uid {
+            *cache = ResourceCache {
                 uid: resource.uid,
-                input: None,
-                statics: HashMap::default(),
-            }
-        });
-    }
-    run_with(check, resource, conf, &mut HashMap::default(), &mut 0)
+                ..ResourceCache::default()
+            };
+        }
+    });
+    run_with(
+        check,
+        resource,
+        conf,
+        &mut HashMap::default(),
+        &mut 0,
+        budget,
+    )
 }
 
-fn evaluate(check: &Check, resource: &Resource) -> Result<Verdict, String> {
+fn evaluate(check: &Check, resource: &Resource, budget: &RuleBudget) -> Result<Verdict, String> {
     let conf = crate::checkov::resource_configuration(resource);
     let timer = (debug() == "time").then(std::time::Instant::now);
-    let v = run(check, resource, conf);
+    let v = run(check, resource, conf, budget);
     if let Some(t) = timer {
         eprintln!(
             "TIME {} {} {}us",
@@ -4539,68 +4577,22 @@ fn run_with(
     conf: &Value,
     choices: &mut HashMap<usize, usize>,
     runs: &mut usize,
+    budget: &RuleBudget,
 ) -> Result<Verdict, String> {
+    budget.charge(1)?;
     let program = &*check.program;
     *runs += 1;
     if *runs > RUN_BUDGET {
         return Err("checkov_python: alternative run budget exhausted".into());
     }
-    let (py_conf, paths) = if check.shares_input {
-        CACHE.with(|c| {
-            c.borrow_mut()
-                .input
-                .get_or_insert_with(|| input(resource, conf))
-                .clone()
-        })
-    } else {
-        input(resource, conf)
-    };
-    let mut self_attrs: HashMap<String, Py> = program
-        .self_attrs
-        .iter()
-        .filter_map(|(k, v)| Py::from_const(v).ok().map(|p| (k.clone(), p)))
-        .collect();
-    self_attrs.insert("entity_type".into(), Py::str(&resource.ty));
-    // Mutable class attributes are shared by every check of this
-    // resource; a forked run starts afresh.
+    let (mut interp, py_conf) = interpreter(check, resource, conf, choices, budget);
     let shared = choices.is_empty();
-    let statics = if shared {
-        CACHE.with(|c| c.borrow().statics.clone())
-    } else {
-        HashMap::default()
-    };
-    let mut interp = Interp {
-        program,
-        resource,
-        self_attrs,
-        choices: choices.clone(),
-        statics,
-        steps: std::cell::Cell::new(0),
-        paths,
-        reads: RefCell::new(Vec::new()),
-        key_lists: RefCell::new(HashMap::default()),
-        delegated: RefCell::new(None),
-    };
     let outcome = interp.call_function(&program.entry, vec![py_conf], Vec::new());
     if shared && !matches!(outcome, Err(Flow::Fork(..))) {
         let statics = std::mem::take(&mut interp.statics);
-        CACHE.with(|c| c.borrow_mut().statics = statics);
+        budget.with_cache(|cache: &mut ResourceCache| cache.statics = statics);
     }
-    if debug() == "2" {
-        let what = match &outcome {
-            Ok(Py::Result(r)) => r.to_string(),
-            Ok(other) => format!("returned {}", other.type_name()),
-            Err(Flow::Abstract(w, t)) => format!("abstract (tainted={t}) {:?}", w.kind),
-            Err(Flow::Fork(id, n)) => format!("fork {id}/{n}"),
-            Err(Flow::Exc(e)) => format!("raised {e}"),
-            Err(Flow::Unsupported(u)) => format!("unsupported {u}"),
-            Err(_) => "control flow escaped".into(),
-        };
-        eprintln!(
-            "checkov_python {}: {}: {what}",
-            program.entry, resource.address
-        );
-    }
+    trace_outcome(program, resource, &outcome);
     Ok(match outcome {
         Ok(Py::Result(r)) if &*r == "FAILED" => {
             Verdict::new(Truth::True, Some(witness(&mut interp, program, conf)))
@@ -4619,7 +4611,7 @@ fn run_with(
             let verdicts = (0..n)
                 .map(|i| {
                     choices.insert(id, i);
-                    let v = run_with(check, resource, conf, choices, runs);
+                    let v = run_with(check, resource, conf, choices, runs, budget);
                     choices.remove(&id);
                     v
                 })
@@ -4627,22 +4619,14 @@ fn run_with(
             truth::combine_one_of(verdicts, tainted)
         }
         Err(Flow::Unsupported(why)) => {
-            if !debug().is_empty() {
-                eprintln!(
-                    "checkov_python {}: {}: {why}",
-                    program.entry, resource.address
-                );
-            }
-            return Err(format!("checkov_python {}: {why}", program.entry));
+            return Err(execution_error(program, resource, &why));
         }
         Err(Flow::Exc(name)) => {
-            if !debug().is_empty() {
-                eprintln!(
-                    "checkov_python {}: {}: raised {name}",
-                    program.entry, resource.address
-                );
-            }
-            return Err(format!("checkov_python {}: raised {name}", program.entry));
+            return Err(execution_error(
+                program,
+                resource,
+                &format!("raised {name}"),
+            ));
         }
         Err(_) => {
             return Err(format!(
@@ -4651,6 +4635,82 @@ fn run_with(
             ));
         }
     })
+}
+
+fn execution_error(program: &Program, resource: &Resource, why: &str) -> String {
+    if !debug().is_empty() {
+        eprintln!(
+            "checkov_python {}: {}: {why}",
+            program.entry, resource.address
+        );
+    }
+    format!("checkov_python {}: {why}", program.entry)
+}
+
+fn interpreter<'p>(
+    check: &'p Check,
+    resource: &'p Resource,
+    conf: &Value,
+    choices: &HashMap<usize, usize>,
+    budget: &'p RuleBudget,
+) -> (Interp<'p>, Py) {
+    let program = &*check.program;
+    let (py_conf, paths) = if check.shares_input {
+        budget.with_cache(|cache: &mut ResourceCache| {
+            cache
+                .input
+                .get_or_insert_with(|| input(resource, conf))
+                .clone()
+        })
+    } else {
+        input(resource, conf)
+    };
+    let mut self_attrs: HashMap<String, Py> = program
+        .self_attrs
+        .iter()
+        .filter_map(|(k, v)| Py::from_const(v).ok().map(|p| (k.clone(), p)))
+        .collect();
+    self_attrs.insert("entity_type".into(), Py::str(&resource.ty));
+    // Mutable class attributes are shared by every check of this
+    // resource; a forked run starts afresh.
+    let shared = choices.is_empty();
+    let statics = if shared {
+        budget.with_cache(|cache: &mut ResourceCache| cache.statics.clone())
+    } else {
+        HashMap::default()
+    };
+    let interp = Interp {
+        program,
+        resource,
+        self_attrs,
+        choices: choices.clone(),
+        statics,
+        steps: std::cell::Cell::new(0),
+        budget,
+        paths,
+        reads: RefCell::new(Vec::new()),
+        key_lists: RefCell::new(HashMap::default()),
+        delegated: RefCell::new(None),
+    };
+    (interp, py_conf)
+}
+
+fn trace_outcome(program: &Program, resource: &Resource, outcome: &R<Py>) {
+    if debug() == "2" {
+        let what = match outcome {
+            Ok(Py::Result(r)) => r.to_string(),
+            Ok(other) => format!("returned {}", other.type_name()),
+            Err(Flow::Abstract(w, t)) => format!("abstract (tainted={t}) {:?}", w.kind),
+            Err(Flow::Fork(id, n)) => format!("fork {id}/{n}"),
+            Err(Flow::Exc(e)) => format!("raised {e}"),
+            Err(Flow::Unsupported(u)) => format!("unsupported {u}"),
+            Err(_) => "control flow escaped".into(),
+        };
+        eprintln!(
+            "checkov_python {}: {}: {what}",
+            program.entry, resource.address
+        );
+    }
 }
 
 /// Whether the `OneOf` with traversal id `id` is tainted.

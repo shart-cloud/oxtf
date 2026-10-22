@@ -37,6 +37,9 @@ fn fixed(name: &str, text: &str, rule: &str) -> tf_scan::FixOutcome {
     let (fp, _) = finding(request(&dir, &files, rule));
     let o = tf_scan::fix(request(&dir, &files, rule), &fp, None).unwrap();
     assert!(o.verified, "{}", o.edit.text);
+    assert!(o.target_resolved && o.no_new_findings);
+    assert_eq!((o.finding_delta.before, o.finding_delta.after), (1, 0));
+    assert_eq!(o.finding_delta.removed[0].fingerprint, fp);
     o
 }
 
@@ -186,6 +189,12 @@ fn an_overridden_default_falls_back_to_the_attribute() {
     )
     .unwrap();
     assert!(!o.verified);
+    assert!(!o.target_resolved);
+    assert!(o.no_new_findings);
+    assert!(o.finding_delta.added.is_empty());
+    assert!(o.finding_delta.removed.is_empty());
+    assert_eq!(o.finding_delta.changed.len(), 1);
+    assert!(!o.finding_delta.changed[0].removed_occurrences.is_empty());
 }
 
 /// Two roots each declare `aws_instance.this`: the fix edits the file of
@@ -201,6 +210,9 @@ fn an_insertion_edits_the_finding_root() {
     for f in &rec.findings {
         let o = tf_scan::fix(request(&dir, &files, "CKV_AWS_126"), &f.fingerprint, None).unwrap();
         assert!(o.verified);
+        assert!(o.target_resolved && o.no_new_findings);
+        assert_eq!((o.finding_delta.before, o.finding_delta.after), (2, 1));
+        assert_eq!(o.finding_delta.unchanged, 1);
         let file = f.location.file.clone();
         assert!(
             o.edit.file.ends_with(&file),
@@ -208,4 +220,136 @@ fn an_insertion_edits_the_finding_root() {
             o.edit.file.display()
         );
     }
+}
+
+// The default edit fixes one database but breaks another. A lower or equal
+// total finding count is not sufficient to establish no new findings.
+fn shared_default(other: &str) -> ScanRequest {
+    let dir = PathBuf::from("/nonexistent/oxtf-fix-delta");
+    let source = format!(
+        "variable \"encrypted\" {{\n  default = false\n}}\n\
+         resource \"aws_db_instance\" \"target\" {{\n  storage_encrypted = var.encrypted\n}}\n\
+         resource \"aws_db_instance\" \"other\" {{\n{other}\n}}\n"
+    );
+    request(&dir, &[("main.tf", &source)], "aws-rds-unencrypted")
+}
+
+fn target_fingerprint(req: &ScanRequest) -> String {
+    scan(req.try_clone().unwrap())
+        .unwrap()
+        .record()
+        .findings
+        .into_iter()
+        .find(|f| {
+            f.occurrences
+                .iter()
+                .any(|o| o.address == "aws_db_instance.target")
+        })
+        .unwrap()
+        .fingerprint
+}
+
+#[test]
+fn resolving_the_target_can_introduce_a_finding_elsewhere() {
+    let req = shared_default("  storage_encrypted = !var.encrypted");
+    let fp = target_fingerprint(&req);
+    let outcome = tf_scan::fix(req, &fp, Some(FixSite::Default)).unwrap();
+    assert!(outcome.verification_errors.is_empty());
+    assert!(outcome.target_resolved);
+    assert!(!outcome.no_new_findings && !outcome.verified);
+    let delta = &outcome.finding_delta;
+    assert_eq!((delta.before, delta.after), (1, 1));
+    assert_eq!(delta.removed[0].fingerprint, fp);
+    assert_eq!(
+        delta.added[0].occurrences[0].address,
+        "aws_db_instance.other"
+    );
+    assert!(delta.changed.is_empty());
+    assert_eq!(delta.unchanged, 0);
+}
+
+#[test]
+fn verification_includes_other_selected_rules() {
+    let dir = PathBuf::from("/nonexistent/oxtf-fix-other-rule");
+    let files = [(
+        "main.tf",
+        "resource \"aws_db_instance\" \"target\" { storage_encrypted = false }\n",
+    )];
+    let mut req = request(&dir, &files, "aws-rds-unencrypted");
+    req.catalog.rule_json.push(
+        serde_json::json!({
+            "version": 2, "name": "conflicting-policy", "message": "Require unencrypted storage",
+            "clauses": [{"resource_types": ["aws_db_instance"], "condition": {
+                "op": "checkov_value", "path": ["storage_encrypted"], "values": [false],
+                "negative": false, "any_value": false, "missing": "pass"
+            }}]
+        })
+        .to_string(),
+    );
+    req.selection
+        .as_mut()
+        .unwrap()
+        .push("conflicting-policy".into());
+    let fp = target_fingerprint(&req);
+    let outcome = tf_scan::fix(req, &fp, None).unwrap();
+    assert!(outcome.target_resolved);
+    assert!(!outcome.no_new_findings && !outcome.verified);
+    assert_eq!(outcome.finding_delta.added[0].rule, "conflicting-policy");
+}
+
+#[test]
+fn a_regressing_default_falls_back_to_the_attribute() {
+    let req = shared_default("  storage_encrypted = !var.encrypted");
+    let fp = target_fingerprint(&req);
+    let outcome = tf_scan::fix(req, &fp, None).unwrap();
+    assert_eq!(outcome.site, FixSite::Attribute);
+    assert!(outcome.target_resolved && outcome.no_new_findings && outcome.verified);
+    assert_eq!(
+        (outcome.finding_delta.before, outcome.finding_delta.after),
+        (1, 0)
+    );
+}
+
+#[test]
+fn a_new_occurrence_of_an_existing_finding_is_a_regression() {
+    let req = shared_default(
+        "  count = 2\n  storage_encrypted = count.index == 0 ? false : !var.encrypted",
+    );
+    let fp = target_fingerprint(&req);
+    let outcome = tf_scan::fix(req, &fp, Some(FixSite::Default)).unwrap();
+    assert!(outcome.target_resolved);
+    assert!(!outcome.no_new_findings && !outcome.verified);
+    let delta = &outcome.finding_delta;
+    assert_eq!((delta.before, delta.after), (2, 1));
+    assert!(delta.added.is_empty());
+    assert_eq!(delta.removed[0].fingerprint, fp);
+    let [change] = delta.changed.as_slice() else {
+        panic!("{delta:?}")
+    };
+    assert_eq!(change.before.occurrences.len(), 1);
+    assert_eq!(change.after.occurrences.len(), 2);
+    assert_eq!(
+        change.added_occurrences[0].address,
+        "aws_db_instance.other[1]"
+    );
+    assert!(change.removed_occurrences.is_empty());
+}
+
+#[test]
+fn an_insertion_does_not_turn_shifted_findings_into_new_ones() {
+    let dir = PathBuf::from("/nonexistent/oxtf-fix-delta-shift");
+    let files = [(
+        "main.tf",
+        concat!(
+            "resource \"aws_instance\" \"target\" {}\n",
+            "resource \"aws_instance\" \"other\" {}\n",
+        ),
+    )];
+    let req = request(&dir, &files, "CKV_AWS_126");
+    let before = scan(req.try_clone().unwrap()).unwrap().record();
+    let outcome = tf_scan::fix(req, &before.findings[0].fingerprint, None).unwrap();
+    assert!(outcome.verified && outcome.no_new_findings);
+    assert_eq!(outcome.finding_delta.unchanged, 1);
+    assert!(outcome.finding_delta.added.is_empty());
+    assert!(outcome.finding_delta.changed.is_empty());
 }

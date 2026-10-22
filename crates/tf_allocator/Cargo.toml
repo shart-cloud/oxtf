@@ -7,3 +7,4 @@ publish.workspace = true
 
 [dependencies]
 bumpalo.workspace = true
+tf_limits.workspace = true

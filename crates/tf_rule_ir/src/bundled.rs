@@ -52,30 +52,23 @@ pub struct BundledRule {
 }
 
 /// The bundled Checkov rules, with their upstream files as origins and
-/// the curated level, category and guideline (`data/checkov/curation.toml`).
+/// the curated metadata and guidance (`data/checkov/curation.toml`).
 pub fn checkov() -> Result<Vec<RuleSpec>, String> {
-    let bundle: Bundle = serde_json::from_str(CHECKOV_RULES_JSON)
-        .map_err(|e| format!("bundled Checkov catalog: {e}"))?;
-    let headers: std::collections::HashMap<&str, &Header> =
-        TABLE.iter().map(|h| (h.name, h)).collect();
-    Ok(bundle
-        .rules
-        .into_iter()
-        .map(|b| {
-            let h = headers[b.rule.name.as_str()];
-            RuleSpec {
+    TABLE
+        .iter()
+        .map(|h| {
+            let spec: RuleSpec = serde_json::from_str(h.json)
+                .map_err(|e| format!("bundled rule {:?}: {e}", h.name))?;
+            Ok(RuleSpec {
                 origin: Origin(tf_linter::RuleSource {
                     engine: tf_linter::Engine::Checkov,
-                    file: Some(b.file.into()),
-                    line: b.line,
+                    file: Some(h.file.into()),
+                    line: h.line,
                 }),
-                level: h.level.to_string(),
-                category: h.category.to_string(),
-                guideline: h.guideline.map(str::to_string),
-                ..b.rule
-            }
+                ..spec
+            })
         })
-        .collect())
+        .collect()
 }
 
 /// One bundled rule as `build.rs` tabulates it: what the linter reads
@@ -87,6 +80,8 @@ struct Header {
     category: &'static str,
     profile: &'static str,
     guideline: Option<&'static str>,
+    rationale: Option<&'static str>,
+    remediation: Option<&'static str>,
     file: &'static str,
     line: Option<u32>,
     types: &'static [&'static str],
@@ -116,6 +111,8 @@ pub fn rules() -> Result<Vec<Box<dyn DynRule>>, String> {
                     resource_types: h.types.iter().map(|t| Arc::from(*t)).collect(),
                     runs_on_module: false,
                     guideline: h.guideline.map(Arc::from),
+                    rationale: h.rationale.map(Arc::from),
+                    remediation: h.remediation.map(Arc::from),
                     source: tf_linter::RuleSource {
                         engine: tf_linter::Engine::Checkov,
                         file: Some(h.file.into()),
@@ -181,6 +178,23 @@ impl DynRule for LazyRule {
             return Ok(Vec::new());
         }
         self.compiled()?.judge_resource(r)
+    }
+    fn judge_resource_with_budget(
+        &self,
+        r: &Resource,
+        budget: &tf_linter::RuleBudget,
+    ) -> Result<Vec<Judgement>, RuleFailure> {
+        if self.header.needs_graph {
+            return Ok(Vec::new());
+        }
+        self.compiled()?.judge_resource_with_budget(r, budget)
+    }
+    fn judge_graph_with_budget<'a>(
+        &self,
+        graph: &tf_semantic::graph::ResourceGraph<'a>,
+        budget: &tf_linter::RuleBudget,
+    ) -> Result<Vec<(&'a Resource, Judgement)>, RuleFailure> {
+        self.compiled()?.judge_graph_with_budget(graph, budget)
     }
     fn judge_module<'m>(
         &self,

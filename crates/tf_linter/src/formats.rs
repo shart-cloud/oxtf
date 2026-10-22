@@ -44,6 +44,7 @@ pub fn ndjson(r: &ScanRecord) -> String {
         "type": "summary",
         "schema": r.schema,
         "status": r.status,
+        "rules": r.rules,
         "findings": s.findings,
         "occurrences": s.occurrences,
         "definite": s.definite,
@@ -136,6 +137,12 @@ pub fn sarif(r: &ScanRecord) -> J {
             });
             if let Some(g) = &rule.guideline {
                 v["helpUri"] = J::from(g.as_str());
+            }
+            if let Some(remediation) = &rule.remediation {
+                v["help"] = json!({"text": remediation});
+            }
+            if let Some(rationale) = &rule.rationale {
+                v["properties"]["rationale"] = J::from(rationale.as_str());
             }
             v
         })

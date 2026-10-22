@@ -86,8 +86,8 @@ impl<'a> Visit<'a> for Collect<'a> {
     }
 }
 
-pub fn parse(src: String) -> SharedParse {
-    SharedParse(OwnedParse::new(
+pub fn parse(src: String) -> tf_allocator::AllocResult<SharedParse> {
+    OwnedParse::try_new(
         Owner {
             alloc: Allocator::new(),
             src,
@@ -99,7 +99,7 @@ pub fn parse(src: String) -> SharedParse {
                 .iter()
                 .map(|e| (e.span.start, e.span.end, e.message.clone()))
                 .collect();
-            let file = o.alloc.alloc(r.file);
+            let file = o.alloc.alloc(r.file)?;
             let mut c = Collect {
                 nodes: Vec::new(),
                 parent: Vec::new(),
@@ -107,14 +107,15 @@ pub fn parse(src: String) -> SharedParse {
                 stack: Vec::new(),
             };
             c.visit_file(file);
-            Parsed {
+            Ok(Parsed {
                 nodes: c.nodes,
                 parent: c.parent,
                 end: c.end,
                 errors,
-            }
+            })
         },
-    ))
+    )
+    .map(SharedParse)
 }
 
 impl SharedParse {
@@ -358,9 +359,13 @@ impl Node {
 
 /// Parse HCL source into an arena AST (GIL released while parsing).
 #[pyfunction]
-fn parse_hcl(py: Python<'_>, source: String) -> Document {
-    let inner = py.detach(move || Arc::new(parse(source)));
-    Document { inner }
+fn parse_hcl(py: Python<'_>, source: String) -> PyResult<Document> {
+    let parsed = py
+        .detach(move || parse(source))
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    Ok(Document {
+        inner: Arc::new(parsed),
+    })
 }
 
 /// Micro-benchmark for Q7: `n` accesses of node spans through

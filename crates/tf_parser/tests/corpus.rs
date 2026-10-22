@@ -8,43 +8,6 @@ mod common;
 use tf_parser::dump::{Options, dump_file};
 
 #[test]
-fn corpus_parses_cleanly() {
-    let files = common::corpus_files();
-    if files.is_empty() {
-        eprintln!(
-            "corpus not found at {}; skipping",
-            common::corpus_dir().display()
-        );
-        return;
-    }
-    let mut failed = Vec::new();
-    let mut bytes = 0usize;
-    for path in &files {
-        let src = std::fs::read_to_string(path).unwrap();
-        bytes += src.len();
-        let alloc = tf_allocator::Allocator::new();
-        let ret = tf_parser::parse(&alloc, &src);
-        if !ret.errors.is_empty() {
-            failed.push((path.clone(), ret.errors.clone()));
-        }
-    }
-    println!(
-        "corpus: {} files, {} bytes, {} with errors",
-        files.len(),
-        bytes,
-        failed.len()
-    );
-    for (p, errs) in failed.iter().take(20) {
-        println!("  {}: {}", p.display(), errs[0]);
-    }
-    assert!(
-        failed.is_empty(),
-        "{} corpus files had parse errors",
-        failed.len()
-    );
-}
-
-#[test]
 fn corpus_differential_vs_hcl_edit() {
     let files = common::corpus_files();
     if files.is_empty() {
@@ -56,14 +19,21 @@ fn corpus_differential_vs_hcl_edit() {
         normalize: true,
         dedupe_object_keys: true,
     };
+    let mut parser_failed = Vec::new();
     let mut hcl_failed = Vec::new();
     let mut diverged = Vec::new();
     let mut same = 0usize;
+    let mut source_bytes = 0usize;
     let mut compared_bytes = 0usize;
     for path in &files {
         let src = std::fs::read_to_string(path).unwrap();
+        source_bytes += src.len();
         let alloc = tf_allocator::Allocator::new();
         let ret = tf_parser::parse(&alloc, &src);
+        // Require clean parsing even for files the reference parser rejects.
+        if !ret.errors.is_empty() {
+            parser_failed.push((path.clone(), ret.errors.clone()));
+        }
         let mine = dump_file(&ret.file, opts);
         match hcl_edit::parser::parse_body(&src) {
             Err(e) => hcl_failed.push((path.clone(), e.to_string())),
@@ -78,6 +48,15 @@ fn corpus_differential_vs_hcl_edit() {
                 }
             }
         }
+    }
+    println!(
+        "corpus: {} files, {} bytes, {} with errors",
+        files.len(),
+        source_bytes,
+        parser_failed.len()
+    );
+    for (p, errs) in parser_failed.iter().take(20) {
+        println!("  {}: {}", p.display(), errs[0]);
     }
     println!(
         "differential: {} files, {} identical, {} diverged, {} rejected by hcl-edit",
@@ -106,6 +85,11 @@ fn corpus_differential_vs_hcl_edit() {
             e.lines().next().unwrap_or("")
         );
     }
+    assert!(
+        parser_failed.is_empty(),
+        "{} corpus files had parse errors",
+        parser_failed.len()
+    );
     assert!(
         diverged.is_empty(),
         "{} files diverged from hcl-edit",
