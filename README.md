@@ -38,6 +38,14 @@ oxtf scan -r . -f json    # the finding record (docs/FINDING_SCHEMA.md)
 Results compared with Checkov on public modules are in
 [docs/RECONCILIATION.md](docs/RECONCILIATION.md).
 
+## Coding agents
+
+Coding agents (Claude Code, Codex) can drive the scan-and-fix loop with the
+[oxtf skill](skills/oxtf/SKILL.md): copy `skills/oxtf/` into the agent's skills
+directory. `scripts/demo-fix-loop.sh` runs the same loop on pinned public modules.
+
+## Rules
+
 CLI, Python, and Rust `ScanRequest::dirs()` / `ScanRequest::plan()` scans default
 to the bundled Checkov catalog plus native seed rules in the security profile.
 Rust callers can explicitly set `request.catalog = Catalog::seed()` for only
