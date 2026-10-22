@@ -1294,6 +1294,7 @@ fn parse_limits(limits: Option<&Bound<'_, PyDict>>) -> PyResult<tf_scan::Limits>
             "ast_nodes" => parsed.with_ast_nodes(value),
             "text_bytes" => parsed.with_text_bytes(value),
             "collection_bytes" => parsed.with_collection_bytes(value),
+            "results" => parsed.with_results(value),
             _ => {
                 return Err(PyValueError::new_err(format!(
                     "unknown limits field {key:?}"

@@ -206,7 +206,7 @@ pub fn scan_plan_with_model(
 ) -> Result<(ScanResult, Analysis), PlanError> {
     let start = Instant::now();
     let a = load_plan(path, opts, &files)?;
-    let mut out = linter.run_with_limits(&a, None, opts.limits);
+    let mut out = linter.run_with_storage(&a, None, opts.limits, files.input_budget());
     tf_linter::engine::protect_fix_hints(&mut out.findings, &a, &files);
     // No parsed modules here: only skips in a resource's own block apply.
     let (findings, suppressed) = tf_linter::suppress::checkov_skips(out.findings, &a, &files, None);
@@ -221,6 +221,7 @@ pub fn scan_plan_with_model(
     let mut diagnostics = a.diagnostics.clone();
     diagnostics.retain(|d| d.code != "coverage-storage");
     diagnostics.extend(files.limit_diagnostic());
+    diagnostics.extend(files.results_diagnostic());
     Ok((
         ScanResult {
             findings,

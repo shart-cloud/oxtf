@@ -12,6 +12,7 @@ pub struct InputStats {
     pub ast_nodes: u64,
     pub text_bytes: u64,
     pub collection_bytes: u64,
+    pub results: u64,
     pub source_bytes: u64,
     pub file_entries: u64,
     pub directory_entries: u64,
@@ -37,6 +38,10 @@ pub struct InputBudget {
     text_bytes: AtomicU64,
     collection_bytes: AtomicU64,
     exhausted: AtomicBool,
+    /// Findings and rule errors. Independent of `exhausted`: storage refusal keeps
+    /// completed resources, whose results must still be recordable.
+    results: AtomicU64,
+    results_exhausted: AtomicBool,
 }
 
 impl Default for InputBudget {
@@ -59,6 +64,8 @@ impl InputBudget {
             text_bytes: AtomicU64::new(0),
             collection_bytes: AtomicU64::new(0),
             exhausted: AtomicBool::new(false),
+            results: AtomicU64::new(0),
+            results_exhausted: AtomicBool::new(false),
         }
     }
 
@@ -82,6 +89,7 @@ impl InputBudget {
             ast_nodes: self.ast_nodes.load(Ordering::Relaxed),
             text_bytes: self.text_bytes.load(Ordering::Relaxed),
             collection_bytes: self.collection_bytes.load(Ordering::Relaxed),
+            results: self.results.load(Ordering::Relaxed),
         }
     }
 
@@ -126,6 +134,44 @@ impl InputBudget {
             self.limits.collection_bytes(),
             amount,
         )
+    }
+
+    /// One finding or rule error. Refusal is sticky for results only and reported
+    /// separately from storage exhaustion; see [`InputBudget::results_exhaustion`].
+    pub fn admit_result(&self) -> Result<(), Exhaustion> {
+        let allowance = self.limits.results();
+        let refused = Exhaustion {
+            resource: Resource::Results,
+            allowance,
+        };
+        if self.results_exhausted.load(Ordering::Acquire) {
+            return Err(refused);
+        }
+        let result = self
+            .results
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
+                assert!(used <= allowance);
+                (used < allowance).then_some(used + 1)
+            });
+        match result {
+            Ok(used) => {
+                assert!(used < allowance);
+                Ok(())
+            }
+            Err(_) => {
+                self.results_exhausted.store(true, Ordering::Release);
+                Err(refused)
+            }
+        }
+    }
+
+    pub fn results_exhaustion(&self) -> Option<Exhaustion> {
+        self.results_exhausted
+            .load(Ordering::Acquire)
+            .then_some(Exhaustion {
+                resource: Resource::Results,
+                allowance: self.limits.results(),
+            })
     }
 
     pub fn collection_refused(&self) -> Exhaustion {

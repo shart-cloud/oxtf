@@ -37,6 +37,8 @@ pub fn from_json(text: &str) -> Result<Limits, String> {
         text_bytes: u64,
         #[serde(default = "default_collection_bytes")]
         collection_bytes: u64,
+        #[serde(default = "default_results")]
+        results: u64,
     }
     let wire: Wire = serde_json::from_str(text).map_err(|e| format!("invalid limits: {e}"))?;
     Limits::new(wire.evaluation_steps)
@@ -52,6 +54,7 @@ pub fn from_json(text: &str) -> Result<Limits, String> {
         .and_then(|limits| limits.with_ast_nodes(wire.ast_nodes))
         .and_then(|limits| limits.with_text_bytes(wire.text_bytes))
         .and_then(|limits| limits.with_collection_bytes(wire.collection_bytes))
+        .and_then(|limits| limits.with_results(wire.results))
         .map_err(|e| format!("invalid limits: {e}"))
 }
 
@@ -104,6 +107,10 @@ fn default_ast_nodes() -> u64 {
 
 fn default_collection_bytes() -> u64 {
     Limits::default().collection_bytes()
+}
+
+fn default_results() -> u64 {
+    Limits::default().results()
 }
 
 #[cfg(test)]

@@ -55,6 +55,8 @@ pub struct RunOutput {
     /// Admitted elapsed Rego execution, capped at its configured allowance on timeout.
     pub rego_elapsed: std::time::Duration,
     pub rule_exhaustion: Option<tf_limits::Exhaustion>,
+    /// Set when this root stopped at the scan's `results` allowance.
+    pub results_exhaustion: Option<tf_limits::Exhaustion>,
     pub findings: Vec<Finding>,
     /// Hooks that returned `Err`, one per (rule, resource) or (rule, module).
     pub rule_errors: Vec<RuleError>,
@@ -140,32 +142,45 @@ impl Linter {
     }
 
     /// Explicit root allowance, also used for plan inputs without parsed sources.
+    /// Without a scan file table, graph storage and results use a local allowance.
     pub fn run_with_limits(
         &self,
         analysis: &Analysis,
         sources: Option<Sources<'_>>,
         limits: tf_limits::Limits,
     ) -> RunOutput {
+        match sources {
+            Some(s) => self.run_with_storage(analysis, sources, limits, s.files.input_budget()),
+            None => {
+                let local = tf_limits::input::InputBudget::new(limits);
+                self.run_with_storage(analysis, None, limits, &local)
+            }
+        }
+    }
+
+    /// `storage` is the scan's shared allowance: graph edges and the scan-wide
+    /// `results` count of findings and rule errors are admitted against it.
+    pub fn run_with_storage(
+        &self,
+        analysis: &Analysis,
+        sources: Option<Sources<'_>>,
+        limits: tf_limits::Limits,
+        storage: &tf_limits::input::InputBudget,
+    ) -> RunOutput {
         let mut run = RuleRun {
             linter: self,
             analysis,
             budget: RuleBudget::new(limits),
+            storage,
+            results_refused: false,
+            refused_error_kept: false,
             out: RunOutput::default(),
             sensitive: analysis
                 .modules
                 .iter()
                 .any(tf_semantic::Module::is_sensitive),
         };
-        // Plan inputs without a scan file table still get a finite graph allowance.
-        let local;
-        let storage = match sources {
-            Some(s) => s.files.input_budget(),
-            None => {
-                local = tf_limits::input::InputBudget::new(limits);
-                &local
-            }
-        };
-        run.graphs(storage);
+        run.graphs();
         run.files(sources);
         run.modules();
         attach_packages(&mut run.out.findings, analysis);
@@ -175,6 +190,7 @@ impl Linter {
         run.out.rule_steps = run.budget.used();
         run.out.rego_elapsed = run.budget.rego_elapsed();
         run.out.rule_exhaustion = run.budget.exhaustion();
+        run.out.results_exhaustion = storage.results_exhaustion().filter(|_| run.results_refused);
         run.out
     }
 
@@ -206,13 +222,34 @@ struct RuleRun<'a> {
     linter: &'a Linter,
     analysis: &'a Analysis,
     budget: RuleBudget,
+    storage: &'a tf_limits::input::InputBudget,
+    /// This root stopped because the scan's `results` allowance refused an entry.
+    results_refused: bool,
+    /// One refused rule error is kept so a failure keeps precedence over incomplete.
+    refused_error_kept: bool,
     out: RunOutput,
     sensitive: bool,
 }
 
 impl RuleRun<'_> {
     fn stopped(&self) -> bool {
-        self.budget.exhaustion().is_some()
+        self.budget.exhaustion().is_some() || self.results_refused
+    }
+
+    /// Admit one result; refusal stops this root's later hooks.
+    fn admit_result(&mut self) -> bool {
+        if self.results_refused {
+            return false;
+        }
+        self.results_refused = self.storage.admit_result().is_err();
+        !self.results_refused
+    }
+
+    fn push_error(&mut self, error: RuleError) {
+        if self.admit_result() || !self.refused_error_kept {
+            self.refused_error_kept |= self.results_refused;
+            self.out.rule_errors.push(error);
+        }
     }
 
     fn invoke<T>(
@@ -236,7 +273,7 @@ impl RuleRun<'_> {
                     Some(exhaustion) => exhaustion.to_string(),
                     None => failure(message, sensitive),
                 };
-                self.out.rule_errors.push(RuleError {
+                self.push_error(RuleError {
                     rule: self.linter.infos[i].name.to_string(),
                     resource: resource.map(|r| r.address.to_string()),
                     message,
@@ -253,16 +290,25 @@ impl RuleRun<'_> {
         j: Judgement,
         sensitive: bool,
     ) {
+        if self.results_refused {
+            return;
+        }
         let info = &self.linter.infos[i];
-        self.out.findings.extend(Finding::build(
+        let built = Finding::build(
             info,
             resource,
             protect(info, j, sensitive),
             &self.analysis.root_dir,
-        ));
+        );
+        // A resource that cannot exist yields no finding and consumes no allowance.
+        if let Some(finding) = built
+            && self.admit_result()
+        {
+            self.out.findings.push(finding);
+        }
     }
 
-    fn graphs(&mut self, storage: &tf_limits::input::InputBudget) {
+    fn graphs(&mut self) {
         let rules = self.linter.graph_rules(self.analysis);
         if rules.is_empty() {
             return;
@@ -270,14 +316,14 @@ impl RuleRun<'_> {
         let built = tf_semantic::graph::ResourceGraph::with_budget(
             self.analysis,
             self.budget.work(),
-            storage,
+            self.storage,
         );
         let graph = match built {
             Ok(graph) => graph,
             Err(exhaustion) => {
                 // No graph rule ran: each records the typed refusal, never an empty verdict.
                 for i in rules {
-                    self.out.rule_errors.push(RuleError {
+                    self.push_error(RuleError {
                         rule: self.linter.infos[i].name.to_string(),
                         resource: None,
                         message: exhaustion.to_string(),
@@ -319,6 +365,9 @@ impl RuleRun<'_> {
                     match subject {
                         Subject::Resource(r) => self.finding(i, r, j, self.sensitive),
                         Subject::File { module, file } => {
+                            if !self.admit_result() {
+                                continue;
+                            }
                             let source = config
                                 .iter()
                                 .find(|c| c.source.id == file)

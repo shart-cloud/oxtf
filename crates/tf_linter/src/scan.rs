@@ -432,6 +432,7 @@ pub fn scan_with_files(
     }
     diagnostics.retain(|d| d.code != "coverage-storage");
     diagnostics.extend(files.limit_diagnostic());
+    diagnostics.extend(files.results_diagnostic());
     let stats = ScanStats {
         roots: roots.len(),
         module_instances,

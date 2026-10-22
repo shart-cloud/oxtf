@@ -116,6 +116,16 @@ impl FileTable {
         })
     }
 
+    /// Terminal evidence that results were truncated, outside the results allowance.
+    pub fn results_diagnostic(&self) -> Option<crate::Diagnostic> {
+        Some(crate::Diagnostic {
+            severity: crate::DiagSeverity::Warning,
+            code: "coverage-results",
+            message: self.input.results_exhaustion()?.to_string(),
+            at: None,
+        })
+    }
+
     /// Installed package files may be scanned but must not be auto-edited.
     pub fn protect_dir(&self, dir: &Path) {
         let mut dirs = self.protected.write().unwrap();

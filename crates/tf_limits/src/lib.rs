@@ -38,6 +38,9 @@ pub const ARENA_BYTES_DEFAULT: u64 = 256 * 1024 * 1024;
 pub const COLLECTION_BYTES_DEFAULT: u64 = 256 * 1024 * 1024;
 pub const TEXT_BYTES_DEFAULT: u64 = 256 * 1024 * 1024;
 pub const AST_NODES_DEFAULT: u64 = 4_000_000;
+/// Findings plus rule errors per scan. Both scale with rules × resources.
+/// About 190 times the largest measured corpus scan; see docs/LIMITS.md.
+pub const RESULTS_DEFAULT: u64 = 100_000;
 
 const _: () = assert!(JSON_DEPTH_MAX <= AST_DEPTH_MAX);
 const _: () = assert!(PRODUCT_ROWS_MAX <= PRODUCT_VALUES_MAX);
@@ -59,6 +62,7 @@ pub struct Limits {
     ast_nodes: NonZeroU64,
     text_bytes: NonZeroU64,
     collection_bytes: NonZeroU64,
+    results: NonZeroU64,
 }
 
 impl Limits {
@@ -80,6 +84,7 @@ impl Limits {
             ast_nodes: NonZeroU64::new(AST_NODES_DEFAULT).expect("positive default"),
             text_bytes: NonZeroU64::new(TEXT_BYTES_DEFAULT).expect("positive default"),
             collection_bytes: NonZeroU64::new(COLLECTION_BYTES_DEFAULT).expect("positive default"),
+            results: NonZeroU64::new(RESULTS_DEFAULT).expect("positive default"),
         })
     }
 
@@ -202,6 +207,15 @@ impl Limits {
         self.collection_bytes.get()
     }
 
+    pub fn with_results(mut self, value: u64) -> Result<Self, InvalidLimits> {
+        self.results = NonZeroU64::new(value).ok_or(InvalidLimits("results"))?;
+        Ok(self)
+    }
+
+    pub fn results(self) -> u64 {
+        self.results.get()
+    }
+
     pub fn ast_nodes(self) -> u64 {
         self.ast_nodes.get()
     }
@@ -239,6 +253,7 @@ pub enum Resource {
     AstNodes,
     TextBytes,
     CollectionBytes,
+    Results,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -282,6 +297,7 @@ impl fmt::Display for Exhaustion {
             Resource::AstNodes => "ast_nodes",
             Resource::TextBytes => "text_bytes",
             Resource::CollectionBytes => "collection_bytes",
+            Resource::Results => "results",
         };
         let scope = match self.resource {
             Resource::EvaluationSteps
@@ -376,6 +392,27 @@ mod tests {
         assert_eq!(budget.used(), 3);
         assert_eq!(budget.charge(0), Err(failure));
         assert_eq!(budget.charge(1), Err(failure));
+    }
+
+    #[test]
+    fn results_are_counted_independently_of_storage_exhaustion() {
+        assert!(Limits::default().with_results(0).is_err());
+        let budget = input::InputBudget::new(Limits::default().with_results(2).unwrap());
+        assert!(budget.admit_collection(u64::MAX).is_err());
+        assert!(budget.exhaustion().is_some());
+        assert_eq!(budget.admit_result(), Ok(()));
+        assert_eq!(budget.admit_result(), Ok(()));
+        assert_eq!(budget.results_exhaustion(), None);
+        let refused = budget.admit_result().unwrap_err();
+        assert_eq!(refused.resource, Resource::Results);
+        assert_eq!(refused.to_string(), "results exceeds scan allowance 2");
+        assert_eq!(budget.results_exhaustion(), Some(refused));
+        assert_eq!(budget.admit_result(), Err(refused));
+        assert_eq!(budget.stats().results, 2);
+        assert_eq!(
+            budget.exhaustion().unwrap().resource,
+            Resource::CollectionBytes
+        );
     }
 
     #[test]

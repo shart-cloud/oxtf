@@ -50,7 +50,7 @@ def test_invalid_budgets_fail_before_inputs(tmp_path, limits):
 
 
 @pytest.mark.parametrize("field", [
-    "input_bytes", "source_bytes", "file_entries", "directory_entries", "roots", "rego_time_ms", "arena_bytes", "ast_nodes", "text_bytes", "collection_bytes"
+    "input_bytes", "source_bytes", "file_entries", "directory_entries", "roots", "rego_time_ms", "arena_bytes", "ast_nodes", "text_bytes", "collection_bytes", "results"
 ])
 def test_invalid_storage_and_backend_limits_fail_before_inputs(tmp_path, field):
     for value in [0, -1, True, None, 1.0, "1", 2**64]:
@@ -352,3 +352,19 @@ def test_variable_file_cache_admission_reaches_python(tmp_path, filename, conten
         assert result.status == "incomplete"
         assert sum(d["code"] == "coverage-storage" for d in result.diagnostics) == 1
         assert not any(d["code"] == "parse-error" for d in result.diagnostics)
+
+
+def test_results_allowance_truncates_with_a_terminal_diagnostic(tmp_path):
+    (tmp_path / "main.tf").write_text(
+        'resource "aws_db_instance" "a" { storage_encrypted = false }\n'
+        'resource "aws_db_instance" "b" { storage_encrypted = false }\n'
+    )
+    select = ["aws-rds-unencrypted"]
+    complete = tfscan.scan(tmp_path, bundled=False, select=select, limits={"results": 2})
+    assert complete.status == "complete"
+    assert len(complete.findings) == 2
+    limited = tfscan.scan(tmp_path, bundled=False, select=select, limits={"results": 1})
+    assert limited.status == "incomplete"
+    assert len(limited.findings) == 1
+    terminal = [d for d in limited.diagnostics if d["code"] == "coverage-results"]
+    assert [d["message"] for d in terminal] == ["results exceeds scan allowance 1"]

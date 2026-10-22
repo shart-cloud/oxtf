@@ -543,3 +543,29 @@ stay below the 10% elapsed/RSS gate.
 The accepted sixteenth-slice probe is preserved for the next comparison at
 `/tmp/oxtf-scan-after-graph`, SHA-256
 `bea75d3bb1ec94a8213e4037592c7c33a27bbf57b68dca421e81811f5095eb71`.
+
+## Results checks
+
+The seventeenth TigerStyle slice adds the scan-wide `results` allowance for
+findings and rule errors. `tf_limits` tests the counter's independence from
+storage exhaustion; the linter tests cover exact boundaries, stopped hooks and the
+kept refused rule error; the scan test covers the terminal `coverage-results`
+diagnostic, incomplete status, fix refusal and the strict wire format. Python
+tests cover the same diagnostic and invalid values.
+
+Use the commands in "Graph and provenance checks", with the paired comparison:
+
+```sh
+python3 bench/collection_limits.py --before /tmp/oxtf-scan-after-graph \
+  --baseline-record bench/results/tigerstyle-graph.json --repeats 5 \
+  --output bench/results/tigerstyle-results.json
+```
+
+Final seventeenth-slice validation: 571 Rust workspace checks pass (two existing
+ignored tests), including the unchanged native baseline, and 349 Python checks
+pass with Terraform required. Clippy and formatting pass. All eight paired cases
+stay below the 10% elapsed/RSS gate.
+
+The accepted seventeenth-slice probe is preserved at
+`/tmp/oxtf-scan-after-results`, SHA-256
+`db008b9022e5e7dadefbd67c3b41b5f647e73145c22da26da416d14ed1fe850e`.

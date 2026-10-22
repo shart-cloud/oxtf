@@ -405,7 +405,8 @@ def scan(
     and ``roots`` (4,096). Arena construction uses ``arena_bytes`` (256 MiB)
     and ``ast_nodes`` (4,000,000) per scan. Evaluator text construction uses
     ``text_bytes`` (256 MiB) per scan. Builtin collection payload uses
-    ``collection_bytes`` (256 MiB) per scan. Children and template files share
+    ``collection_bytes`` (256 MiB) per scan. Findings plus rule errors use
+    ``results`` (100,000) per scan. Children and template files share
     the runtime allowance; cached override defaults
     consume the loader allowance. Analysis exhaustion reports ``incomplete``;
     rule exhaustion reports ``failed`` and stops later hooks for that root. See

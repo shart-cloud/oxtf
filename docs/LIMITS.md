@@ -21,6 +21,7 @@ scheduling; elapsed Rego time also depends on machine load.
 | `ast_nodes` | 4,000,000 per scan | Positive `u64` integer |
 | `text_bytes` | 256 MiB per scan | Positive `u64` integer |
 | `collection_bytes` | 256 MiB per scan | Positive `u64` integer |
+| `results` | 100,000 per scan | Positive `u64` integer |
 
 An omitted setting uses the default. Unknown names, null, booleans, fractions,
 negative values, and zero are rejected. Zero does not disable accounting.
@@ -639,13 +640,33 @@ at most one list; refusal is sticky and the evaluator's next charge stops the
 root with a typed limit. Lists copied outside evaluation (analyzer projections)
 are copies of already-admitted lists and are not charged again.
 
+## Results admission
+
+`results` counts findings and rule errors across the whole scan. Both scale with
+rules × resources, unlike diagnostics, rendering and Python conversion, which are
+linear in admitted input or in these capped results. A finding is admitted after
+it is built, so a resource that cannot exist consumes nothing. The counter is
+independent of the sticky storage flag: an earlier storage refusal keeps completed
+resources, and their results remain recordable.
+
+On the first refusal the root stops running later hooks, and the scan appends a
+terminal `coverage-results` diagnostic (`results exceeds scan allowance N`) outside
+the allowance, so status is at least `incomplete` and fix verification is
+refused. One refused rule error is still kept, so an established rule failure
+keeps `failed` precedence over incomplete. Plan scans share the scan file table's
+allowance; `Linter::run_with_limits` without sources uses a local allowance and
+reports `RunOutput.results_exhaustion`.
+
+The default is about 190 times the largest measured corpus scan (507 findings
+and 14 rule errors with the standard catalog).
+
 ## Remaining scope
 
 Input, arena, evaluator text, builtin, expression, semantic conversion, analyzer
 model and parsed-definition metadata admission do not bound line indexes,
 parser scratch strings, paths, remaining value containers and source-table metadata,
-plan models, findings, diagnostics, output
-serialization, or Python argument/result conversion. Retained models and active
+plan models, diagnostics, output serialization, or Python argument/result
+conversion (findings and rule errors use `results`). Retained models and active
 workers still need memory admission. Native rules and Python callbacks charge
 hook admission; native Checkov predicates, structural
 module composition, and many builtin internals remain outside counted work.
@@ -1294,3 +1315,25 @@ and fingerprints are retained in
 Collection payload rises from 52,557,488 bytes to 55,307,688 (seed) and
 55,669,672 (standard): provenance unions plus graph edges, which only graph
 rules build. The default 256 MiB allowance has 4.82× observed headroom.
+
+## Results measurements
+
+The paired comparison uses the accepted sixteenth-slice probe as the before
+executable, five alternating pairs per case.
+
+| Catalog | Workers | Keep models | Before ms | After ms | Elapsed change | Peak RSS change |
+| --- | ---: | --- | ---: | ---: | ---: | ---: |
+| seed | 1 | false | 743.56 | 735.48 | -1.09% | +0.09% |
+| seed | 1 | true | 788.62 | 806.92 | +2.32% | +0.12% |
+| seed | 4 | false | 281.22 | 295.61 | +5.12% | -0.99% |
+| seed | 4 | true | 352.23 | 359.04 | +1.93% | -0.78% |
+| standard | 1 | false | 1312.49 | 1229.64 | -6.31% | +0.09% |
+| standard | 1 | true | 1229.12 | 1237.99 | +0.72% | -0.05% |
+| standard | 4 | false | 409.98 | 407.87 | -0.51% | -0.03% |
+| standard | 4 | true | 473.18 | 464.26 | -1.88% | -0.06% |
+
+All eight per-case medians remain below the 10% investigation gate; accept
+without repeated measurements. Findings, errors, status and every input/arena/
+text/collection counter match exactly: results admission adds no collection
+payload. Raw samples are retained in
+[`tigerstyle-results.json`](../bench/results/tigerstyle-results.json).

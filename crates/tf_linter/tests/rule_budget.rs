@@ -160,3 +160,101 @@ fn discarded_charge_failure_cannot_be_reported_as_success() {
     }
     assert_eq!(*calls.lock().unwrap(), ["resource", "resource"]);
 }
+
+/// Emits `per_resource` findings, or fails, on every resource.
+struct Flood {
+    per_resource: usize,
+    fail: bool,
+}
+
+impl DynRule for Flood {
+    fn info(&self) -> RuleInfo {
+        let mut info = tf_linter::rules::all()[0].info();
+        info.name = "test-flood".into();
+        info.resource_types = vec!["*".into()];
+        info.runs_on_module = false;
+        info
+    }
+    fn judge_resource(&self, _: &Resource) -> Result<Vec<Judgement>, String> {
+        if self.fail {
+            return Err("ordinary failure".into());
+        }
+        let judgement = Judgement {
+            certainty: tf_linter::Certainty::Definite,
+            witness: None,
+            message: "flood".into(),
+            hidden: Vec::new(),
+            fix_hint: None,
+        };
+        Ok(vec![judgement; self.per_resource])
+    }
+    fn judge_module<'m>(&self, _: &'m Module) -> Result<Vec<(&'m Resource, Judgement)>, String> {
+        Ok(Vec::new())
+    }
+}
+
+fn resources(count: usize) -> Analysis {
+    let source: String = (0..count)
+        .map(|i| format!("resource \"test_resource\" \"r{i}\" {{}}\n"))
+        .collect();
+    let files = FileTable::with_overlay([("/nonexistent/flood/main.tf".into(), source.into())]);
+    tf_semantic::analyze_module(
+        Path::new("/nonexistent/flood"),
+        &AnalyzeOptions::default(),
+        &files,
+    )
+}
+
+#[test]
+fn findings_stop_at_the_results_allowance_and_later_hooks_do_not_run() {
+    let linter = Linter::new(vec![Box::new(Flood {
+        per_resource: 3,
+        fail: false,
+    })]);
+    let analysis = resources(4);
+    let unlimited = linter.run_with_limits(&analysis, None, tf_limits::Limits::default());
+    assert_eq!(unlimited.findings.len(), 12);
+    assert!(unlimited.results_exhaustion.is_none());
+    for allowance in [1, 5, 11, 12] {
+        let limits = tf_limits::Limits::default()
+            .with_results(allowance)
+            .unwrap();
+        let storage = tf_limits::input::InputBudget::new(limits);
+        let out = linter.run_with_storage(&analysis, None, limits, &storage);
+        assert_eq!(out.findings.len() as u64, allowance);
+        assert!(out.rule_errors.is_empty());
+        assert_eq!(
+            out.results_exhaustion.is_some(),
+            allowance < 12,
+            "{allowance}"
+        );
+        // Hooks stop once refused: one resource beyond the boundary at most.
+        assert!(out.rule_steps <= allowance.div_ceil(3) + 1, "{allowance}");
+        assert_eq!(storage.stats().results, allowance);
+    }
+}
+
+#[test]
+fn a_refused_rule_error_is_kept_so_failure_keeps_precedence() {
+    let linter = Linter::new(vec![Box::new(Flood {
+        per_resource: 0,
+        fail: true,
+    })]);
+    let limits = tf_limits::Limits::default().with_results(1).unwrap();
+    let out = linter.run_with_limits(&resources(4), None, limits);
+    assert_eq!(
+        out.rule_errors.len(),
+        2,
+        "one admitted, one kept past the boundary"
+    );
+    assert!(
+        out.rule_errors
+            .iter()
+            .all(|e| e.message.contains("ordinary failure"))
+    );
+    assert_eq!(out.rule_steps, 2);
+    assert_eq!(
+        out.results_exhaustion.unwrap().resource,
+        tf_limits::Resource::Results
+    );
+}
