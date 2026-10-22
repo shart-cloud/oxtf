@@ -2097,7 +2097,7 @@ dependencies = [
 
 [[package]]
 name = "tf_allocator"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "bumpalo",
  "tf_limits",
@@ -2105,7 +2105,7 @@ dependencies = [
 
 [[package]]
 name = "tf_ast"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "tf_allocator",
  "tf_span",
@@ -2113,7 +2113,7 @@ dependencies = [
 
 [[package]]
 name = "tf_ast_codegen"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "prettyplease",
  "proc-macro2",
@@ -2123,7 +2123,7 @@ dependencies = [
 
 [[package]]
 name = "tf_cli"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "miette",
  "mimalloc",
@@ -2135,7 +2135,7 @@ dependencies = [
 
 [[package]]
 name = "tf_eval"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "md-5",
  "regex",
@@ -2151,7 +2151,7 @@ dependencies = [
 
 [[package]]
 name = "tf_fetch"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "flate2",
  "libc",
@@ -2168,11 +2168,11 @@ dependencies = [
 
 [[package]]
 name = "tf_limits"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "tf_linter"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "miette",
  "rayon",
@@ -2188,7 +2188,7 @@ dependencies = [
 
 [[package]]
 name = "tf_parser"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "hcl-edit",
  "insta",
@@ -2202,7 +2202,7 @@ dependencies = [
 
 [[package]]
 name = "tf_plan"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "serde_json",
  "tf_eval",
@@ -2215,7 +2215,7 @@ dependencies = [
 
 [[package]]
 name = "tf_rego"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "regorus",
@@ -2234,7 +2234,7 @@ dependencies = [
 
 [[package]]
 name = "tf_rule_ir"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "regex",
  "rustc-hash",
@@ -2250,7 +2250,7 @@ dependencies = [
 
 [[package]]
 name = "tf_scan"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2266,7 +2266,7 @@ dependencies = [
 
 [[package]]
 name = "tf_schema"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "phf 0.14.0",
  "postcard",
@@ -2275,7 +2275,7 @@ dependencies = [
 
 [[package]]
 name = "tf_schema_codegen"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "phf_codegen",
  "postcard",
@@ -2287,7 +2287,7 @@ dependencies = [
 
 [[package]]
 name = "tf_semantic"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "elsa",
  "rustc-hash",
@@ -2305,11 +2305,11 @@ dependencies = [
 
 [[package]]
 name = "tf_span"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "tf_yaml"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "serde_json",
  "yaml-rust2",
@@ -2317,7 +2317,7 @@ dependencies = [
 
 [[package]]
 name = "tfscan_py"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",
@@ -2338,7 +2338,7 @@ dependencies = [
 
 [[package]]
 name = "tfscan_stubgen"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "serde",
  "tf_schema",

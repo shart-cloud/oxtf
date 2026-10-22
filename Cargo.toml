@@ -4,7 +4,7 @@ members = ["crates/*"]
 
 [workspace.package]
 edition = "2024"
-version = "0.0.0"
+version = "0.1.0"
 license = "MIT"
 publish = false
 
@@ -51,3 +51,9 @@ regorus = { git = "https://github.com/jlgore/regorus", rev = "b395fb851e73d94a61
 # #[expect(clippy::too_many_lines)]; an expectation that no longer fires fails
 # the build, so the allowlist only shrinks.
 too_many_lines = "warn"
+
+# Release artifacts: the release profile without debug info, stripped.
+[profile.dist]
+inherits = "release"
+debug = false
+strip = true

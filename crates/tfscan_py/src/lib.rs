@@ -1667,6 +1667,8 @@ fn fetch(
 
 #[pymodule]
 fn _tfscan(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
+    m.add("CHECKOV_VERSION", tf_scan::CHECKOV_VERSION)?;
     m.add_class::<ScanResult>()?;
     m.add_class::<Finding>()?;
     m.add_class::<Resource>()?;

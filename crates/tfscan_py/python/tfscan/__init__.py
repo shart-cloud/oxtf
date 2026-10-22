@@ -33,7 +33,10 @@ from ._tfscan import (
 )
 from .expr import Expr, Rule, all_of, any_of, col, element, lit, load_rules, rule, save_rules
 
-__version__ = "0.0.1"
+#: The engine's version (one source: the Cargo workspace).
+__version__: str = _tfscan.__version__
+#: The Checkov release whose Terraform checks are bundled.
+CHECKOV_VERSION: str = _tfscan.CHECKOV_VERSION
 
 __all__ = [
     "fetch",
