@@ -874,10 +874,9 @@ fn profiles_pick_the_shipped_rules() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-#[test]
-#[expect(clippy::too_many_lines)]
-fn explicit_fetch_enables_offline_counted_module_scans() {
-    let base = std::env::temp_dir().join(format!("oxtf-cli-fetch-{}", std::process::id()));
+/// A committed local Git package with one unencrypted database, and an empty root.
+fn git_package(name: &str) -> (std::path::PathBuf, std::path::PathBuf, std::path::PathBuf) {
+    let base = std::env::temp_dir().join(format!("oxtf-cli-{name}-{}", std::process::id()));
     let package = base.join("package");
     let root = base.join("root");
     std::fs::create_dir_all(&package).unwrap();
@@ -908,6 +907,12 @@ fn explicit_fetch_enables_offline_counted_module_scans() {
             .unwrap();
         assert!(status.success());
     }
+    (base, package, root)
+}
+
+#[test]
+fn explicit_fetch_enables_offline_counted_module_scans() {
+    let (base, package, root) = git_package("fetch");
     std::fs::write(
         root.join("main.tf"),
         format!(
@@ -953,4 +958,123 @@ fn explicit_fetch_enables_offline_counted_module_scans() {
             .is_some()
     );
     assert!(record["findings"][0]["fix_hint"].is_null());
+}
+
+fn scan_json(args: &[&str], path: &std::path::Path) -> (Option<i32>, serde_json::Value) {
+    let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .args(["scan", "--no-bundled", "-f", "json"])
+        .args(args)
+        .arg(path)
+        .output()
+        .unwrap();
+    let record = serde_json::from_slice(&out.stdout).unwrap_or_else(|_| {
+        panic!("{}", String::from_utf8_lossy(&out.stderr));
+    });
+    (out.status.code(), record)
+}
+
+fn codes(record: &serde_json::Value) -> Vec<&str> {
+    record["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|d| d["code"].as_str().unwrap())
+        .collect()
+}
+
+#[test]
+fn scan_fetch_installs_only_roots_that_need_modules() {
+    let (base, package, root) = git_package("scan-fetch");
+    let module = format!(
+        "module \"m\" {{\nsource = \"git::file://{}\"\n}}\n",
+        package.display()
+    );
+    std::fs::write(root.join("main.tf"), &module).unwrap();
+    let local = base.join("local");
+    std::fs::create_dir_all(&local).unwrap();
+    std::fs::write(local.join("main.tf"), "locals { a = 1 }\n").unwrap();
+    let (code, before) = scan_json(&["-r"], &base);
+    assert_eq!(code, Some(3));
+    assert!(codes(&before).contains(&"coverage-module-not-installed"));
+    let statuses: Vec<_> = before["roots"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["status"].as_str().unwrap())
+        .collect();
+    assert!(
+        statuses.contains(&"incomplete") && statuses.contains(&"complete"),
+        "{statuses:?}"
+    );
+
+    let (code, after) = scan_json(&["-r", "--fetch"], &base);
+    assert_eq!(code, Some(1), "{after}");
+    assert_eq!(after["status"], "complete");
+    assert_eq!(after["findings"][0]["rule"], "aws-rds-unencrypted");
+    assert!(root.join(".terraform/modules/modules.json").is_file());
+    assert!(
+        !local.join(".terraform").exists(),
+        "a root without remote modules is not touched"
+    );
+    assert!(!package.join(".terraform").exists());
+}
+
+#[test]
+fn scan_fetch_reports_a_root_it_cannot_install() {
+    let (base, package, root) = git_package("scan-fetch-missing");
+    let missing = package.with_file_name("missing");
+    let module = format!(
+        "module \"m\" {{\nsource = \"git::file://{}\"\n}}\n",
+        missing.display()
+    );
+    std::fs::write(root.join("main.tf"), module).unwrap();
+    let (code, record) = scan_json(&["--fetch"], &root);
+    assert_eq!(code, Some(3));
+    assert_eq!(record["status"], "incomplete");
+    let diagnostics = codes(&record);
+    assert!(diagnostics.contains(&"coverage-fetch"), "{diagnostics:?}");
+    assert!(
+        diagnostics.contains(&"coverage-module-not-installed"),
+        "{diagnostics:?}"
+    );
+    std::fs::remove_dir_all(&base).ok();
+}
+
+#[test]
+fn text_output_collapses_missing_installs_and_names_incomplete_roots() {
+    let (base, package, root) = git_package("first-run");
+    let module = format!(
+        "module \"m\" {{\nsource = \"git::file://{}\"\n}}\n",
+        package.display()
+    );
+    std::fs::write(
+        root.join("main.tf"),
+        format!("{module}{}", module.replace("\"m\"", "\"n\"")),
+    )
+    .unwrap();
+    let local = base.join("local");
+    std::fs::create_dir_all(&local).unwrap();
+    std::fs::write(local.join("main.tf"), "locals { a = 1 }\n").unwrap();
+    std::fs::remove_dir_all(&package).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .args(["scan", "--no-bundled", "-r"])
+        .arg(&base)
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    let hints: Vec<_> = text
+        .lines()
+        .filter(|l| l.contains("coverage-module-not-installed"))
+        .collect();
+    assert_eq!(hints.len(), 1, "{text}");
+    assert!(
+        hints[0].contains("2 remote module calls") && hints[0].contains("--fetch"),
+        "{text}"
+    );
+    assert!(
+        text.contains("0 failed, 1 incomplete, 1 complete"),
+        "{text}"
+    );
+    assert!(text.contains("\n  incomplete: root"), "{text}");
+    std::fs::remove_dir_all(&base).ok();
 }

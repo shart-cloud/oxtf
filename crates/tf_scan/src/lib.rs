@@ -416,6 +416,69 @@ impl From<PlanError> for ScanError {
     }
 }
 
+/// [`scan`], first installing remote modules for the roots that need them.
+/// A first scan finds roots with uninstalled modules; only those are fetched
+/// (as `oxtf fetch` would, into each root's data directory), then the request is
+/// scanned again. A root that fails to fetch keeps its not-installed diagnostics
+/// and gains a `coverage-fetch` warning. This is the only scan entry point that
+/// uses the network or writes to the scanned tree.
+pub fn scan_fetching(req: ScanRequest) -> Result<ScanOutput, ScanError> {
+    let retry = req.try_clone().ok_or_else(|| {
+        ScanError::Input("fetching rescans the request, which runtime rules prevent".into())
+    })?;
+    let data_dir = req.data_dir.clone();
+    let first = scan(req)?;
+    let pending: Vec<PathBuf> = first
+        .result
+        .roots
+        .iter()
+        .filter(|r| r.needs_install)
+        .map(|r| r.dir.clone())
+        .collect();
+    if pending.is_empty() {
+        return Ok(first);
+    }
+    drop(first);
+    let failures = fetch_roots(&pending, data_dir.as_deref());
+    let mut out = scan(retry)?;
+    out.result.diagnostics.extend(failures);
+    Ok(out)
+}
+
+/// Fetches roots concurrently, a few at a time; returns one warning per failure.
+fn fetch_roots(roots: &[PathBuf], data_dir: Option<&std::path::Path>) -> Vec<Diagnostic> {
+    const CONCURRENT: usize = 8;
+    let mut failures = Vec::new();
+    for batch in roots.chunks(CONCURRENT) {
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = batch
+                .iter()
+                .map(|root| {
+                    scope.spawn(move || {
+                        let mut request = FetchRequest::new(root);
+                        request.data_dir = data_dir.map(PathBuf::from);
+                        fetch(request).err().map(|error| (root, error))
+                    })
+                })
+                .collect();
+            for handle in handles {
+                if let Some((root, error)) = handle.join().expect("fetch worker") {
+                    failures.push(Diagnostic {
+                        severity: DiagSeverity::Warning,
+                        code: "coverage-fetch",
+                        message: format!(
+                            "{}: modules could not be fetched: {error}",
+                            root.display()
+                        ),
+                        at: None,
+                    });
+                }
+            }
+        });
+    }
+    failures
+}
+
 /// Run one request. The catalog is resolved and the selection validated
 /// before any input is read, so a bad rule id never costs a parse.
 #[expect(clippy::too_many_lines)]

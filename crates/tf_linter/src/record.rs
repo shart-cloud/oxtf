@@ -690,6 +690,17 @@ pub struct ScanRecord {
     /// Findings a `checkov:skip` line suppressed.
     #[serde(default)]
     pub suppressed: Vec<SuppressedRecord>,
+    /// Each scanned root's own completion. `status` also reflects scan-wide
+    /// limits, so a complete root can sit inside an incomplete scan.
+    #[serde(default)]
+    pub roots: Vec<RootRecord>,
+}
+
+/// A root module directory and its own [`crate::ScanStatus`].
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct RootRecord {
+    pub path: String,
+    pub status: crate::ScanStatus,
 }
 
 /// A suppressed finding: `rule`, `resource` (address), the `comment`'s
@@ -737,6 +748,14 @@ impl ScanRecord {
                     resource: s.address.to_string(),
                     comment: s.comment.clone(),
                     location: location(&r.files, s.at),
+                })
+                .collect(),
+            roots: r
+                .roots
+                .iter()
+                .map(|root| RootRecord {
+                    path: root.dir.display().to_string(),
+                    status: root.status,
                 })
                 .collect(),
         }

@@ -342,6 +342,15 @@ impl<'a, 'o> Analyzer<'a, 'o> {
             Err(crate::installed::ResolveError::Storage(error)) => {
                 Err(Value::limit(error.to_string()))
             }
+            Err(crate::installed::ResolveError::NotInstalled(message)) => {
+                self.diag(
+                    DiagSeverity::Warning,
+                    "coverage-module-not-installed", // tf_linter::scan::NOT_INSTALLED
+                    format!("module.{}: {message}; source was not evaluated", call.name),
+                    Some(at),
+                );
+                Ok(None)
+            }
             Err(crate::installed::ResolveError::Invalid(message)) => {
                 self.diag(
                     DiagSeverity::Warning,

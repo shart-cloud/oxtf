@@ -43,6 +43,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/baseline/sibling",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-s3-public-access-block": {
@@ -124,6 +130,12 @@
             "name": "b",
             "type": "aws_s3_bucket"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/baseline/transformed",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -239,6 +251,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-iam-wildcard-policy/fail_dynamic_statements",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-iam-wildcard-policy": {
@@ -339,6 +357,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-iam-wildcard-policy/fail_heredoc_json",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-iam-wildcard-policy": {
@@ -437,6 +461,12 @@
             "name": "admin",
             "type": "aws_iam_policy"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_inline",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -552,6 +582,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_via_local_and_list",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-iam-wildcard-policy": {
@@ -665,6 +701,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_data_source",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-iam-wildcard-policy": {
@@ -704,6 +746,12 @@
     "plan:fixtures/plans/aws-iam-wildcard-policy/pass_policy_document_deny.json": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-iam-wildcard-policy/pass_policy_document_deny",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -725,6 +773,12 @@
     "plan:fixtures/plans/aws-iam-wildcard-policy/pass_scoped.json": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-iam-wildcard-policy/pass_scoped",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -840,6 +894,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-rds-unencrypted": {
@@ -879,6 +939,12 @@
     "plan:fixtures/plans/aws-rds-unencrypted/conditional_unconstrained_variable__pass.json": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -979,6 +1045,12 @@
             "name": "db",
             "type": "aws_db_instance"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -1099,6 +1171,12 @@
             "name": "db",
             "type": "aws_db_instance"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-rds-unencrypted/fail_explicit_false",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -1234,6 +1312,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-rds-unencrypted": {
@@ -1273,6 +1357,12 @@
     "plan:fixtures/plans/aws-rds-unencrypted/pass_encrypted.json": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-rds-unencrypted/pass_encrypted",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -1380,6 +1470,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-s3-public-access-block/conditional_unconstrained_variable",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-s3-public-access-block": {
@@ -1419,6 +1515,12 @@
     "plan:fixtures/plans/aws-s3-public-access-block/conditional_unconstrained_variable__pass.json": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-s3-public-access-block/conditional_unconstrained_variable",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -1513,6 +1615,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-s3-public-access-block/fail_block_attrs_absent_default_false",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-s3-public-access-block": {
@@ -1591,6 +1699,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-s3-public-access-block/fail_block_for_other_bucket",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-s3-public-access-block": {
@@ -1667,6 +1781,12 @@
             "name": "logs",
             "type": "aws_s3_bucket"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-s3-public-access-block/fail_missing_block",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -1781,6 +1901,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-s3-public-access-block/fail_permissive_block",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-s3-public-access-block": {
@@ -1820,6 +1946,12 @@
     "plan:fixtures/plans/aws-s3-public-access-block/pass_block_via_variable.json": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-s3-public-access-block/pass_block_via_variable",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -1841,6 +1973,12 @@
     "plan:fixtures/plans/aws-s3-public-access-block/pass_full_block.json": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-s3-public-access-block/pass_full_block",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -1964,6 +2102,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-sg-open-ssh/conditional_unconstrained_variable",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-sg-open-ssh": {
@@ -2003,6 +2147,12 @@
     "plan:fixtures/plans/aws-sg-open-ssh/conditional_unconstrained_variable__pass.json": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-sg-open-ssh/conditional_unconstrained_variable",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -2139,6 +2289,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-sg-open-ssh/fail_dynamic_block",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-sg-open-ssh": {
@@ -2267,6 +2423,12 @@
             "name": "web",
             "type": "aws_security_group"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-sg-open-ssh/fail_inline_literal",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -2485,6 +2647,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-sg-open-ssh/fail_port_range_and_all_protocols",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-sg-open-ssh": {
@@ -2626,6 +2794,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-sg-open-ssh": {
@@ -2726,6 +2900,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-sg-open-ssh/fail_vpc_ingress_rule",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-sg-open-ssh": {
@@ -2765,6 +2945,12 @@
     "plan:fixtures/plans/aws-sg-open-ssh/pass_dynamic_restricted.json": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-sg-open-ssh/pass_dynamic_restricted",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -2786,6 +2972,12 @@
     "plan:fixtures/plans/aws-sg-open-ssh/pass_restricted.json": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-sg-open-ssh/pass_restricted",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -2807,6 +2999,12 @@
     "plan:fixtures/plans/aws-sg-open-ssh/pass_tfvars_overrides_open_default.json": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-sg-open-ssh/pass_tfvars_overrides_open_default",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -2897,6 +3095,12 @@
             "name": "b",
             "type": "google_storage_bucket"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/rules/gcp-storage-uniform-access/fail_absent",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -3034,6 +3238,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/gcp-storage-uniform-access/fail_false_via_local",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "gcp-storage-uniform-access": {
@@ -3075,6 +3285,12 @@
     "plan:fixtures/plans/gcp-storage-uniform-access/pass_enabled.json": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/gcp-storage-uniform-access/pass_enabled",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -3133,6 +3349,12 @@
             "name": "b",
             "type": "aws_s3_bucket"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/baseline/computed",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -3213,6 +3435,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/baseline/local",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-s3-public-access-block": {
@@ -3289,6 +3517,12 @@
             "name": "b",
             "type": "aws_s3_bucket"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/baseline/sibling",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -3372,6 +3606,12 @@
             "name": "b",
             "type": "aws_s3_bucket"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/baseline/transformed",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -3531,6 +3771,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-iam-wildcard-policy/fail_dynamic_statements",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-iam-wildcard-policy": {
@@ -3629,6 +3875,12 @@
             "name": "admin",
             "type": "aws_iam_user_policy"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-iam-wildcard-policy/fail_heredoc_json",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -3747,6 +3999,12 @@
             "name": "admin",
             "type": "aws_iam_policy"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_inline",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -3888,6 +4146,12 @@
             "name": "admin",
             "type": "aws_iam_role_policy"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_via_local_and_list",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -4060,6 +4324,12 @@
             "name": "admin",
             "type": "aws_iam_policy"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_data_source",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -4258,6 +4528,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_dynamic_statement",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-iam-wildcard-policy": {
@@ -4297,6 +4573,12 @@
     "source:fixtures/rules/aws-iam-wildcard-policy/pass_policy_document_deny": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-iam-wildcard-policy/pass_policy_document_deny",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -4318,6 +4600,12 @@
     "source:fixtures/rules/aws-iam-wildcard-policy/pass_scoped": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-iam-wildcard-policy/pass_scoped",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -4418,6 +4706,12 @@
             "name": "db",
             "type": "aws_db_instance"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-rds-unencrypted/conditional_count_tainted_alternative",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -4553,6 +4847,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-rds-unencrypted": {
@@ -4661,6 +4961,12 @@
             "name": "db",
             "type": "aws_db_instance"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -4781,6 +5087,12 @@
             "name": "db",
             "type": "aws_db_instance"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-rds-unencrypted/fail_explicit_false",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -4923,6 +5235,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-rds-unencrypted": {
@@ -4962,6 +5280,12 @@
     "source:fixtures/rules/aws-rds-unencrypted/pass_encrypted": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-rds-unencrypted/pass_encrypted",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -5067,6 +5391,12 @@
             "name": "data",
             "type": "aws_s3_bucket"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-s3-public-access-block/conditional_unconstrained_variable",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -5175,6 +5505,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-s3-public-access-block/fail_block_attrs_absent_default_false",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-s3-public-access-block": {
@@ -5253,6 +5589,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-s3-public-access-block/fail_block_for_other_bucket",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-s3-public-access-block": {
@@ -5329,6 +5671,12 @@
             "name": "logs",
             "type": "aws_s3_bucket"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-s3-public-access-block/fail_missing_block",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -5443,6 +5791,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-s3-public-access-block/fail_permissive_block",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-s3-public-access-block": {
@@ -5482,6 +5836,12 @@
     "source:fixtures/rules/aws-s3-public-access-block/pass_block_via_variable": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-s3-public-access-block/pass_block_via_variable",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -5503,6 +5863,12 @@
     "source:fixtures/rules/aws-s3-public-access-block/pass_escaped_instance_key": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-s3-public-access-block/pass_escaped_instance_key",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -5524,6 +5890,12 @@
     "source:fixtures/rules/aws-s3-public-access-block/pass_full_block": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-s3-public-access-block/pass_full_block",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -5617,6 +5989,12 @@
             "name": "maybe",
             "type": "aws_security_group"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-sg-open-ssh/conditional_unconstrained_variable",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -5779,6 +6157,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-sg-open-ssh/fail_dynamic_block",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-sg-open-ssh": {
@@ -5897,6 +6281,12 @@
             "name": "web",
             "type": "aws_security_group"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-sg-open-ssh/fail_inline_literal",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -6095,6 +6485,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-sg-open-ssh/fail_port_range_and_all_protocols",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-sg-open-ssh": {
@@ -6252,6 +6648,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-sg-open-ssh": {
@@ -6352,6 +6754,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-sg-open-ssh/fail_vpc_ingress_rule",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "aws-sg-open-ssh": {
@@ -6391,6 +6799,12 @@
     "source:fixtures/rules/aws-sg-open-ssh/pass_dynamic_restricted": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-sg-open-ssh/pass_dynamic_restricted",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -6412,6 +6826,12 @@
     "source:fixtures/rules/aws-sg-open-ssh/pass_restricted": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-sg-open-ssh/pass_restricted",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -6433,6 +6853,12 @@
     "source:fixtures/rules/aws-sg-open-ssh/pass_tfvars_overrides_open_default": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/aws-sg-open-ssh/pass_tfvars_overrides_open_default",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,
@@ -6548,6 +6974,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/gcp-storage-uniform-access/conditional_unconstrained_variable",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "gcp-storage-uniform-access": {
@@ -6658,6 +7090,12 @@
             "name": "b",
             "type": "google_storage_bucket"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/rules/gcp-storage-uniform-access/fail_absent",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -6793,6 +7231,12 @@
             "name": "b",
             "type": "google_storage_bucket"
           }
+        }
+      ],
+      "roots": [
+        {
+          "path": "fixtures/rules/gcp-storage-uniform-access/fail_false_via_local",
+          "status": "complete"
         }
       ],
       "rule_errors": [],
@@ -6943,6 +7387,12 @@
           }
         }
       ],
+      "roots": [
+        {
+          "path": "fixtures/rules/gcp-storage-uniform-access/fail_tfvars_variable",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {
         "gcp-storage-uniform-access": {
@@ -6984,6 +7434,12 @@
     "source:fixtures/rules/gcp-storage-uniform-access/pass_enabled": {
       "diagnostics": [],
       "findings": [],
+      "roots": [
+        {
+          "path": "fixtures/rules/gcp-storage-uniform-access/pass_enabled",
+          "status": "complete"
+        }
+      ],
       "rule_errors": [],
       "rules": {},
       "schema": 3,

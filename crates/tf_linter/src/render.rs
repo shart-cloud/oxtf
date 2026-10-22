@@ -278,3 +278,91 @@ pub fn finding_json(files: &FileTable, f: &Finding) -> J {
 pub fn result_json(r: &ScanResult) -> J {
     serde_json::to_value(crate::record::ScanRecord::from_result(r)).expect("scan record is JSON")
 }
+
+/// Diagnostics as text lines. Identical diagnostics reached from several roots
+/// print once. Calls whose remote modules are not installed collapse into one
+/// actionable line; JSON output keeps each call.
+pub fn diagnostics_text(files: &FileTable, diagnostics: &[tf_semantic::Diagnostic]) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut not_installed = std::collections::HashSet::new();
+    for d in diagnostics {
+        if !seen.insert((d.code, d.at, &d.message)) {
+            continue;
+        }
+        if d.code == crate::scan::NOT_INSTALLED {
+            not_installed.insert(d.at);
+            continue;
+        }
+        let at =
+            d.at.map(|x| format!("{}: ", location(files, x)))
+                .unwrap_or_default();
+        let _ = writeln!(out, "{:?} [{}] {at}{}", d.severity, d.code, d.message);
+    }
+    if !not_installed.is_empty() {
+        let _ = writeln!(
+            out,
+            "Warning [coverage-module-not-installed] {} remote module calls were not evaluated \
+             because their modules are not installed; scan with `--fetch`, or run \
+             `terraform init`, to install them",
+            not_installed.len()
+        );
+    }
+    out
+}
+
+/// Which roots did not complete, when that is narrower than the whole scan.
+/// Paths print relative to the roots' common directory. `None` when every root
+/// completed.
+pub fn roots_text(roots: &[crate::record::RootRecord]) -> Option<String> {
+    use crate::ScanStatus;
+    const SHOWN: usize = 5;
+    let count = |status| roots.iter().filter(|r| r.status == status).count();
+    let (failed, incomplete) = (count(ScanStatus::Failed), count(ScanStatus::Incomplete));
+    if failed + incomplete == 0 {
+        return None;
+    }
+    let base = common_dir(roots.iter().map(|r| std::path::Path::new(&r.path)));
+    let mut text = format!(
+        "  roots under {}: {failed} failed, {incomplete} incomplete, {} complete",
+        base.display(),
+        count(ScanStatus::Complete)
+    );
+    for status in [ScanStatus::Failed, ScanStatus::Incomplete] {
+        let paths: Vec<String> = roots
+            .iter()
+            .filter(|r| r.status == status)
+            .map(|r| relative(std::path::Path::new(&r.path), &base))
+            .collect();
+        if paths.is_empty() {
+            continue;
+        }
+        let more = paths.len().saturating_sub(SHOWN);
+        let shown = paths[..paths.len().min(SHOWN)].join(", ");
+        text.push_str(&format!("\n  {}: {shown}", status.as_str()));
+        if more > 0 {
+            text.push_str(&format!(" and {more} more"));
+        }
+    }
+    Some(text)
+}
+
+fn common_dir<'p>(mut paths: impl Iterator<Item = &'p std::path::Path>) -> std::path::PathBuf {
+    let Some(first) = paths.next() else {
+        return std::path::PathBuf::new();
+    };
+    let mut base = first.to_path_buf();
+    for path in paths {
+        while !path.starts_with(&base) && base.pop() {}
+    }
+    base
+}
+
+fn relative(path: &std::path::Path, base: &std::path::Path) -> String {
+    match path.strip_prefix(base) {
+        Ok(rest) if rest.as_os_str().is_empty() => ".".into(),
+        Ok(rest) => rest.display().to_string(),
+        Err(_) => path.display().to_string(),
+    }
+}

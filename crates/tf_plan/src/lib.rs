@@ -219,6 +219,14 @@ pub fn scan_plan_with_model(
         elapsed: start.elapsed(),
         ..ScanStats::from_findings(&findings)
     };
+    let root = tf_linter::scan::RootOutcome {
+        dir: a.root_dir.clone(),
+        status: tf_linter::scan::status_of(&a.diagnostics, &out.rule_errors),
+        needs_install: a
+            .diagnostics
+            .iter()
+            .any(|d| d.code == tf_linter::scan::NOT_INSTALLED),
+    };
     let mut diagnostics = a.diagnostics.clone();
     diagnostics.retain(|d| d.code != "coverage-storage");
     diagnostics.extend(files.limit_diagnostic());
@@ -231,6 +239,7 @@ pub fn scan_plan_with_model(
             rule_errors: out.rule_errors,
             files,
             suppressed,
+            roots: vec![root],
         },
         a,
     ))

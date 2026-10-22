@@ -204,6 +204,8 @@ def scan(
     bundled: bool = True,
     profiles: Optional[Sequence[str]] = None,
     data_dir: str | os.PathLike[str] | None = ...,
+    limits: Optional[dict[str, int]] = None,
+    fetch: bool = False,
 ) -> tuple[ScanResult, int]: ...
 def fix_finding(
     fingerprint: str,

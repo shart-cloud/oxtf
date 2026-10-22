@@ -185,7 +185,8 @@ have no automatic fix hints and are also rejected by the edit API.
     },
     "elapsed_ms": 1.2
   },
-  "suppressed": []
+  "suppressed": [],
+  "roots": [{ "path": "infra", "status": "complete" }]
 }
 ```
 
@@ -197,9 +198,10 @@ have no automatic fix hints and are also rejected by the edit API.
 | `status` | `complete`, `incomplete`, or `failed`; independent of findings. |
 | `rules` | Metadata of every rule a finding names, by ID: `category` (`network`, `storage`, `iam`, `encryption`, `other`), `level` (`low`, `medium`, `high`, `critical`: potential impact, independent of certainty), `description`, optional `rationale` (why that severity fits the check's evidence and limits), optional `remediation` (actionable steps and material migration constraints), `guideline` (documentation URL, or `null`), `source` (`engine`: `builtin`, `ir`, `checkov`, `rego`, `conftest`, `python`; the rule's `file` and `line`, `null` for built-in rules), `aliases` and `profile` (`security`, `audit`, `hygiene`, or `unreviewed`; see `--profile`). Reviewed guidance links to provider documentation; other bundled rules retain their pinned Checkov source URL. A source link alone is not remediation guidance. |
 | `findings` | One record per finding, below, ordered by file, position and rule. |
-| `diagnostics` | Parse errors, warnings and notes: `severity` (`error`, `warning`, `info`), `code`, `message`, `location` or `null`. A `rule-skipped` warning (listed first, `location` `null`) names a file in a `--rule-file` directory that did not load; its message gives the file and each reason with its line and column. The rules in that file did not run. |
+| `diagnostics` | Parse errors, warnings and notes: `severity` (`error`, `warning`, `info`), `code`, `message`, `location` or `null`. A `rule-skipped` warning (listed first, `location` `null`) names a file in a `--rule-file` directory that did not load; its message gives the file and each reason with its line and column. The rules in that file did not run. `coverage-module-not-installed` marks a remote module call with no installed-module manifest (install with `--fetch`, `oxtf fetch` or `terraform init`); other unresolved remote sources keep `coverage-remote-module`. `coverage-fetch` names a root whose modules `--fetch` could not install. An `evaluation-error` names the failing builtin when there is one (for example `expression evaluation failed in coalesce()`), never the values involved. |
 | `rule_errors` | Rules that failed to run or returned an unresolved foreign result: `rule`, `resource` (or `null`), `message`. An empty list means no execution errors were recorded for selected, applicable rules; it does not establish coverage of unsupported rules or prove that native Unknown outcomes passed. A reader must never take silence from a rule listed here as a pass. |
 | `stats` | `roots`, `module_instances`, `files`, `resources`; `findings` (findings) and `occurrences` (judgements); `definite`, `conditional`, `indeterminate` and `findings_by_rule`, counting findings; `elapsed_ms`. |
+| `roots` | Each scanned root module in scan order: `path` and its own `status`. A root is `failed` or `incomplete` by its own diagnostics and rule errors; scan-wide limits (`coverage-storage`, `coverage-results`) affect only the scan `status`, so a complete root can sit inside an incomplete scan. Records without this field (older readers) default to an empty list. |
 | `suppressed` | Judgements of Checkov-sourced rules that a `checkov:skip=ID:reason` line suppressed, as Checkov applies them (in the resource's block or an enclosing `module` block): `rule`, `resource`, `comment` (Checkov's `No comment provided` when there is none) and the `location` of that line. Not findings, but never dropped silently. |
 
 ## Finding

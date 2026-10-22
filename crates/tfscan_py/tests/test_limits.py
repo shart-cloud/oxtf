@@ -368,3 +368,17 @@ def test_results_allowance_truncates_with_a_terminal_diagnostic(tmp_path):
     assert len(limited.findings) == 1
     terminal = [d for d in limited.diagnostics if d["code"] == "coverage-results"]
     assert [d["message"] for d in terminal] == ["results exceeds scan allowance 1"]
+
+
+def test_roots_report_their_own_status_and_missing_installs(tmp_path):
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    (remote / "main.tf").write_text('module "vpc" {\n  source = "terraform-aws-modules/vpc/aws"\n}\n')
+    local = tmp_path / "local"
+    local.mkdir()
+    (local / "main.tf").write_text("locals { a = 1 }\n")
+    result = tfscan.scan(tmp_path, recursive=True, bundled=False)
+    assert result.status == "incomplete"
+    statuses = {r["path"].rsplit("/", 1)[-1]: r["status"] for r in result.roots}
+    assert statuses == {"remote": "incomplete", "local": "complete"}
+    assert [d["code"] for d in result.diagnostics] == ["coverage-module-not-installed"]
