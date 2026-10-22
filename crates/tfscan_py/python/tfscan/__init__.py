@@ -482,10 +482,12 @@ def fix(
     are refused): its fix hint is applied in memory and the source is
     rescanned with the edit as an overlay, as ``oxtf fix`` does.
 
-    A value written as ``var.x`` is fixed at the variable's default first
-    (keeping the module's interface), and at the attribute when that leaves
-    the target unresolved or introduces findings; ``at="default"`` or
-    ``at="attribute"`` picks one.
+    A value a caller passes in (a module argument or tfvars entry) is fixed
+    only where the caller sets it (``site == "input"``). A value written as
+    ``var.x`` is fixed at the variable's default first (keeping the module's
+    interface), and at the attribute when that leaves the target unresolved
+    or introduces findings. ``at="input"``, ``"default"`` or ``"attribute"``
+    picks one.
 
     Returns a dict: ``fingerprint``, ``rule``, ``file``, ``resource``,
     ``attribute``, ``action``, ``value``, ``site`` (where the literal

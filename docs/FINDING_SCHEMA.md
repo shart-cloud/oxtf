@@ -245,7 +245,14 @@ attribute as written today, or `null` meaning insert it into the resource
 block, creating the blocks on its path that are not written, and, only
 when the attribute is written as exactly `var.<name>` and its value comes
 from that variable's default, `default_site`: the location of the
-`default`, the other place the literal can go.
+`default`, the other place the literal can go. When the value is passed
+in from outside the module (a caller's module argument or a tfvars
+binding, written there as a literal), `input_site` is that binding: the
+only place a fix writes, because rewriting the module's attribute would
+override the input for every caller. `site` then marks where the value
+lands, not an edit target. A value a caller computes (from locals,
+functions or other variables) has no single place a literal belongs and
+gets no hint.
 
 A hint is only built when the edit is valid configuration: each block on
 the path is written at most once and not by `dynamic`, and a block that
@@ -266,11 +273,11 @@ declaration from any root, whatever attribute would decide it next.
 `no_new_findings` means the edit adds no finding or affected occurrence
 anywhere in the request's selected rules and roots. Existing unrelated
 findings may remain. `verified` requires both checks; `--write` writes only
-a verified edit, and an unverified edit returns exit code 1. With a
-`default_site` it writes the default first, which keeps a module's
-interface, and falls back to the attribute when the default edit leaves the
-target unresolved or introduces other findings. `--at default|attribute`
-picks the site. Edits keep the file's
+a verified edit, and an unverified edit returns exit code 1. With an
+`input_site` it writes only there. With a `default_site` it writes the
+default first, which keeps a module's interface, and falls back to the
+attribute when the default edit leaves the target unresolved or introduces
+other findings. `--at input|default|attribute` picks the site. Edits keep the file's
 layout: a replaced value keeps the text up to its `=`, and an inserted
 attribute is aligned with the attributes above it as `terraform fmt`
 aligns them.

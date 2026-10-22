@@ -205,6 +205,11 @@ pub struct FixHintRecord {
     /// module's interface. Only fixes occurrences no caller overrides.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_site: Option<Location>,
+    /// When the value is passed in by a caller's module argument or a tfvars
+    /// binding: that binding, the only place the fix writes. `site` is then
+    /// where the value lands, not an edit target.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_site: Option<Location>,
 }
 
 fn fix_hint_record(files: &FileTable, h: &FixHint) -> FixHintRecord {
@@ -215,6 +220,7 @@ fn fix_hint_record(files: &FileTable, h: &FixHint) -> FixHintRecord {
         value: h.value.clone(),
         site: h.site.map(|at| location(files, at)),
         default_site: h.default_site(files).map(|at| location(files, at)),
+        input_site: h.input_site().map(|at| location(files, at)),
     }
 }
 

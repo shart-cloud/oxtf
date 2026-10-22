@@ -431,11 +431,14 @@ output "encrypted" { value = var.encrypted }
     with pytest.raises(ValueError, match="fix hint"):
         tfscan.fix(remote["fingerprint"], tmp_path, data_dir="cache",
                    overlay=overlay, bundled=False)
+    # The root's value comes from terraform.tfvars.json: the fix belongs in that
+    # input, which the HCL writer cannot edit. Overriding it in main.tf would
+    # silently ignore the input, so no hint is offered.
     local = next(f for f in record["findings"] if not f.get("package"))
-    fixed = tfscan.fix(local["fingerprint"], tmp_path, data_dir="cache",
-                       overlay=overlay, bundled=False)
-    assert fixed["verified"]
-    assert fixed["file"] == str(tmp_path / "main.tf")
+    assert local["fix_hint"] is None
+    with pytest.raises(ValueError, match="fix hint"):
+        tfscan.fix(local["fingerprint"], tmp_path, data_dir="cache",
+                   overlay=overlay, bundled=False)
 
 
 def test_explicit_json_vars_and_sensitive_exports(tmp_path):

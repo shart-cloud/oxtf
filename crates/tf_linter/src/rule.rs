@@ -261,6 +261,42 @@ pub struct FixHint {
     /// literal there keeps the module's interface. Checked against the
     /// source by [`FixHint::default_site`].
     pub variable: Option<(Arc<str>, FileSpan)>,
+    /// Where the current value is decided, which bounds where a fix may write.
+    pub source: ValueSource,
+}
+
+/// Where an attribute's current value is decided. A value passed in from outside
+/// its module belongs to that caller: rewriting the attribute would override the
+/// input for every caller, so a fix may only write where the value was set.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ValueSource {
+    /// This module: written at the attribute, or a variable's default.
+    Module,
+    /// A caller's module argument or a tfvars binding, written there as a literal.
+    Input(FileSpan),
+    /// Passed in from outside and computed there: no single place to write.
+    Computed,
+}
+
+impl ValueSource {
+    pub fn of(prov: &tf_eval::prov::Prov) -> ValueSource {
+        use tf_eval::prov::StepKind;
+        let passed_in = |kind| matches!(kind, StepKind::ModuleArgument | StepKind::Tfvars);
+        let steps = prov.steps();
+        // A chain at its length limit may have lost the steps that cross a module.
+        let truncated = steps.len() >= tf_eval::prov::MAX_STEPS as usize;
+        if !truncated && !steps.iter().any(|s| passed_in(s.kind)) {
+            return ValueSource::Module;
+        }
+        match steps.first() {
+            Some(origin) if !truncated && passed_in(origin.kind) => ValueSource::Input(origin.at),
+            _ => ValueSource::Computed,
+        }
+    }
+
+    fn of_attr(attr: Option<&tf_semantic::Attr>) -> ValueSource {
+        attr.map_or(ValueSource::Module, |a| ValueSource::of(&a.value.prov))
+    }
 }
 
 impl FixHint {
@@ -275,6 +311,7 @@ impl FixHint {
             value,
             site: attr.map(|a| a.span),
             variable: attr.and_then(variable_default),
+            source: ValueSource::of_attr(attr),
         }
     }
 
@@ -336,13 +373,26 @@ impl FixHint {
             value,
             site: attr.map(|a| a.span),
             variable: attr.and_then(variable_default),
+            source: ValueSource::of_attr(attr),
         })
+    }
+
+    /// The caller's binding the value was passed in from, when written there as
+    /// a literal: the only place a fix may write a passed-in value.
+    pub fn input_site(&self) -> Option<FileSpan> {
+        match self.source {
+            ValueSource::Input(at) => Some(at),
+            ValueSource::Module | ValueSource::Computed => None,
+        }
     }
 
     /// The default of the variable the attribute is set from, when the
     /// attribute is written as exactly `var.<name>`: the other place the
     /// literal can go.
     pub fn default_site(&self, files: &tf_semantic::source::FileTable) -> Option<FileSpan> {
+        if self.source != ValueSource::Module {
+            return None;
+        }
         let (name, default) = self.variable.as_ref()?;
         let site = self.site?;
         let text = &files.get(site.file).text[site.span.start as usize..site.span.end as usize];
@@ -791,6 +841,8 @@ impl Finding {
             hidden,
             fix_hint,
         } = judgement;
+        // A value computed by a caller has no single place a literal belongs.
+        let fix_hint = fix_hint.filter(|h| h.source != ValueSource::Computed);
         let mut downgraded = false;
         let certainty = match resource.existence {
             Truth::False | Truth::Unknown => return None,
