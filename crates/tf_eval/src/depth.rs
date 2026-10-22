@@ -1,5 +1,8 @@
 //! Bound the active evaluation stack, including re-entry through a fresh evaluator.
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::sync::Arc;
+
+use tf_limits::input::InputBudget;
 
 use crate::Value;
 
@@ -9,13 +12,19 @@ pub use tf_limits::EVALUATION_DEPTH_MAX;
 
 thread_local! {
     static ACTIVE: Cell<usize> = const { Cell::new(0) };
+    /// Collection allowance of the innermost active evaluation, for provenance unions
+    /// built inside infallible value constructors.
+    static STORAGE: RefCell<Option<Arc<InputBudget>>> = const { RefCell::new(None) };
     static EXHAUSTED: Cell<bool> = const { Cell::new(false) };
 }
 
-pub(crate) struct DepthGuard;
+/// `previous` is set only when entering switched the active allowance.
+pub(crate) struct DepthGuard {
+    previous: Option<Option<Arc<InputBudget>>>,
+}
 
 impl DepthGuard {
-    pub(crate) fn enter() -> Result<Self, Value> {
+    pub(crate) fn enter(storage: &Arc<InputBudget>) -> Result<Self, Value> {
         let active = ACTIVE.get();
         assert!(active <= EVALUATION_DEPTH_MAX);
         if active == 0 {
@@ -26,7 +35,10 @@ impl DepthGuard {
             return Err(Self::limit());
         }
         ACTIVE.set(active + 1);
-        Ok(Self)
+        // Nested evaluators usually share the root's allowance: compare without cloning.
+        let same = STORAGE.with_borrow(|s| s.as_ref().is_some_and(|s| Arc::ptr_eq(s, storage)));
+        let previous = (!same).then(|| STORAGE.replace(Some(Arc::clone(storage))));
+        Ok(Self { previous })
     }
 
     /// A parent operation (length, condition, try/can) cannot erase exhaustion.
@@ -59,5 +71,21 @@ impl Drop for DepthGuard {
         let active = ACTIVE.get();
         assert!(active > 0);
         ACTIVE.set(active - 1);
+        if let Some(previous) = self.previous.take() {
+            STORAGE.set(previous);
+        }
+        assert!(ACTIVE.get() > 0 || STORAGE.with_borrow(Option::is_none));
     }
+}
+
+/// Provenance lists are built inside infallible constructors, after their inputs
+/// were admitted. Refusal is sticky: the evaluator's next charge stops the root and
+/// the scan reports `coverage-storage`, so overshoot is at most one list.
+/// Outside an active evaluation (analyzer projections) lists copy admitted ones.
+pub(crate) fn admit_provenance(bytes: usize) {
+    STORAGE.with_borrow(|storage| {
+        if let Some(storage) = storage {
+            let _refused = storage.admit_collection(bytes as u64);
+        }
+    });
 }

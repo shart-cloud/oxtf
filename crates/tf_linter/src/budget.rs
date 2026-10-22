@@ -86,6 +86,11 @@ impl RuleBudget {
         limit.to_string()
     }
 
+    /// Shared counter for engine work done on behalf of rules, such as graph construction.
+    pub(crate) fn work(&self) -> &WorkBudget {
+        &self.work
+    }
+
     pub fn used(&self) -> u64 {
         self.work.used()
     }

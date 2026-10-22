@@ -609,21 +609,53 @@ Existing parser-guarded recursive walks still need explicit traversal stacks.
 Graph solver/dependency construction and evaluator value provenance are separate
 from these cached, parsed reference records.
 
+## Graph and provenance admission
+
+Resource graph construction is engine work done on behalf of graph rules. It
+charges the root's `rule_steps` allowance one step per resource, one per collected
+dependency and one per candidate (dependency, target instance) pair, before any
+edge is examined. A dependency on an aggregate address reaches every instance
+of that base address, so candidate pairs, not resources, bound the quadratic
+part. Each new logical adjacency entry admits its bytes against the scan's
+collection allowance before insertion, and the sorted neighbour copy is admitted
+again because it coexists with unconverted maps. Plan inputs without a scan file
+table use a finite local allowance with the same limits.
+
+Refusal is typed (`rule_steps` or `collection_bytes`). No graph rule runs: each
+records a rule error naming the exhausted resource, so status is `failed` and
+no empty graph verdict can stand in for omitted work. Other hooks follow the
+existing contract: `rule_steps` exhaustion stops them, storage refusal also
+produces the terminal `coverage-storage` diagnostic. Standalone
+`ResourceGraph::new` uses default allowances and returns the same refusal.
+
+Value provenance dependency lists deduplicate with a hash set once a union would
+need more than 256 comparisons, so unions are linear in their inputs; first-seen
+order and the per-alternative certainty merge are unchanged. Previously a join
+of two 30,000-dependency lists took 131 seconds in a debug build. Each new list
+built inside an active evaluation charges its payload to that evaluation's
+collection allowance through the thread-local depth guard. Lists are built inside
+infallible value constructors after their inputs were admitted, so overshoot is
+at most one list; refusal is sticky and the evaluator's next charge stops the
+root with a typed limit. Lists copied outside evaluation (analyzer projections)
+are copies of already-admitted lists and are not charged again.
+
 ## Remaining scope
 
 Input, arena, evaluator text, builtin, expression, semantic conversion, analyzer
 model and parsed-definition metadata admission do not bound line indexes,
 parser scratch strings, paths, remaining value containers and source-table metadata,
-plan models, graph/provenance allocations, findings, diagnostics, output
+plan models, findings, diagnostics, output
 serialization, or Python argument/result conversion. Retained models and active
 workers still need memory admission. Native rules and Python callbacks charge
-hook admission; native Checkov predicates, graph solver internals, structural
+hook admission; native Checkov predicates, structural
 module composition, and many builtin internals remain outside counted work.
 Standalone parser/JSON arenas now have admission; their scratch collections,
 error lists and decoded temporary strings still need the complete storage contract.
 This is not a process-wide CPU or memory sandbox.
 
 Those gaps remain in [Phase 2/3 of the TigerStyle plan](plans/TIGERSTYLE_PLAN.md).
+Its completion cut line closes the gaps that are linear in admitted input (plan
+models, line indexes, parser scratch, paths and metadata text).
 The temporary depth guards still need replacement with explicit traversal
 stacks, including runtime conversion's descent through validated type/default
 trees. The completed directory walkers do not close that broader recursion work.
@@ -1236,3 +1268,29 @@ The default 256 MiB allowance has 5.11× observed logical-payload headroom.
 Text remains 7,539,771 bytes. These counters measure cumulative reservations,
 not live heap or RSS; graph/value provenance, plan models, remaining metadata/text,
 results/output and live memory admission remain open.
+
+## Graph and provenance measurements
+
+The paired comparison uses the accepted fifteenth-slice probe as the before
+executable, five alternating pairs per case, on the pinned corpus.
+
+| Catalog | Workers | Keep models | Before ms | After ms | Elapsed change | Peak RSS change |
+| --- | ---: | --- | ---: | ---: | ---: | ---: |
+| seed | 1 | false | 729.02 | 745.38 | +2.24% | +0.34% |
+| seed | 1 | true | 799.57 | 821.14 | +2.70% | -0.49% |
+| seed | 4 | false | 295.00 | 286.03 | -3.04% | -6.77% |
+| seed | 4 | true | 350.23 | 359.20 | +2.56% | -0.51% |
+| standard | 1 | false | 1156.88 | 1167.09 | +0.88% | +0.18% |
+| standard | 1 | true | 1226.85 | 1221.15 | -0.46% | -0.24% |
+| standard | 4 | false | 392.14 | 388.41 | -0.95% | +0.10% |
+| standard | 4 | true | 467.58 | 472.14 | +0.98% | -0.44% |
+
+All eight per-case medians remain below the 10% investigation gate; accept
+without repeated measurements. Negative changes are not a speedup claim.
+Findings, errors, status and every input/arena/text counter match. Raw samples
+and fingerprints are retained in
+[`tigerstyle-graph.json`](../bench/results/tigerstyle-graph.json).
+
+Collection payload rises from 52,557,488 bytes to 55,307,688 (seed) and
+55,669,672 (standard): provenance unions plus graph edges, which only graph
+rules build. The default 256 MiB allowance has 4.82× observed headroom.

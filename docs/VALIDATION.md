@@ -511,3 +511,35 @@ no repeated investigation was needed. Raw samples and acceptance are retained in
 The accepted fifteenth-slice probe is preserved for the next comparison at
 `/tmp/oxtf-scan-after-composition`, SHA-256
 `8884b6cc9da27a206f60e53c5c5f425ddfe46d07b700a13d8bb7e939bfd2b8bd`.
+
+## Graph and provenance checks
+
+The sixteenth TigerStyle slice charges graph construction to `rule_steps` and
+admits graph edges and evaluated provenance unions as collection payload. The
+semantic graph test exercises the exact step and byte boundaries; the evaluator
+provenance tests cover first-seen order on both deduplication paths, a
+30,000-dependency linearity probe, union charging and a stale-allowance check.
+The rule-budget hook test accounts for the graph construction step.
+
+```sh
+OXTF_REQUIRE_CORPUS=1 cargo test --workspace --offline --locked --no-fail-fast
+cargo clippy --workspace --all-targets --offline --locked -- -D warnings
+cargo build --release --offline --locked -p tf_scan --example scan_limits
+python3 bench/collection_limits.py --before /tmp/oxtf-scan-after-composition \
+  --baseline-record bench/results/tigerstyle-composition.json --repeats 5 \
+  --output bench/results/tigerstyle-graph.json
+VIRTUAL_ENV=/tmp/oxtf-trust-python /tmp/oxtf-trust-python/bin/maturin develop \
+  --offline --locked --manifest-path crates/tfscan_py/Cargo.toml
+OXTF_REQUIRE_TERRAFORM=1 /tmp/oxtf-trust-python/bin/python -m pytest crates/tfscan_py/tests
+cargo fmt --all -- --check
+git diff --check
+```
+
+Final sixteenth-slice validation: 566 Rust workspace checks pass (two existing
+ignored tests), including the unchanged native baseline, and 347 Python checks
+pass with Terraform required. Clippy and formatting pass. All eight paired cases
+stay below the 10% elapsed/RSS gate.
+
+The accepted sixteenth-slice probe is preserved for the next comparison at
+`/tmp/oxtf-scan-after-graph`, SHA-256
+`bea75d3bb1ec94a8213e4037592c7c33a27bbf57b68dca421e81811f5095eb71`.

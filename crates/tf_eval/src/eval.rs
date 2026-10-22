@@ -154,7 +154,8 @@ impl<'r, 'a> Evaluator<'r, 'a> {
     fn enter(&self, span: Span, steps: u64) -> Result<DepthGuard, Value> {
         let at = FileSpan::new(self.file, span);
         self.budget.charge(at, steps)?;
-        DepthGuard::enter().map_err(|limit| self.budget.finish(limit, at))
+        DepthGuard::enter(self.budget.shared_storage())
+            .map_err(|limit| self.budget.finish(limit, at))
     }
 
     fn finish(&self, guard: &DepthGuard, value: Value, span: Span) -> Value {

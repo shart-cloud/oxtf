@@ -257,18 +257,18 @@ impl Value {
         for input in inputs {
             prov = prov.joined(&input.prov);
         }
-        let mut dependencies = Vec::with_capacity(prov.dependencies().len());
-        for dependency in prov.dependencies() {
-            let dependency = crate::prov::ResourceDependency {
+        // A nested refusal may meet the original definite dependency again.
+        // Normalize before deduplication so repeated boundaries stay idempotent.
+        let normalized: Vec<_> = prov
+            .dependencies()
+            .iter()
+            .map(|dependency| crate::prov::ResourceDependency {
                 certainty: dependency.certainty.and(crate::Truth::Unknown),
                 ..dependency.clone()
-            };
-            // A nested refusal may meet the original definite dependency again.
-            // Normalize before deduplication so repeated boundaries stay idempotent.
-            if !dependencies.contains(&dependency) {
-                dependencies.push(dependency);
-            }
-        }
+            })
+            .collect();
+        let mut dependencies = Vec::with_capacity(normalized.len());
+        crate::prov::extend_unique(&mut dependencies, &normalized);
         Value::limit(msg).with_prov(prov.referencing(dependencies))
     }
 
@@ -597,26 +597,26 @@ impl Value {
 /// Compute this before structurally equal values collapse.
 fn one_of_dependencies(alts: &[Value], tainted: bool) -> Vec<crate::prov::ResourceDependency> {
     assert!(alts.len() <= crate::eval::MAX_ALTERNATIVES);
-    let mut dependencies = Vec::<crate::prov::ResourceDependency>::new();
-    for a in alts {
+    // Per (resource, key), first-seen order: the certainty each alternative gives it.
+    let mut index: std::collections::HashMap<(&str, Option<&str>), usize> =
+        std::collections::HashMap::new();
+    let mut outcomes: Vec<(&crate::prov::ResourceDependency, Vec<crate::Truth>)> = Vec::new();
+    for (i, a) in alts.iter().enumerate() {
         for d in a.prov.dependencies() {
-            if dependencies
-                .iter()
-                .any(|old| old.resource == d.resource && old.key == d.key)
-            {
-                continue;
-            }
-            let outcomes: Vec<_> = alts
-                .iter()
-                .map(|a| {
-                    a.prov
-                        .dependencies()
-                        .iter()
-                        .filter(|x| x.resource == d.resource && x.key == d.key)
-                        .fold(crate::Truth::False, |t, x| t.or(x.certainty))
-                })
-                .collect();
-            assert!(!outcomes.is_empty());
+            let slot = *index
+                .entry((&d.resource, d.key.as_deref()))
+                .or_insert_with(|| {
+                    outcomes.push((d, vec![crate::Truth::False; alts.len()]));
+                    outcomes.len() - 1
+                });
+            let truth = &mut outcomes[slot].1[i];
+            *truth = truth.or(d.certainty);
+        }
+    }
+    assert_eq!(index.len(), outcomes.len());
+    outcomes
+        .into_iter()
+        .map(|(d, outcomes)| {
             let certainty = if outcomes.iter().all(|t| *t == outcomes[0]) {
                 outcomes[0]
             } else if tainted || outcomes.contains(&crate::Truth::Tainted) {
@@ -624,13 +624,12 @@ fn one_of_dependencies(alts: &[Value], tainted: bool) -> Vec<crate::prov::Resour
             } else {
                 crate::Truth::Unknown
             };
-            dependencies.push(crate::prov::ResourceDependency {
+            crate::prov::ResourceDependency {
                 certainty,
                 ..d.clone()
-            });
-        }
-    }
-    dependencies
+            }
+        })
+        .collect()
 }
 
 fn push_unique(v: &mut Vec<Value>, x: Value) {

@@ -36,7 +36,7 @@ fn plan_configuration_recovers_known_value_edges_through_outputs_and_inputs() {
         &files,
     )
     .unwrap();
-    let graph = ResourceGraph::new(&analysis);
+    let graph = ResourceGraph::new(&analysis).expect("graph within default limits");
     assert!(graph.resources.iter().all(|r| r.dependencies_complete));
     let mut edges: Vec<_> = graph
         .neighbours

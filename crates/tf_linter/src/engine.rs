@@ -156,7 +156,16 @@ impl Linter {
                 .iter()
                 .any(tf_semantic::Module::is_sensitive),
         };
-        run.graphs();
+        // Plan inputs without a scan file table still get a finite graph allowance.
+        let local;
+        let storage = match sources {
+            Some(s) => s.files.input_budget(),
+            None => {
+                local = tf_limits::input::InputBudget::new(limits);
+                &local
+            }
+        };
+        run.graphs(storage);
         run.files(sources);
         run.modules();
         attach_packages(&mut run.out.findings, analysis);
@@ -253,12 +262,30 @@ impl RuleRun<'_> {
         ));
     }
 
-    fn graphs(&mut self) {
+    fn graphs(&mut self, storage: &tf_limits::input::InputBudget) {
         let rules = self.linter.graph_rules(self.analysis);
         if rules.is_empty() {
             return;
         }
-        let graph = tf_semantic::graph::ResourceGraph::new(self.analysis);
+        let built = tf_semantic::graph::ResourceGraph::with_budget(
+            self.analysis,
+            self.budget.work(),
+            storage,
+        );
+        let graph = match built {
+            Ok(graph) => graph,
+            Err(exhaustion) => {
+                // No graph rule ran: each records the typed refusal, never an empty verdict.
+                for i in rules {
+                    self.out.rule_errors.push(RuleError {
+                        rule: self.linter.infos[i].name.to_string(),
+                        resource: None,
+                        message: exhaustion.to_string(),
+                    });
+                }
+                return;
+            }
+        };
         for i in rules {
             if self.stopped() {
                 return;

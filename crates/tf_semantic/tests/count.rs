@@ -226,7 +226,7 @@ resource "test_link" "links" {
             Some(index as f64)
         );
     }
-    let graph = ResourceGraph::new(&analysis);
+    let graph = ResourceGraph::new(&analysis).expect("graph within default limits");
     for i in 1..4 {
         assert_eq!(graph.neighbours[i], vec![(i + 3, Truth::True)]);
     }
@@ -376,7 +376,7 @@ resource "test_link" "l" {
     let r = a.modules[0].resources.last().unwrap();
     assert_eq!(r.value("from_list").unwrap().as_number(), Some(1.0));
     assert_eq!(r.value("from_object").unwrap().as_number(), Some(1.0));
-    let g = ResourceGraph::new(&a);
+    let g = ResourceGraph::new(&a).expect("graph within default limits");
     assert_eq!(g.neighbours[3], vec![(1, Truth::True)]);
 }
 
@@ -429,7 +429,7 @@ resource "test_link" "l" {
             .as_number(),
         Some(1.0)
     );
-    let g = ResourceGraph::new(&a);
+    let g = ResourceGraph::new(&a).expect("graph within default limits");
     assert_eq!(g.neighbours[4].len(), 1, "{:?}", g.neighbours[4]);
     assert_eq!(g.neighbours[4][0].0, 3);
 }

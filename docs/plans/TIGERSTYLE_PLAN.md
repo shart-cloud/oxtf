@@ -616,6 +616,22 @@ Raw samples, fingerprints and acceptance are in
 `bench/results/tigerstyle-composition.json`; no repeated investigation was needed,
 and no speedup is claimed.
 
+The sixteenth slice (2026-10-22) completes area 1, graph and value provenance:
+
+- Graph construction charges `rule_steps` per resource, dependency and candidate
+  pair, and admits each logical edge and the sorted neighbour copy as collection
+  payload. Refusal records a typed rule error for every graph rule; none runs on
+  a partial graph.
+- Provenance unions deduplicate in linear time; a 30,000-dependency join that
+  took 131 seconds now takes milliseconds. Unions built during evaluation charge
+  the active collection allowance through the depth guard.
+
+Validation: 566 Rust and 347 Python checks pass; all eight paired comparisons
+pass the 10% gate (elapsed -3.04% to +2.70%, RSS -6.77% to +0.34%) with matching
+outcomes. Collection payload is 55.7 MB, 4.82× under the default. Contracts and
+measurements are in [LIMITS.md](../LIMITS.md); samples in
+`bench/results/tigerstyle-graph.json`.
+
 ### Remaining work after slice fifteen
 
 Eight work areas remain. These are scope groups, not fixed-size implementation
@@ -660,7 +676,7 @@ Applied to the eight areas:
 
 | Area | Decision | Reason |
 | --- | --- | --- |
-| 1. Graph and provenance | Do | Dependency sets and provenance copies can grow multiplicatively. |
+| 1. Graph and provenance | Done (slice 16) | Dependency sets and provenance copies can grow multiplicatively. |
 | 2. Plan models | Closed | Plan JSON is admitted input; decoding and ownership are linear in it. |
 | 3. Metadata and text | Closed | Line indexes, paths, keys and scratch are linear in admitted source. |
 | 4. Results and adapters | Do, narrowed | Findings scale with rules × resources: cap findings and diagnostics, reserve the terminal diagnostic. Rendering and Python conversion are linear in the capped results. |
@@ -669,7 +685,7 @@ Applied to the eight areas:
 | 7. Work coverage | Audit only | Record amplifying gaps and fix those; linear predicates and builtins are bounded by input. |
 | 8. Policy | Ratchet | CI rejects new functions over 70 lines; existing ones are allowlisted and shrink over time. |
 
-Remaining slices, in order: graph/provenance (1), findings cap and terminal
+Remaining slices, in order: findings cap and terminal
 diagnostic (4), parser/evaluator explicit stacks followed by stack sizing (6, 5),
 then the function-length ratchet and the area 7 audit (8, 7).
 

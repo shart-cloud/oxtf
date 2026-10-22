@@ -54,6 +54,10 @@ impl EvaluationBudget {
         &self.storage
     }
 
+    pub(crate) fn shared_storage(&self) -> &Arc<InputBudget> {
+        &self.storage
+    }
+
     pub fn used(&self) -> u64 {
         self.work.used()
     }

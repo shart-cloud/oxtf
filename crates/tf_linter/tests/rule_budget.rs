@@ -113,7 +113,11 @@ fn analysis() -> Analysis {
 
 #[test]
 fn all_hook_passes_share_one_allowance_and_stop_at_the_boundary() {
-    for allowance in 1..=5 {
+    // Graph construction charges its one resource before the graph hook runs.
+    const GRAPH_STEPS: u64 = 1;
+    const HOOKS: [&str; 4] = ["graph", "files", "module", "resource"];
+    let total = GRAPH_STEPS + HOOKS.len() as u64;
+    for allowance in 1..=total + 1 {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let linter = Linter::new(vec![Box::new(Hooks {
             calls: calls.clone(),
@@ -123,13 +127,11 @@ fn all_hook_passes_share_one_allowance_and_stop_at_the_boundary() {
             .with_rule_steps(allowance)
             .unwrap();
         let out = linter.run_with_limits(&analysis(), None, limits);
-        assert_eq!(out.rule_steps, allowance.min(4));
-        assert_eq!(
-            *calls.lock().unwrap(),
-            ["graph", "files", "module", "resource"][..allowance.min(4) as usize]
-        );
-        assert_eq!(out.rule_errors.len(), usize::from(allowance < 4));
-        if allowance < 4 {
+        assert_eq!(out.rule_steps, allowance.min(total));
+        let ran = (allowance.min(total) - GRAPH_STEPS) as usize;
+        assert_eq!(*calls.lock().unwrap(), HOOKS[..ran]);
+        assert_eq!(out.rule_errors.len(), usize::from(allowance < total));
+        if allowance < total {
             assert!(out.rule_errors[0].message.contains("rule_steps"));
             assert!(
                 out.rule_errors[0]

@@ -414,7 +414,8 @@ fn installed_outputs_preserve_resource_dependency_edges() {
     );
     let out = scan(req).unwrap();
     assert_eq!(out.result.status(), ScanStatus::Complete);
-    let graph = tf_semantic::graph::ResourceGraph::new(&out.analyses[0]);
+    let graph = tf_semantic::graph::ResourceGraph::new(&out.analyses[0])
+        .expect("graph within default limits");
     let consumer = graph
         .resources
         .iter()

@@ -263,7 +263,8 @@ resource "test" "consumer" { value = module.db.value }
             .unwrap()
             .contains("json-private-secret")
     );
-    let graph = tf_semantic::graph::ResourceGraph::new(&out.analyses[0]);
+    let graph = tf_semantic::graph::ResourceGraph::new(&out.analyses[0])
+        .expect("graph within default limits");
     assert_eq!(graph.resources.len(), 2);
     assert_eq!(graph.neighbours[0].len(), 1);
 }
