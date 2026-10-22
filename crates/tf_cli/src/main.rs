@@ -168,6 +168,7 @@ impl ArgsError {
     }
 }
 
+#[expect(clippy::too_many_lines)]
 fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, ArgsError> {
     let mut paths: Vec<PathBuf> = Vec::new();
     let mut recursive = false;
@@ -356,6 +357,7 @@ fn read_limits(path: &str) -> Result<tf_scan::Limits, String> {
     tf_scan::limits::from_json(&text).map_err(|e| format!("--limits {path}: {e}"))
 }
 
+#[expect(clippy::too_many_lines)]
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
     match args.next().as_deref() {
@@ -553,6 +555,7 @@ fn rules_test(args: impl Iterator<Item = String>) -> ExitCode {
 /// edit resolves the target without new findings (written with `--write`),
 /// 1 the edit is unverified (nothing written), 2 no such finding, no
 /// fix hint, or the scan could not run.
+#[expect(clippy::too_many_lines)]
 fn fix(mut args: impl Iterator<Item = String>) -> ExitCode {
     let fail = |e: String| {
         eprintln!("error: {e}");
@@ -743,6 +746,7 @@ fn scan(a: Args) -> ExitCode {
     }
 }
 
+#[expect(clippy::too_many_lines)]
 fn print_result(
     r: &tf_linter::ScanResult,
     record: &ScanRecord,

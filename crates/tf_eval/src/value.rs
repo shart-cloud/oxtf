@@ -539,7 +539,9 @@ impl Value {
 
     /// Structural equality of wholly-known values; `None` if either side is
     /// not wholly known.
+    /// Each visited pair ticks the work meter; callers that loop check it.
     pub fn known_eq(&self, other: &Value) -> Option<bool> {
+        crate::meter::tick(1);
         let (a, b) = (self.as_known()?, other.as_known()?);
         Some(match (a, b) {
             (Known::Null, Known::Null) => true,

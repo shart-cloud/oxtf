@@ -20,3 +20,6 @@ serde.workspace = true
 serde_json.workspace = true
 regorus = { version = "=0.13.0", default-features = false, features = ["std", "arc", "base64", "base64url", "glob", "graph", "hex", "jsonpatch", "net", "regex", "semver", "time", "urlquery", "uuid", "yaml"] }
 
+
+[lints]
+workspace = true

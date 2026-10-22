@@ -418,6 +418,7 @@ impl From<PlanError> for ScanError {
 
 /// Run one request. The catalog is resolved and the selection validated
 /// before any input is read, so a bad rule id never costs a parse.
+#[expect(clippy::too_many_lines)]
 pub fn scan(mut req: ScanRequest) -> Result<ScanOutput, ScanError> {
     tf_linter::scan::validate_threads(req.threads).map_err(ScanError::Execution)?;
     // Conftest-mode policies see what Conftest would be given: a `.tf`
@@ -648,6 +649,7 @@ impl std::error::Error for FixError {}
 /// With `site` `None`, a value written as `var.x` is first fixed at the
 /// variable's default (keeping the module's interface), and at the
 /// attribute when that leaves the target unresolved or introduces findings.
+#[expect(clippy::too_many_lines)]
 pub fn fix(
     request: ScanRequest,
     fingerprint: &str,
@@ -864,6 +866,7 @@ pub fn apply_fix(output: &ScanOutput, finding: &tf_linter::Finding) -> Result<Fi
 /// fmt` aligns them. The value is written as an HCL literal. Nothing is
 /// written to disk; scan the edit through `ScanRequest::overlay` to check
 /// it.
+#[expect(clippy::too_many_lines)]
 pub fn apply_fix_at(
     output: &ScanOutput,
     root: &std::path::Path,

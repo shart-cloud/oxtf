@@ -16,6 +16,7 @@ use crate::collections::{self, Buffer};
 use crate::depth::DepthGuard;
 pub use crate::depth::EVALUATION_DEPTH_MAX;
 use crate::functions;
+use crate::meter;
 use crate::prov::Prov;
 use crate::text;
 use crate::value::{Kind, Known, Map, Value};
@@ -153,14 +154,24 @@ impl<'r, 'a> Evaluator<'r, 'a> {
 
     fn enter(&self, span: Span, steps: u64) -> Result<DepthGuard, Value> {
         let at = FileSpan::new(self.file, span);
-        self.budget.charge(at, steps)?;
-        DepthGuard::enter(self.budget.shared_storage())
-            .map_err(|limit| self.budget.finish(limit, at))
+        if crate::depth::idle() {
+            meter::reset();
+        }
+        self.budget
+            .charge(at, steps.saturating_add(meter::take()))?;
+        let guard = DepthGuard::enter(self.budget.shared_storage())
+            .map_err(|limit| self.budget.finish(limit, at))?;
+        meter::allow(self.budget.remaining());
+        Ok(guard)
     }
 
+    /// Charges the metered work of this node's operations before finishing it.
     fn finish(&self, guard: &DepthGuard, value: Value, span: Span) -> Value {
-        self.budget
-            .finish(guard.finish(value), FileSpan::new(self.file, span))
+        let at = FileSpan::new(self.file, span);
+        // A refused charge is sticky; `finish` turns the value into its limit.
+        let _refused = self.budget.charge(at, meter::take());
+        meter::allow(self.budget.remaining());
+        self.budget.finish(guard.finish(value), at)
     }
 
     /// Evaluate an expression that has no references (type-constraint
@@ -204,6 +215,7 @@ impl<'r, 'a> Evaluator<'r, 'a> {
         self.finish(&guard, self.eval_inner(e, sc), e.span())
     }
 
+    #[expect(clippy::too_many_lines)]
     fn eval_inner(&self, e: &'a Expression<'a>, sc: Scope<'_>) -> Value {
         match e {
             Expression::Null(_) => Value::null(),
@@ -342,7 +354,11 @@ impl<'r, 'a> Evaluator<'r, 'a> {
                 None => return non_known_or(&last, "cannot expand non-list"),
             }
         }
-        self.resolver.call(&name, args.finish(), &self.budget)
+        let args = args.finish();
+        if functions::scans_arguments(&name) && !meter::arguments(&args) {
+            return Value::limit_from(meter::LIMIT, args.iter());
+        }
+        self.resolver.call(&name, args, &self.budget)
     }
 
     /// Choose a branch by `cond` (a Known bool), or both (`OneOf`) when the

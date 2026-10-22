@@ -176,6 +176,7 @@ fn parsed_caches_do_not_cross_input_snapshots_or_recharge_warm_entries() {
 }
 
 #[test]
+#[expect(clippy::too_many_lines)]
 fn every_module_construction_boundary_discards_partial_definitions() {
     let root = PathBuf::from("/nonexistent/oxtf-arena-sweep");
     let cases: &[&[(&str, &str)]] = &[

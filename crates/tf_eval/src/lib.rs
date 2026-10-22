@@ -19,6 +19,7 @@ pub mod collections;
 mod depth;
 pub mod eval;
 pub mod functions;
+mod meter;
 pub mod prov;
 pub mod text;
 pub mod truth;

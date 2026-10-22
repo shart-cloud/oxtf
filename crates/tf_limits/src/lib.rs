@@ -343,14 +343,26 @@ impl WorkBudget {
         }
     }
 
-    pub fn charge(&self, steps: u64) -> Result<(), Exhaustion> {
-        let used = self.used.get();
-        let allowance = match self.resource {
+    fn allowance(&self) -> u64 {
+        match self.resource {
             Resource::EvaluationSteps => self.limits.evaluation_steps(),
             Resource::LoaderSteps => self.limits.loader_steps(),
             Resource::RuleSteps => self.limits.rule_steps(),
             _ => panic!("scan storage resources use InputBudget"),
-        };
+        }
+    }
+
+    /// Zero once exhausted.
+    pub fn remaining(&self) -> u64 {
+        if self.exhausted.get().is_some() {
+            return 0;
+        }
+        self.allowance() - self.used.get()
+    }
+
+    pub fn charge(&self, steps: u64) -> Result<(), Exhaustion> {
+        let used = self.used.get();
+        let allowance = self.allowance();
         assert!(used <= allowance);
         if let Some(exhaustion) = self.exhausted.get() {
             return Err(exhaustion);

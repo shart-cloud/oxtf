@@ -1,0 +1,2 @@
+# Counts non-blank, non-comment lines of a function body.
+too-many-lines-threshold = 70

@@ -168,6 +168,7 @@ fn wrap(mode: NestingMode, td: String) -> String {
     }
 }
 
+#[expect(clippy::too_many_lines)]
 fn main() {
     let mut args = std::env::args().skip(1);
     let ws = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");

@@ -60,6 +60,7 @@ fn expect_rows(case: &Path) -> BTreeSet<Row> {
 }
 
 #[test]
+#[expect(clippy::too_many_lines)]
 fn plan_fixtures_match_source() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let plans_root = repo.join("fixtures/plans");
@@ -236,6 +237,7 @@ fn plan_without_source_points_into_plan_json() {
 /// variable. The source directory is found next to the plan (no
 /// `PlanOptions::source`).
 #[test]
+#[expect(clippy::too_many_lines)]
 fn plan_case_module_count_sensitive() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let case = repo.join("fixtures/plan_cases/module_count_sensitive");

@@ -457,6 +457,7 @@ pub struct Group {
 
 /// Group a scan's findings into findings with occurrences, ordered by
 /// file, position and rule.
+#[expect(clippy::too_many_lines)]
 pub fn group(files: &FileTable, findings: &[Finding]) -> Vec<Group> {
     #[derive(PartialEq, Eq, Hash)]
     enum FileKey {

@@ -15,6 +15,7 @@
 //!   `try` and `can` need lazy arguments and live in the evaluator.
 
 use crate::collections::{self, Buffer};
+use crate::meter;
 use crate::text::{self, Text};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -287,6 +288,7 @@ fn call1(
     r
 }
 
+#[expect(clippy::too_many_lines)]
 fn dispatch(name: &str, a: &[Value], budget: &InputBudget) -> R {
     budget
         .admit_text(0)
@@ -394,7 +396,9 @@ fn dispatch(name: &str, a: &[Value], budget: &InputBudget) -> R {
             let l = list(&a[0])?;
             let mut pending = Buffer::new(budget);
             for e in l {
-                match e.known_eq(&a[1]) {
+                let equal = e.known_eq(&a[1]);
+                meter::check()?;
+                match equal {
                     Some(true) => return Ok(Value::bool(true)),
                     Some(false) => {}
                     None => pending.push(e.clone())?,
@@ -412,7 +416,9 @@ fn dispatch(name: &str, a: &[Value], budget: &InputBudget) -> R {
             arity(a, 2)?;
             let l = list(&a[0])?;
             for (i, e) in l.iter().enumerate() {
-                match e.known_eq(&a[1]) {
+                let equal = e.known_eq(&a[1]);
+                meter::check()?;
+                match equal {
                     Some(true) => return Ok(num(i as f64)),
                     Some(false) => {}
                     None => return Err(non_known_or(e, "index: unknown element")),
@@ -434,7 +440,7 @@ fn dispatch(name: &str, a: &[Value], budget: &InputBudget) -> R {
             let l = list(&a[0])?;
             let mut out: Buffer<Value> = Buffer::new(budget);
             for e in l {
-                if e.is_wholly_known() && out.iter().any(|o| o.known_eq(e) == Some(true)) {
+                if e.is_wholly_known() && contains_equal(&out, e)? {
                     continue;
                 }
                 out.push(e.child_of(&a[0]))?;
@@ -600,13 +606,13 @@ fn dispatch(name: &str, a: &[Value], budget: &InputBudget) -> R {
                     budget,
                 )?)?;
             }
-            let has = |s: &[Value], v: &Value| s.iter().any(|y| y.known_eq(v) == Some(true));
+            let has = contains_equal;
             let mut out: Buffer<Value> = Buffer::new(budget);
             match name {
                 "setunion" => {
                     for s in sets.iter() {
                         for v in s {
-                            if !has(&out, v) {
+                            if !has(&out, v)? {
                                 out.push(v.clone())?;
                             }
                         }
@@ -614,14 +620,14 @@ fn dispatch(name: &str, a: &[Value], budget: &InputBudget) -> R {
                 }
                 "setintersection" => {
                     for v in &sets[0] {
-                        if sets[1..].iter().all(|s| has(s, v)) && !has(&out, v) {
+                        if all_contain(&sets[1..], v)? && !has(&out, v)? {
                             out.push(v.clone())?;
                         }
                     }
                 }
                 _ => {
                     for v in &sets[0] {
-                        if !sets[1..].iter().any(|s| has(s, v)) && !has(&out, v) {
+                        if !any_contains(&sets[1..], v)? && !has(&out, v)? {
                             out.push(v.clone())?;
                         }
                     }
@@ -637,7 +643,9 @@ fn dispatch(name: &str, a: &[Value], budget: &InputBudget) -> R {
             for (v, k) in vals.iter().zip(keys.iter()) {
                 let mut hit = false;
                 for s in search {
-                    match k.known_eq(s) {
+                    let equal = k.known_eq(s);
+                    meter::check()?;
+                    match equal {
                         Some(true) => hit = true,
                         Some(false) => {}
                         None => return Err(non_known_or(k, "matchkeys: unknown key")),
@@ -1685,6 +1693,44 @@ pub fn encoded(value: Value, budget: &InputBudget) -> R {
         return Err(Value::limit_from(message.clone(), [&value]));
     }
     Ok(Value::json(value.clone()).with_prov(value.prov))
+}
+
+/// Whether `items` holds a value known equal to `v`; stops at the work allowance.
+fn contains_equal(items: &[Value], v: &Value) -> Result<bool, Value> {
+    for item in items {
+        let equal = item.known_eq(v);
+        meter::check()?;
+        if equal == Some(true) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn all_contain<S: std::ops::Deref<Target = [Value]>>(sets: &[S], v: &Value) -> Result<bool, Value> {
+    for set in sets {
+        if !contains_equal(set, v)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+fn any_contains<S: std::ops::Deref<Target = [Value]>>(
+    sets: &[S],
+    v: &Value,
+) -> Result<bool, Value> {
+    for set in sets {
+        if contains_equal(set, v)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Index lookups do not scan their collection, so they are not metered by size.
+pub(crate) fn scans_arguments(name: &str) -> bool {
+    !matches!(name, "lookup" | "element")
 }
 
 #[cfg(test)]

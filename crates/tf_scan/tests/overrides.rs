@@ -402,6 +402,7 @@ fn nested_blocks_replace_by_type_but_lifecycle_attributes_merge() {
 }
 
 #[test]
+#[expect(clippy::too_many_lines)]
 fn terraform_settings_merge_per_component_and_providers_match_aliases() {
     let req = request(&[
         (

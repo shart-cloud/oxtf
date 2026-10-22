@@ -592,3 +592,28 @@ formatting pass. No paired case rises above the 10% gate.
 The accepted eighteenth-slice probe is preserved at
 `/tmp/oxtf-scan-after-stack`, SHA-256
 `5e9ac19e702d669496478ea824c1b5daab0b6202012a283cfcb329afdceb14c1`.
+
+## Work metering and function-length checks
+
+The nineteenth TigerStyle slice meters equality and builtin internals.
+`crates/tf_eval/tests/work.rs` checks quadratic charging inside loops, in-call
+stopping for every quadratic builtin, the index-lookup exemption, and that no
+metered work reaches a later root. With the meter disabled those tests fail
+(the in-call case takes 12 seconds); with it they finish in 0.08 seconds.
+The function-length lint runs as part of Clippy.
+
+```sh
+python3 bench/collection_limits.py --before /tmp/oxtf-scan-after-stack \
+  --baseline-record bench/results/tigerstyle-stack.json --repeats 5 \
+  --output bench/results/tigerstyle-work.json
+cargo run --release --offline --locked -p tf_linter --example evaluation_budget -- corpus/repos
+```
+
+Final nineteenth-slice validation: 576 Rust workspace checks pass (two existing
+ignored tests) and 349 Python checks pass with Terraform required. Clippy, with
+the function-length lint, and formatting pass. All eight paired cases stay below
+the 10% gate.
+
+The accepted nineteenth-slice probe is preserved at
+`/tmp/oxtf-scan-after-work`, SHA-256
+`e3f58c1bfb4d0bcb3afb4296606682599d88dd0e970bb584f8b48bf3d8cbace5`.

@@ -263,6 +263,7 @@ fn providers_resolve_by_registry_address() {
 }
 
 #[test]
+#[expect(clippy::too_many_lines)]
 fn nested_attributes_in_uses_defaults_and_diff() {
     let dir = scratch("nested");
     let old = dir.join("old.json");

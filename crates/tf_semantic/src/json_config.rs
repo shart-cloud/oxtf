@@ -59,6 +59,7 @@ impl<'a> Mapping<'a, '_> {
         });
     }
 
+    #[expect(clippy::too_many_lines)]
     fn body(
         &mut self,
         value: Expression<'a>,
@@ -256,6 +257,7 @@ impl<'a> Mapping<'a, '_> {
         }
     }
 
+    #[expect(clippy::too_many_lines)]
     fn blocks(
         &mut self,
         ident: Identifier<'a>,

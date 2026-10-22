@@ -111,6 +111,7 @@ pub fn findings_schema() -> Schema {
     ])
 }
 
+#[expect(clippy::too_many_lines)]
 pub fn findings_batch(d: &ScanData) -> Result<RecordBatch, ArrowError> {
     let files = d.files();
     let fs = &d.result.findings;

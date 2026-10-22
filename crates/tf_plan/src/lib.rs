@@ -97,6 +97,7 @@ impl std::error::Error for PlanError {}
 
 /// Read a plan JSON file into an [`Analysis`]. Source files (and the plan
 /// file itself) are registered in `files`.
+#[expect(clippy::too_many_lines)]
 pub fn load_plan(
     path: &Path,
     opts: &PlanOptions,
@@ -597,6 +598,7 @@ impl<'p> Builder<'p> {
         }
     }
 
+    #[expect(clippy::too_many_lines)]
     fn resource(&mut self, pr: &PlanRes<'p>) -> Resource {
         // The plan's own spelling of the address is authoritative for the
         // instance key's kind (`[0]` versus `["0"]`).
@@ -720,6 +722,7 @@ impl<'p> Builder<'p> {
 
     /// Follow configuration references through module outputs and arguments.
     /// Plan JSON does not contain local definitions; source is required there.
+    #[expect(clippy::too_many_lines)]
     fn graph_dependencies(
         &self,
         module: &str,
@@ -828,6 +831,7 @@ impl<'p> Builder<'p> {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_lines)]
     fn body(
         &self,
         ctx: &ResCtx<'_>,
@@ -1070,6 +1074,7 @@ impl<'p> Builder<'p> {
     /// locals and referenced resource attributes (oldest first).
     /// Variable values are quoted in labels unless the variable is declared
     /// `sensitive` or the attribute is sensitive (`redact`).
+    #[expect(clippy::too_many_lines)]
     fn ref_steps(&self, ctx: &ResCtx<'_>, refs: &[Ref], redact: bool) -> Vec<Step> {
         let src = self.src_module(ctx.module);
         let mut steps = Vec::new();

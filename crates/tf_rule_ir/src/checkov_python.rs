@@ -470,6 +470,7 @@ enum Node<'a> {
 }
 
 /// Visit every statement and expression of `stmts`, outer first.
+#[expect(clippy::too_many_lines)]
 fn walk(stmts: &[Stmt], f: &mut dyn FnMut(Node<'_>)) {
     fn target(t: &Target, f: &mut dyn FnMut(Node<'_>)) {
         match t {
@@ -691,6 +692,7 @@ impl Py {
     }
 
     /// A program constant (`checkov_python.py` tagged form).
+    #[expect(clippy::too_many_lines)]
     fn from_const(v: &Json) -> Result<Py, String> {
         Ok(match v {
             Json::Null => Py::None,
@@ -1278,6 +1280,7 @@ impl<'p> Interp<'p> {
         Ok(())
     }
 
+    #[expect(clippy::too_many_lines)]
     fn stmt(&mut self, s: &Stmt, env: &mut Env) -> R<()> {
         self.step()?;
         match s {
@@ -1550,6 +1553,7 @@ impl<'p> Interp<'p> {
 
     // -- expressions -----------------------------------------------------
 
+    #[expect(clippy::too_many_lines)]
     fn expr(&mut self, e: &Expr, env: &mut Env) -> R<Py> {
         self.step()?;
         Ok(match e {
@@ -1851,6 +1855,7 @@ impl<'p> Interp<'p> {
         })
     }
 
+    #[expect(clippy::too_many_lines)]
     fn binop(&self, op: BinOp, a: &Py, b: &Py, in_place: bool) -> R<Py> {
         let (a, b) = (self.concrete(a)?, self.concrete(b)?);
         let int = |v: &Py| match v {
@@ -2198,6 +2203,7 @@ impl<'p> Interp<'p> {
         })
     }
 
+    #[expect(clippy::too_many_lines)]
     fn builtin(&mut self, name: &str, args: Vec<Py>, kwargs: Vec<(String, Py)>) -> R<Py> {
         let a0 = args.first().cloned();
         Ok(match name {
@@ -2850,6 +2856,7 @@ impl<'p> Interp<'p> {
         })
     }
 
+    #[expect(clippy::too_many_lines)]
     fn method(&mut self, recv: Py, name: &str, args: Vec<Py>, kwargs: Vec<(String, Py)>) -> R<Py> {
         if let Py::Data(Json::Object(m)) = &recv {
             match name {
@@ -3185,6 +3192,7 @@ impl<'p> Interp<'p> {
         })
     }
 
+    #[expect(clippy::too_many_lines)]
     fn str_method(
         &mut self,
         s: &Rc<str>,
@@ -3736,6 +3744,7 @@ impl Bounded {
 /// policy_sentry's and cloudsplaining's IAM-database queries, ported
 /// exactly over [`iam::definition`] (see `NATIVE` in the importer).
 impl Interp<'_> {
+    #[expect(clippy::too_many_lines)]
     fn iam_builtin(&mut self, name: &str, args: Vec<Py>, kwargs: Vec<(String, Py)>) -> R<Py> {
         let arg = |i: usize, kw: &str| Self::arg(&args, &kwargs, i, kw);
         let text = |this: &Self, v: Option<Py>| -> R<Rc<str>> {

@@ -26,3 +26,6 @@ name = "q6_eval_depth"
 
 [[example]]
 name = "dump"
+
+[lints]
+workspace = true

@@ -219,6 +219,7 @@ pub struct Generated {
 /// policy (Checkov runs both) becomes one rule with both sets of clauses.
 /// Every graph policy that does not translate is inventoried with its
 /// reason, as the value pack inventories its checks.
+#[expect(clippy::too_many_lines)]
 pub fn generate(
     pack: &std::path::Path,
     graph_checks: &std::path::Path,

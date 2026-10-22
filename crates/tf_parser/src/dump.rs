@@ -173,6 +173,7 @@ impl Dumper {
         d.out
     }
 
+    #[expect(clippy::too_many_lines)]
     fn expr(&mut self, e: &Expression<'_>) {
         match e {
             Expression::Null(n) => {
@@ -389,6 +390,7 @@ impl Dumper {
         }
     }
 
+    #[expect(clippy::too_many_lines)]
     fn template(&mut self, t: &Template<'_>, lead_trim: bool, trail_trim: bool) -> String {
         let mut items = Vec::new();
         for el in t.elements.iter() {

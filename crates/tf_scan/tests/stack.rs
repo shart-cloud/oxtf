@@ -23,72 +23,70 @@ fn chain(n: usize, first: &str, next: impl Fn(usize) -> String) -> String {
     text + "}\n"
 }
 
-/// One root per construct and depth, as (relative path, source) files.
-fn hostile_roots(n: usize) -> Vec<(String, Vec<(String, String)>)> {
-    let bucket =
-        |value: String| format!("resource \"aws_s3_bucket\" \"b\" {{ bucket = {value} }}\n");
-    let main = |text: String| vec![("main.tf".to_string(), text)];
+type Root = (String, Vec<(String, String)>);
+
+fn bucket(value: &str) -> String {
+    format!("resource \"aws_s3_bucket\" \"b\" {{ bucket = {value} }}\n")
+}
+
+fn main_tf(name: &str, text: String) -> Root {
+    (name.into(), vec![("main.tf".into(), text)])
+}
+
+/// Constructs that nest within one attribute expression.
+fn expression_roots(n: usize) -> Vec<Root> {
+    [
+        ("unary", format!("{}true", "!".repeat(n))),
+        ("parens", nested("(", "1", ")", n)),
+        ("lists", nested("[", "1", "]", n)),
+        ("objects", nested("{a = ", "1", "}", n)),
+        ("calls", nested("upper(", "\"x\"", ")", n)),
+        ("templates", nested("\"${", "1", "}\"", n)),
+        ("binary", vec!["1"; n].join(" + ")),
+        (
+            "json",
+            format!("jsonencode(jsondecode(\"{}\"))", nested("[", "1", "]", n)),
+        ),
+    ]
+    .into_iter()
+    .map(|(name, value)| main_tf(name, bucket(&value)))
+    .collect()
+}
+
+/// Constructs that nest through blocks, declarations or input files.
+fn declaration_roots(n: usize) -> Vec<Root> {
     let last = n - 1;
+    let blocks = nested("x {\n", "", "}\n", n);
+    let conditional = format!("{}0", "var.v ? 1 : ".repeat(n));
+    let locals = chain(n, "aws_s3_bucket.n.id", |i| format!("local.x{i}"));
+    let wrapped = chain(n, "\"a\"", |i| format!("[local.x{i}]"));
+    let tfvars = "variable \"v\" {}\nresource \"aws_s3_bucket\" \"b\" { tags = var.v }\n";
     vec![
-        (
-            "blocks".into(),
-            main(format!(
-                "resource \"aws_s3_bucket\" \"b\" {{\n{}}}\n",
-                nested("x {\n", "", "}\n", n)
-            )),
+        main_tf(
+            "blocks",
+            format!("resource \"aws_s3_bucket\" \"b\" {{\n{blocks}}}\n"),
         ),
-        (
-            "unary".into(),
-            main(bucket(format!("{}true", "!".repeat(n)))),
+        main_tf(
+            "conditionals",
+            format!("variable \"v\" {{}}\n{}", bucket(&conditional)),
         ),
-        ("parens".into(), main(bucket(nested("(", "1", ")", n)))),
-        ("lists".into(), main(bucket(nested("[", "1", "]", n)))),
-        ("objects".into(), main(bucket(nested("{a = ", "1", "}", n)))),
-        (
-            "calls".into(),
-            main(bucket(nested("upper(", "\"x\"", ")", n))),
+        main_tf(
+            "locals",
+            format!(
+                "resource \"aws_s3_bucket\" \"n\" {{}}\n{locals}{}",
+                bucket(&format!("local.x{last}"))
+            ),
         ),
-        (
-            "templates".into(),
-            main(bucket(nested("\"${", "1", "}\"", n))),
-        ),
-        (
-            "conditionals".into(),
-            main(format!(
-                "variable \"v\" {{}}\n{}",
-                bucket(format!("{}0", "var.v ? 1 : ".repeat(n)))
-            )),
-        ),
-        ("binary".into(), main(bucket(vec!["1"; n].join(" + ")))),
-        (
-            "json".into(),
-            main(bucket(format!(
-                "jsonencode(jsondecode(\"{}\"))",
-                nested("[", "1", "]", n)
-            ))),
-        ),
-        (
-            "locals".into(),
-            main(format!(
-                "resource \"aws_s3_bucket\" \"n\" {{}}\n{}{}",
-                chain(n, "aws_s3_bucket.n.id", |i| format!("local.x{i}")),
-                bucket(format!("local.x{last}"))
-            )),
-        ),
-        (
-            "wrapped".into(),
-            main(format!(
-                "{}resource \"aws_security_group\" \"b\" {{ tags = {{ a = local.x{last} }} }}\n",
-                chain(n, "\"a\"", |i| format!("[local.x{i}]"))
-            )),
+        main_tf(
+            "wrapped",
+            format!(
+                "{wrapped}resource \"aws_security_group\" \"b\" {{ tags = {{ a = local.x{last} }} }}\n"
+            ),
         ),
         (
             "tfvars".into(),
             vec![
-                (
-                    "main.tf".into(),
-                    "variable \"v\" {}\nresource \"aws_s3_bucket\" \"b\" { tags = var.v }\n".into(),
-                ),
+                ("main.tf".into(), tfvars.into()),
                 (
                     "terraform.tfvars.json".into(),
                     format!("{{\"v\": {}}}", nested("[", "1", "]", n)),
@@ -133,7 +131,7 @@ fn request() -> ScanRequest {
         }
     };
     for n in DEPTHS {
-        for (construct, files) in hostile_roots(n) {
+        for (construct, files) in expression_roots(n).into_iter().chain(declaration_roots(n)) {
             add(format!("{construct}{n}"), files);
         }
     }

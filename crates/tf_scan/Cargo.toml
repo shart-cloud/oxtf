@@ -20,3 +20,6 @@ tf_rego.workspace = true
 [dev-dependencies]
 serde_json.workspace = true
 tf_eval.workspace = true
+
+[lints]
+workspace = true

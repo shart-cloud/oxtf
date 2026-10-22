@@ -213,6 +213,7 @@ impl Session<'_> {
             Ok(())
         }
     }
+    #[expect(clippy::too_many_lines)]
     fn visit(
         &mut self,
         dir: &Path,
@@ -327,6 +328,7 @@ impl Session<'_> {
         ancestors.pop();
         Ok(())
     }
+    #[expect(clippy::too_many_lines)]
     fn remote(
         &mut self,
         key: &str,

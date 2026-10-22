@@ -8,6 +8,7 @@ use std::path::Path;
 use tf_linter::{ScanOptions, scan_dir};
 
 #[test]
+#[expect(clippy::too_many_lines)]
 fn seed_rule_fixtures() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/rules");
     let mut rules: Vec<_> = std::fs::read_dir(&root)

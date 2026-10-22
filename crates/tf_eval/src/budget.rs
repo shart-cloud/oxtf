@@ -62,6 +62,10 @@ impl EvaluationBudget {
         self.work.used()
     }
 
+    pub(crate) fn remaining(&self) -> u64 {
+        self.work.remaining()
+    }
+
     /// First work exhaustion, or the first fixed limit if the work allowance is not exhausted.
     pub fn first_limit(&self) -> Option<EvaluationLimit> {
         self.first_limit.get()

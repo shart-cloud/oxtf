@@ -1,9 +1,9 @@
 # TigerStyle alignment plan
 
-Status: implementation in progress; completion is defined by the cut line under "Remaining work". Shared evaluation/default/rule accounting,
-scan input admission, cooperative Rego execution time, and root-owned backend
-caches are implemented. Arena/model/output storage, remaining backend and loader
-work, explicit AST/evaluator traversal stacks, and final acceptance remain open.
+Status: complete (2026-10-22). All eight remaining areas are resolved under the
+completion cut line in "Remaining work": amplifying operations are admitted or
+metered, linear structures are bounded by admitted input, recursion is bounded
+by measured depth guards, and a function-length lint ratchets in CI.
 
 Date: 2026-10-21. Based on the TigerStyle audit of the working tree, including
 the source-function and signal changes already in progress.
@@ -660,6 +660,19 @@ The eighteenth slice (2026-10-22) closes areas 5 and 6 by measurement:
   `tf_scan/tests/stack.rs` scans the corpus on production workers in a child
   process and fails if any guarded path outgrows them (verified to abort at 256 KiB).
 
+The nineteenth slice (2026-10-22) completes areas 7 and 8:
+
+- Audit by measurement: 28 repetition patterns at two sizes found one
+  amplification class, builtin internals and deep equality doing uncounted work
+  (hours at default limits). A per-thread work meter now charges them to
+  `evaluation_steps`, and quadratic builtins stop inside a call. Every probe
+  completes or stops within 601 ms; corpus work rises 5.7% with 37× headroom.
+- Clippy's `too_many_lines` (70) applies workspace-wide; the 91 existing long
+  functions carry `#[expect]`, so the allowlist can only shrink.
+
+Validation: 576 Rust and 349 Python checks pass; all eight paired comparisons
+pass the gate (elapsed +0.4% to +3.7%) with identical outcomes.
+
 ### Remaining work after slice fifteen
 
 Eight work areas remain. These are scope groups, not fixed-size implementation
@@ -710,10 +723,10 @@ Applied to the eight areas:
 | 4. Results and adapters | Done (slice 17) | Findings scale with rules × resources: cap findings and diagnostics, reserve the terminal diagnostic. Rendering and Python conversion are linear in the capped results. |
 | 5. Live memory | Done (slice 18) | Worker stacks set from measurement (64 MiB → 4 MiB). Retained models are admitted at construction; counters stay cumulative, not live RSS. |
 | 6. Traversal stacks | Closed (slice 18) | Measured instead of rewritten: every guarded path at and past its ceiling needs at most 274 KiB (release) / 635 KiB (debug); a CI probe enforces the fit. Revisit only if the probe fails. |
-| 7. Work coverage | Audit only | Record amplifying gaps and fix those; linear predicates and builtins are bounded by input. |
-| 8. Policy | Ratchet | CI rejects new functions over 70 lines; existing ones are allowlisted and shrink over time. |
+| 7. Work coverage | Done (slice 19) | Record amplifying gaps and fix those; linear predicates and builtins are bounded by input. |
+| 8. Policy | Done (slice 19) | CI rejects new functions over 70 lines; existing ones are allowlisted and shrink over time. |
 
-Remaining slice: the function-length ratchet and the area 7 audit (8, 7).
+All eight areas are resolved under the cut line. The migration is complete.
 
 Validation cadence: each slice runs the Rust workspace tests with the corpus
 required, Clippy, and one corpus timing against the 0.5 s budget. The full paired

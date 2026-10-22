@@ -681,6 +681,41 @@ corpus through the production scan in a debug child process; it aborts at a
 256 KiB worker stack and passes at 4 MiB. A new recursive path that outgrows the
 headroom fails that test rather than a user's scan.
 
+## Work metering
+
+Equality and builtin internals take no budget, so their work is metered on the
+evaluating thread and charged to the root's `evaluation_steps` at the
+evaluator's next entry or finish. Each visited equality pair costs one tick;
+each builtin call costs one tick per element or entry of each argument, or per
+64 bytes of text, because a builtin may scan its arguments once. Index lookups
+(`lookup`, `element`) are exempt. Loops that can be quadratic inside one call
+(`contains`, `index`, `distinct`/`toset`, set operations, `matchkeys`) stop once
+uncharged ticks exceed what remains of the allowance. The evaluator then records
+the typed `evaluation_steps` exhaustion, so refusal is the same sticky limit as
+any other work exhaustion. The meter resets when no evaluation is active, so
+analyzer or rule comparisons never reach a later root.
+
+An audit probe of 28 repetition patterns (scans inside `for` loops, set
+operations, deep equality, encoders, string builtins) at 1,000 and 8,000
+elements found the gap: `contains` inside a loop over 8,000 values took 144 ms
+for 32 million uncounted comparisons, and one `distinct` over 20,000 values took
+12 seconds. At the default allowance either could run for hours. With metering,
+every probe completes or stops in at most 601 ms. String builtins remain bounded
+by `text_bytes` as well.
+
+The corpus charges 660,389 steps (up 5.7% from 624,739). The median root uses
+209 and the largest 27,060, leaving 37× headroom under the default; no root
+is exhausted.
+
+## Function length
+
+Clippy's `too_many_lines` lint (threshold 70 non-blank, non-comment lines, in
+`clippy.toml`) applies to every workspace crate. The 91 functions longer than
+that when the lint landed carry `#[expect(clippy::too_many_lines)]`. An
+expectation that no longer fires fails `cargo clippy -D warnings`, so a function
+that is shortened must drop its attribute, and the allowlist only shrinks. New
+code must stay within the limit.
+
 ## Remaining scope
 
 Input, arena, evaluator text, builtin, expression, semantic conversion, analyzer
@@ -1379,3 +1414,23 @@ No elapsed or RSS median rises above the 10% gate, and findings, errors, status
 and every counter match. Untouched stack pages are not resident, so the smaller
 reservation is not expected to change RSS. Raw samples are retained in
 [`tigerstyle-stack.json`](../bench/results/tigerstyle-stack.json).
+
+## Work metering measurements
+
+Paired comparison against the eighteenth-slice probe, five alternating pairs.
+
+| Catalog | Workers | Keep models | Before ms | After ms | Elapsed change | Peak RSS change |
+| --- | ---: | --- | ---: | ---: | ---: | ---: |
+| seed | 1 | false | 782.71 | 795.97 | +1.69% | +0.22% |
+| seed | 1 | true | 807.60 | 810.85 | +0.40% | -0.05% |
+| seed | 4 | false | 282.22 | 287.74 | +1.96% | -0.55% |
+| seed | 4 | true | 343.23 | 355.76 | +3.65% | +1.33% |
+| standard | 1 | false | 1149.32 | 1166.61 | +1.50% | -0.09% |
+| standard | 1 | true | 1210.18 | 1236.27 | +2.16% | -0.04% |
+| standard | 4 | false | 400.10 | 408.31 | +2.05% | +0.38% |
+| standard | 4 | true | 458.80 | 464.49 | +1.24% | -0.37% |
+
+All eight cases stay below the 10% gate with identical findings, errors, status
+and counters. Elapsed changes are consistently small and positive (+0.4% to
++3.7%), which is the meter's real cost. Raw samples are retained in
+[`tigerstyle-work.json`](../bench/results/tigerstyle-work.json).

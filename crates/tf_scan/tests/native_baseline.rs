@@ -61,6 +61,7 @@ fn plan(repo: &Path, plan: &str, source: &str) -> Value {
 }
 
 #[test]
+#[expect(clippy::too_many_lines)]
 fn native_findings_match_baseline() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")

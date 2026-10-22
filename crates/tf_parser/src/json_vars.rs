@@ -127,6 +127,7 @@ impl<'a> Json<'a> {
         })
     }
 
+    #[expect(clippy::too_many_lines)]
     fn value(&mut self, root: bool) -> tf_allocator::AllocResult<Expression<'a>> {
         self.ws();
         let start = self.pos;

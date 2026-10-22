@@ -14,3 +14,6 @@ tf_eval.workspace = true
 tf_semantic.workspace = true
 tf_linter.workspace = true
 serde_json.workspace = true
+
+[lints]
+workspace = true

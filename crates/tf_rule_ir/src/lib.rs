@@ -720,6 +720,7 @@ fn compile_message(m: &str) -> Result<Vec<Piece>, String> {
 }
 
 /// Validate and compile a rule.
+#[expect(clippy::too_many_lines)]
 pub fn compile(spec: RuleSpec) -> Result<CompiledRule, String> {
     let ctx = |e: String| format!("rule {:?}: {e}", spec.name);
     if !(1..=IR_VERSION).contains(&spec.version) {
@@ -807,6 +808,7 @@ pub fn compile(spec: RuleSpec) -> Result<CompiledRule, String> {
 /// ([`tf_linter::FixHint::set_path`]). A type whose clauses imply
 /// different fixes gets none. `exists` and other operators do not say what
 /// to write, so they derive none.
+#[expect(clippy::too_many_lines)]
 fn derive_fix(spec: &RuleSpec) -> HashMap<String, (Vec<String>, serde_json::Value)> {
     use checkov::AttributeOp::*;
     fn leaves<'g>(e: &'g graph::GraphExpr, out: &mut Vec<&'g graph::GraphExpr>) -> bool {

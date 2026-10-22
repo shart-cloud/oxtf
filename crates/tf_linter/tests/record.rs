@@ -20,6 +20,7 @@ fn keys(v: &serde_json::Value) -> Vec<String> {
 /// Breaking changes bump `SCHEMA`; additive fields update this list and
 /// `docs/FINDING_SCHEMA.md`.
 #[test]
+#[expect(clippy::too_many_lines)]
 fn schema_3_field_set_is_pinned() {
     assert_eq!(SCHEMA, 3);
     let r = scan("aws-rds-unencrypted/fail_absent_uses_default");

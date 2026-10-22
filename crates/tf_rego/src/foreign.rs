@@ -107,6 +107,7 @@ pub fn rules(opts: &Options) -> Result<Vec<Box<dyn DynRule>>, String> {
     rules_with_sources(opts, Arc::new(tf_semantic::FileTable::new()))
 }
 
+#[expect(clippy::too_many_lines)]
 pub fn rules_with_sources(
     opts: &Options,
     sources: Arc<tf_semantic::FileTable>,
@@ -305,6 +306,7 @@ impl Bundle {
         Self::load_with_sources(opts, Arc::new(tf_semantic::FileTable::new()))
     }
 
+    #[expect(clippy::too_many_lines)]
     fn load_with_sources(
         opts: &Options,
         sources: Arc<tf_semantic::FileTable>,
@@ -564,6 +566,7 @@ fn parse_with(parser: &str, text: &str, sources: &tf_semantic::FileTable) -> any
 ///   resolves, any other is an error;
 /// - `parse_combined_config_files` fails: Conftest's combined document is
 ///   not reproduced.
+#[expect(clippy::too_many_lines)]
 fn conftest_builtins(
     engine: &mut regorus::Engine,
     modules: &[(PathBuf, String)],
@@ -869,6 +872,7 @@ fn collect(
     Ok(())
 }
 
+#[expect(clippy::too_many_lines)]
 fn collect_document(
     root: &Path,
     path: &Path,
@@ -1098,6 +1102,7 @@ fn comment(l: &str) -> Option<&str> {
     l.trim_start().strip_prefix('#')
 }
 
+#[expect(clippy::too_many_lines)]
 fn parse_annotations(
     file: &Path,
     source: &str,
@@ -1229,6 +1234,7 @@ fn level(s: &str, at: &str) -> Result<Level, String> {
 }
 
 impl Meta {
+    #[expect(clippy::too_many_lines)]
     fn fill(&mut self, fields: &JsonMap<String, Json>, at: &str) -> Result<(), String> {
         let string = |v: &Json, name: &str| {
             v.as_str()
@@ -2419,6 +2425,7 @@ deny contains "bad" if {
     }
 
     #[test]
+    #[expect(clippy::too_many_lines)]
     fn conftest_rules_namespaces_and_exceptions() {
         let d = dir(&[
             (

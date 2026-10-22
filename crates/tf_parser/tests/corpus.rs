@@ -8,6 +8,7 @@ mod common;
 use tf_parser::dump::{Options, dump_file};
 
 #[test]
+#[expect(clippy::too_many_lines)]
 fn corpus_differential_vs_hcl_edit() {
     let files = common::corpus_files();
     if files.is_empty() {

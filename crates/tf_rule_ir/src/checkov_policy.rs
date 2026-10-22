@@ -118,6 +118,7 @@ enum Tok {
 /// The tokens of bc_jsonpath_ng's extended lexer that the admitted grammar
 /// uses. Anything else, including tokens whose lexing depends on rule order
 /// in that lexer (`true…`/`false…` prefixes, keywords), is rejected.
+#[expect(clippy::too_many_lines)]
 fn lex(s: &str) -> Option<Vec<Tok>> {
     let b = s.as_bytes();
     let mut out = Vec::new();
@@ -518,6 +519,7 @@ impl Translator {
         }
     }
 
+    #[expect(clippy::too_many_lines)]
     fn expression(&mut self, node: Option<&Json>, path: &str) -> Option<Json> {
         let Some(Json::Object(obj)) = node else {
             self.reject(path, "structure", "graph condition requires an object");
@@ -877,6 +879,7 @@ fn level(metadata: &serde_json::Map<String, Json>) -> Result<&'static str, Block
 }
 
 /// Translate one parsed policy document.
+#[expect(clippy::too_many_lines)]
 pub fn translate(doc: &Json) -> Result<RuleSpec, Vec<Blocker>> {
     let mut t = Translator {
         blockers: Vec::new(),
@@ -1056,6 +1059,7 @@ pub fn translate_source(path: &Path, source: &PolicySource) -> Result<RuleSpec, 
 
 /// Start positions of every value in a JSON text, by JSON Pointer. The text
 /// has already been parsed successfully, so this scanner does not validate.
+#[expect(clippy::too_many_lines)]
 fn json_positions(text: &str) -> HashMap<String, Position> {
     struct Scan<'a> {
         b: &'a [u8],

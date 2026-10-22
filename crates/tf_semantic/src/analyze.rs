@@ -285,6 +285,7 @@ fn reference_value_unchecked(
 }
 
 impl<'a, 'o> Analyzer<'a, 'o> {
+    #[expect(clippy::too_many_lines)]
     fn new(
         store: &'a ModuleStore,
         files: &'a FileTable,
@@ -666,6 +667,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
 
     // ---- variables, locals, outputs -------------------------------------
 
+    #[expect(clippy::too_many_lines)]
     fn var_value(&self, inst_id: usize, name: &str) -> Value {
         if self.loading_exhausted() {
             return Value::other("module inputs unavailable after loader exhaustion");
@@ -840,6 +842,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
 
     // ---- references -----------------------------------------------------
 
+    #[expect(clippy::too_many_lines)]
     fn resource_ref(
         &self,
         inst_id: usize,
@@ -1110,6 +1113,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         attempt.unwrap_or_else(|stopped| stopped)
     }
 
+    #[expect(clippy::too_many_lines)]
     fn resource_attr(
         &self,
         inst_id: usize,
@@ -1222,6 +1226,7 @@ impl<'a, 'o> Analyzer<'a, 'o> {
         )
     }
 
+    #[expect(clippy::too_many_lines)]
     fn module_ref(
         &self,
         inst_id: usize,

@@ -8,3 +8,6 @@ publish.workspace = true
 [dependencies]
 tf_span.workspace = true
 tf_allocator.workspace = true
+
+[lints]
+workspace = true

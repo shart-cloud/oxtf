@@ -101,6 +101,7 @@ fn curation(path: &str) -> std::collections::HashMap<String, Curated> {
         .collect()
 }
 
+#[expect(clippy::too_many_lines)]
 fn main() {
     let path = "data/checkov/rules.json";
     let curation_path = "data/checkov/curation.toml";

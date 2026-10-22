@@ -119,6 +119,7 @@ fn region(l: &crate::record::Location) -> J {
 /// carries the fingerprint as `partialFingerprints["oxtf/v1"]`, the
 /// provenance chain as related locations, and certainty, occurrences and
 /// any fix hint as properties.
+#[expect(clippy::too_many_lines)]
 pub fn sarif(r: &ScanRecord) -> J {
     let ids: Vec<&String> = r.rules.keys().collect();
     let rules: Vec<J> = r

@@ -693,6 +693,7 @@ fn ndjson_and_sarif_formats() {
 /// `--write`; exit 2 for an unknown fingerprint or a finding with no fix
 /// hint.
 #[test]
+#[expect(clippy::too_many_lines)]
 fn fix_prints_writes_and_refuses() {
     let dir = std::env::temp_dir().join(format!("oxtf-cli-fix-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -874,6 +875,7 @@ fn profiles_pick_the_shipped_rules() {
 }
 
 #[test]
+#[expect(clippy::too_many_lines)]
 fn explicit_fetch_enables_offline_counted_module_scans() {
     let base = std::env::temp_dir().join(format!("oxtf-cli-fetch-{}", std::process::id()));
     let package = base.join("package");

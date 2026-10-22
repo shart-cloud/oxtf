@@ -35,3 +35,6 @@ tf_rego.workspace = true
 tf_scan.workspace = true
 arrow-array = { version = "60.0.0", default-features = false, features = ["ffi"] }
 arrow-schema = { version = "60.0.0", default-features = false, features = ["ffi"] }
+
+[lints]
+workspace = true

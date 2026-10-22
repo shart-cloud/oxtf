@@ -16,3 +16,6 @@ serde.workspace = true
 [dev-dependencies]
 insta.workspace = true
 hcl-edit.workspace = true
+
+[lints]
+workspace = true

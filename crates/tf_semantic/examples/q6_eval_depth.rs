@@ -317,6 +317,7 @@ fn print_table(title: &str, m: &BTreeMap<String, usize>, total: usize, limit: us
     }
 }
 
+#[expect(clippy::too_many_lines)]
 fn main() {
     let dir = std::env::args()
         .nth(1)

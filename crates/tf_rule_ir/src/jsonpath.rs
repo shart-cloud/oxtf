@@ -207,6 +207,7 @@ impl JsonPathCheck {
         }
     }
 
+    #[expect(clippy::too_many_lines)]
     fn query(&self, value: &Value, path: &[Segment], raised: &Cell<bool>) -> Matches {
         if let Kind::OneOf(o) = &value.kind {
             let branches: Vec<_> = o

@@ -105,6 +105,7 @@ pub(crate) struct Download {
     pub revision: Option<String>,
 }
 
+#[expect(clippy::too_many_lines)]
 pub(crate) fn download(
     source: Source,
     constraint: Option<&str>,
@@ -338,6 +339,7 @@ fn git_output(
         deadline,
     )
 }
+#[expect(clippy::too_many_lines)]
 fn run_git(
     repo: &Path,
     args: &[&str],

@@ -290,6 +290,7 @@ pub fn scan_with(
 }
 
 /// Reuse the snapshot and admission counters established during discovery/catalog loading.
+#[expect(clippy::too_many_lines)]
 pub fn scan_with_files(
     linter: &Linter,
     roots: &[PathBuf],

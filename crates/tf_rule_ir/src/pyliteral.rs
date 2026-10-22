@@ -76,6 +76,7 @@ impl Parser<'_> {
         }
     }
 
+    #[expect(clippy::too_many_lines)]
     fn expr(&mut self) -> Option<Json> {
         self.space(false);
         match self.peek()? {

@@ -40,6 +40,7 @@ pub(crate) fn call(
     })
 }
 
+#[expect(clippy::too_many_lines)]
 fn call_one(
     files: &FileTable,
     root: &Path,

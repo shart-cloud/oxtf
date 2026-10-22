@@ -488,6 +488,7 @@ impl<'a> Parser<'a> {
         })
     }
 
+    #[expect(clippy::too_many_lines)]
     fn parse_body_item(&mut self) -> tf_allocator::AllocResult<Option<BodyItem<'a>>> {
         let ident = self.ident_from_tok();
         let start = ident.span.start;
@@ -699,6 +700,7 @@ impl<'a> Parser<'a> {
         })?))
     }
 
+    #[expect(clippy::too_many_lines)]
     fn parse_postfix(&mut self) -> tf_allocator::AllocResult<Expression<'a>> {
         let start = self.start();
         let object = self.parse_term()?;
@@ -1267,6 +1269,7 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
+    #[expect(clippy::too_many_lines)]
     fn parse_template_elements_inner(
         &mut self,
         ctx: TemplateCtx<'_>,
@@ -1477,6 +1480,7 @@ impl<'a> Parser<'a> {
     /// whitespace is ignored for counting and left untouched; a template
     /// sequence at the start of a line means nothing is stripped; literals
     /// inside directives count too.
+    #[expect(clippy::too_many_lines)]
     fn dedent(&mut self, template: &mut Template<'a>) -> tf_allocator::AllocResult<()> {
         enum Piece<'t, 'a> {
             Lit(&'t mut TemplateLiteral<'a>),

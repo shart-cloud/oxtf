@@ -29,6 +29,7 @@ impl DepthGuard {
         assert!(active <= EVALUATION_DEPTH_MAX);
         if active == 0 {
             EXHAUSTED.set(false);
+            crate::meter::reset();
         }
         if active == EVALUATION_DEPTH_MAX || EXHAUSTED.get() {
             EXHAUSTED.set(true);
@@ -71,6 +72,9 @@ impl Drop for DepthGuard {
         let active = ACTIVE.get();
         assert!(active > 0);
         ACTIVE.set(active - 1);
+        if active == 1 {
+            crate::meter::reset();
+        }
         if let Some(previous) = self.previous.take() {
             STORAGE.set(previous);
         }
@@ -82,6 +86,11 @@ impl Drop for DepthGuard {
 /// were admitted. Refusal is sticky: the evaluator's next charge stops the root and
 /// the scan reports `coverage-storage`, so overshoot is at most one list.
 /// Outside an active evaluation (analyzer projections) lists copy admitted ones.
+/// No evaluation is active on this thread.
+pub(crate) fn idle() -> bool {
+    ACTIVE.get() == 0
+}
+
 pub(crate) fn admit_provenance(bytes: usize) {
     STORAGE.with_borrow(|storage| {
         if let Some(storage) = storage {

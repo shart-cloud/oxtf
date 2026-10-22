@@ -36,6 +36,7 @@ fn corpus_files() -> Vec<PathBuf> {
     out
 }
 
+#[expect(clippy::too_many_lines)]
 fn main() {
     let iters: usize = std::env::args()
         .nth(1)
