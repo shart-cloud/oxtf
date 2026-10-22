@@ -1,0 +1,106 @@
+{
+  "cpus": "0",
+  "warmups_per_binary_catalog": 1,
+  "metadata": {
+    "before_binary_sha256": "b5759299719a40f0cd77b99219e1392fadb08ca7afb591c21f3823ee2e138a27",
+    "after_binary_sha256": "c8a604275eb4ae3d91a0c5c5c493a39208cd64d630799a1e8c162da62943fa99"
+  },
+  "samples": [
+    {
+      "catalog": "seed",
+      "version": "before",
+      "run": 1,
+      "elapsed_s": 0.55,
+      "peak_rss_kib": 75692,
+      "output": "catalog=seed roots=504 files=2195 resources=5379 findings=2 errors=0 exhausted=0\nsteps=1902 median=1 p95=14 max=46 largest=corpus/repos/terraform-aws-modules__terraform-aws-eks/tests/eks-managed-node-group\n"
+    },
+    {
+      "catalog": "seed",
+      "version": "after",
+      "run": 1,
+      "elapsed_s": 0.61,
+      "peak_rss_kib": 83292,
+      "output": "catalog=seed roots=504 files=2195 resources=5379 findings=2 errors=0 exhausted=0\nsteps=1902 median=1 p95=14 max=46 largest=corpus/repos/terraform-aws-modules__terraform-aws-eks/tests/eks-managed-node-group\nrego_total_us=0 median_us=0 p95_us=0 max_us=0 largest=corpus/repos/terraform-google-modules__terraform-google-network/test/setup\ninput=InputStats { source_bytes: 20207589, file_entries: 6568, directory_entries: 3631, roots: 0 } input_exhaustion=None\n"
+    },
+    {
+      "catalog": "seed",
+      "version": "before",
+      "run": 2,
+      "elapsed_s": 0.56,
+      "peak_rss_kib": 75840,
+      "output": "catalog=seed roots=504 files=2195 resources=5379 findings=2 errors=0 exhausted=0\nsteps=1902 median=1 p95=14 max=46 largest=corpus/repos/terraform-aws-modules__terraform-aws-eks/tests/eks-managed-node-group\n"
+    },
+    {
+      "catalog": "seed",
+      "version": "after",
+      "run": 2,
+      "elapsed_s": 0.55,
+      "peak_rss_kib": 83040,
+      "output": "catalog=seed roots=504 files=2195 resources=5379 findings=2 errors=0 exhausted=0\nsteps=1902 median=1 p95=14 max=46 largest=corpus/repos/terraform-aws-modules__terraform-aws-eks/tests/eks-managed-node-group\nrego_total_us=0 median_us=0 p95_us=0 max_us=0 largest=corpus/repos/terraform-google-modules__terraform-google-network/test/setup\ninput=InputStats { source_bytes: 20207589, file_entries: 6568, directory_entries: 3631, roots: 0 } input_exhaustion=None\n"
+    },
+    {
+      "catalog": "seed",
+      "version": "before",
+      "run": 3,
+      "elapsed_s": 0.58,
+      "peak_rss_kib": 75956,
+      "output": "catalog=seed roots=504 files=2195 resources=5379 findings=2 errors=0 exhausted=0\nsteps=1902 median=1 p95=14 max=46 largest=corpus/repos/terraform-aws-modules__terraform-aws-eks/tests/eks-managed-node-group\n"
+    },
+    {
+      "catalog": "seed",
+      "version": "after",
+      "run": 3,
+      "elapsed_s": 0.59,
+      "peak_rss_kib": 82792,
+      "output": "catalog=seed roots=504 files=2195 resources=5379 findings=2 errors=0 exhausted=0\nsteps=1902 median=1 p95=14 max=46 largest=corpus/repos/terraform-aws-modules__terraform-aws-eks/tests/eks-managed-node-group\nrego_total_us=0 median_us=0 p95_us=0 max_us=0 largest=corpus/repos/terraform-google-modules__terraform-google-network/test/setup\ninput=InputStats { source_bytes: 20207589, file_entries: 6568, directory_entries: 3631, roots: 0 } input_exhaustion=None\n"
+    },
+    {
+      "catalog": "standard",
+      "version": "before",
+      "run": 1,
+      "elapsed_s": 0.98,
+      "peak_rss_kib": 116488,
+      "output": "catalog=standard roots=504 files=2195 resources=5379 findings=510 errors=14 exhausted=0\nsteps=455669 median=14 p95=3328 max=68146 largest=corpus/repos/terraform-aws-modules__terraform-aws-iam/examples/iam-role-for-service-accounts\n"
+    },
+    {
+      "catalog": "standard",
+      "version": "after",
+      "run": 1,
+      "elapsed_s": 0.96,
+      "peak_rss_kib": 123632,
+      "output": "catalog=standard roots=504 files=2195 resources=5379 findings=510 errors=14 exhausted=0\nsteps=455669 median=14 p95=3328 max=68146 largest=corpus/repos/terraform-aws-modules__terraform-aws-iam/examples/iam-role-for-service-accounts\nrego_total_us=0 median_us=0 p95_us=0 max_us=0 largest=corpus/repos/terraform-google-modules__terraform-google-network/test/setup\ninput=InputStats { source_bytes: 20207589, file_entries: 6568, directory_entries: 3631, roots: 0 } input_exhaustion=None\n"
+    },
+    {
+      "catalog": "standard",
+      "version": "before",
+      "run": 2,
+      "elapsed_s": 0.97,
+      "peak_rss_kib": 116448,
+      "output": "catalog=standard roots=504 files=2195 resources=5379 findings=510 errors=14 exhausted=0\nsteps=455669 median=14 p95=3328 max=68146 largest=corpus/repos/terraform-aws-modules__terraform-aws-iam/examples/iam-role-for-service-accounts\n"
+    },
+    {
+      "catalog": "standard",
+      "version": "after",
+      "run": 2,
+      "elapsed_s": 0.95,
+      "peak_rss_kib": 123748,
+      "output": "catalog=standard roots=504 files=2195 resources=5379 findings=510 errors=14 exhausted=0\nsteps=455669 median=14 p95=3328 max=68146 largest=corpus/repos/terraform-aws-modules__terraform-aws-iam/examples/iam-role-for-service-accounts\nrego_total_us=0 median_us=0 p95_us=0 max_us=0 largest=corpus/repos/terraform-google-modules__terraform-google-network/test/setup\ninput=InputStats { source_bytes: 20207589, file_entries: 6568, directory_entries: 3631, roots: 0 } input_exhaustion=None\n"
+    },
+    {
+      "catalog": "standard",
+      "version": "before",
+      "run": 3,
+      "elapsed_s": 0.96,
+      "peak_rss_kib": 116488,
+      "output": "catalog=standard roots=504 files=2195 resources=5379 findings=510 errors=14 exhausted=0\nsteps=455669 median=14 p95=3328 max=68146 largest=corpus/repos/terraform-aws-modules__terraform-aws-iam/examples/iam-role-for-service-accounts\n"
+    },
+    {
+      "catalog": "standard",
+      "version": "after",
+      "run": 3,
+      "elapsed_s": 0.96,
+      "peak_rss_kib": 123792,
+      "output": "catalog=standard roots=504 files=2195 resources=5379 findings=510 errors=14 exhausted=0\nsteps=455669 median=14 p95=3328 max=68146 largest=corpus/repos/terraform-aws-modules__terraform-aws-iam/examples/iam-role-for-service-accounts\nrego_total_us=0 median_us=0 p95_us=0 max_us=0 largest=corpus/repos/terraform-google-modules__terraform-google-network/test/setup\ninput=InputStats { source_bytes: 20207589, file_entries: 6568, directory_entries: 3631, roots: 0 } input_exhaustion=None\n"
+    }
+  ]
+}
