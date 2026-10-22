@@ -290,6 +290,10 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, ArgsError> {
             "--no-diagnostics" => a.diagnostics = false,
             "--fetch" => a.fetch = true,
             "-q" | "--quiet" => a.quiet = true,
+            "-h" | "--help" => {
+                println!("{USAGE}");
+                std::process::exit(0);
+            }
             s if s.starts_with('-') => return Err(format!("unknown option {s}").into()),
             p => paths.push(p.into()),
         }
@@ -458,6 +462,10 @@ fn main() -> ExitCode {
                     types
                 );
             }
+            ExitCode::SUCCESS
+        }
+        Some("--help" | "-h" | "help") => {
+            println!("{USAGE}");
             ExitCode::SUCCESS
         }
         _ => {

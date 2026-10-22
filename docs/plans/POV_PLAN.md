@@ -1,6 +1,6 @@
 # Proof-of-value plan
 
-Status: items 1 and 2 done (2026-10-22); items 3–5 open. Follows the completed
+Status: items 1–4 done (2026-10-22); item 5 and the follow-ups below open. Follows the completed
 [TigerStyle migration](TIGERSTYLE_PLAN.md). Relates to the open items in
 [signal completion](SIGNAL_COMPLETION.md).
 
@@ -97,6 +97,12 @@ A POV cannot start with "install Rust and build it".
 
 Done when: a clean machine goes from nothing to a first scan with one command.
 
+Done (2026-10-22, PR #14). A `v*` tag builds the CLI and an abi3 `tfscan` wheel
+for Linux x86-64/ARM64 (glibc 2.17, so RHEL 7+) and macOS ARM/Intel, and drafts
+a release with checksums; `oxtf --version` reports the bundled Checkov catalog.
+Open: a LICENSE file (Cargo declares MIT; the copyright holder is needed) and
+PyPI publishing.
+
 ### 4. Agent patch loop
 
 Show the differentiator end to end: scan, choose a finding, apply its fix,
@@ -111,6 +117,22 @@ verify by fingerprint.
 
 Done when: Claude Code or Codex can fix a real finding from a cold start using
 only the packaged skill or server.
+
+Done (2026-10-22): `skills/oxtf/SKILL.md` and `scripts/demo-fix-loop.sh`. Two
+cold-start agent runs with only the skill and binary drove the design. The
+first found that a verified fix could replace a module's `var.x` with a literal,
+overriding a caller's input; fix hints now record where a value is decided and
+write only at the caller's argument or tfvars entry (`input_site`). The second
+run handled every finding correctly and wrote nothing unsafe. Its remaining
+gaps are follow-ups:
+
+- Diagnostics carry no root, so attributing one needs a per-root rescan.
+- `verified` covers scanner rules, not provider validity (for example
+  `BucketOwnerEnforced` beside an `acl` argument); the skill says to check.
+- A finding reached with bad values from several places needs one edit per
+  place; `oxtf fix` applies one edit per run.
+- Conditional findings name the variable but not the value that triggers them,
+  and `validation`/`precondition` blocks do not narrow variables.
 
 ### 5. Common-repository failures
 
