@@ -4,7 +4,7 @@
 //! oxtf scan [PATH...] [-r|--recursive] [--format text|json|ndjson|sarif] [--var-file FILE]...
 //!           [--rule ID]... [--rule-file PATH]... [--threads N] [--color] [--no-diagnostics] [--quiet]
 //! oxtf scan --plan PLAN.json [--source DIR] [options]
-//! oxtf fix FINGERPRINT [PATH...] [scan options] [--at default|attribute] [--write] [-f diff|json]
+//! oxtf fix FINGERPRINT [PATH...] [scan options] [--at default|attribute|input] [--write] [-f diff|json]
 //! oxtf rules
 //! ```
 //!
@@ -45,14 +45,16 @@ const USAGE: &str = "usage:
                                   scan `terraform show -json` output; findings are mapped
                                   back to .tf/.tf.json spans in DIR (default: the plan's directory
                                   if it has configuration, else locations point into the plan JSON)
-  oxtf fix FINGERPRINT [PATH...] [scan options] [--at default|attribute] [--write] [-f diff|json]
+  oxtf fix FINGERPRINT [PATH...] [scan options] [--at default|attribute|input] [--write] [-f diff|json]
                                   apply the fix hint of the finding with FINGERPRINT in
                                   memory, rescan to check the target is resolved without
                                   new findings, and print the finding delta and
                                   the edit as a diff (or JSON); --write writes it, only
                                   when verified. A value written as var.x is fixed at the
                                   variable's default first, else at the attribute (--at
-                                  picks one). Exit 0 verified, 1 unverified,
+                                  picks one). A value a caller passes in (a module argument
+                                  or tfvars) is fixed only where it is set (input).
+                                  Exit 0 verified, 1 unverified,
                                   2 no such finding, no fix hint, or the scan failed
   oxtf rules [--rule-file PATH]... [-f json]
                                   list built-in and loaded rules: level, category, engine,
@@ -288,6 +290,10 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, ArgsError> {
             "--no-diagnostics" => a.diagnostics = false,
             "--fetch" => a.fetch = true,
             "-q" | "--quiet" => a.quiet = true,
+            "-h" | "--help" => {
+                println!("{USAGE}");
+                std::process::exit(0);
+            }
             s if s.starts_with('-') => return Err(format!("unknown option {s}").into()),
             p => paths.push(p.into()),
         }
@@ -458,6 +464,10 @@ fn main() -> ExitCode {
             }
             ExitCode::SUCCESS
         }
+        Some("--help" | "-h" | "help") => {
+            println!("{USAGE}");
+            ExitCode::SUCCESS
+        }
         _ => {
             eprintln!("{USAGE}");
             ExitCode::from(2)
@@ -578,6 +588,7 @@ fn fix(mut args: impl Iterator<Item = String>) -> ExitCode {
             "--at" => match args.next().as_deref() {
                 Some("attribute") => site = Some(tf_scan::FixSite::Attribute),
                 Some("default") => site = Some(tf_scan::FixSite::Default),
+                Some("input") => site = Some(tf_scan::FixSite::Input),
                 other => return fail(format!("unknown fix site {other:?}")),
             },
             "-f" | "--format" => match args.next().as_deref() {
@@ -630,6 +641,7 @@ fn fix(mut args: impl Iterator<Item = String>) -> ExitCode {
             outcome.fingerprint,
             match outcome.site {
                 tf_scan::FixSite::Default => "at the variable default: ",
+                tf_scan::FixSite::Input => "where the value is passed in: ",
                 tf_scan::FixSite::Attribute => "",
             },
             if outcome.verified {

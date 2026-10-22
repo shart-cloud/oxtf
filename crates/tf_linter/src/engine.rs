@@ -472,11 +472,13 @@ fn attach_packages(findings: &mut [Finding], analysis: &Analysis) {
         .collect();
     for f in findings {
         f.package = packages.get(f.module.as_ref()).map(|p| (*p).clone());
-        if f.package.is_some()
-            || f.fix_hint
-                .as_ref()
-                .is_some_and(|h| packages.contains_key(h.resource.module.as_ref()))
-        {
+        // A value passed in to a package is fixed where its caller sets it;
+        // `protect_fix_hints` then checks that site is writable.
+        let edits_package = f.fix_hint.as_ref().is_some_and(|h| {
+            h.input_site().is_none()
+                && (f.package.is_some() || packages.contains_key(h.resource.module.as_ref()))
+        });
+        if edits_package {
             f.fix_hint = None;
         }
     }
@@ -491,6 +493,14 @@ pub fn protect_fix_hints(findings: &mut [Finding], analysis: &Analysis, files: &
     };
     for f in findings {
         let Some(h) = &mut f.fix_hint else { continue };
+        // A passed-in value is edited only where it is set, which can be the
+        // caller's own file even when the declaration is in an installed package.
+        if let Some(input) = h.input_site() {
+            if !writable(input) {
+                f.fix_hint = None;
+            }
+            continue;
+        }
         let target = h.site.or_else(|| {
             let r = analysis
                 .modules

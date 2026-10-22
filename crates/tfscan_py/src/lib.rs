@@ -1443,6 +1443,7 @@ fn fix_finding<'py>(
         None => None,
         Some("attribute") => Some(tf_scan::FixSite::Attribute),
         Some("default") => Some(tf_scan::FixSite::Default),
+        Some("input") => Some(tf_scan::FixSite::Input),
         Some(other) => {
             return Err(PyValueError::new_err(format!(
                 "at must be \"attribute\" or \"default\", not {other:?}"

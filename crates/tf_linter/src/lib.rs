@@ -37,6 +37,7 @@ pub use record::{FindingRecord, RuleError, ScanRecord};
 pub use rule::{
     Category, Certainty, ConfigFile, DynRule, Engine, Finding, FindingSubject, FixAction, FixHint,
     Hidden, Judgement, Level, Profile, Rule, RuleFailure, RuleInfo, RuleMeta, RuleSource, Subject,
+    ValueSource,
 };
 pub use scan::{
     ScanOptions, ScanResult, ScanStats, ScanStatus, discover_roots, scan_dir, scan_with,

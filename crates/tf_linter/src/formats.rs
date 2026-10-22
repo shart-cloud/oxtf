@@ -90,6 +90,10 @@ fn finding_line(f: &FindingRecord) -> J {
             v["fix_hint"]["default_site"] =
                 json!({"file": l.file, "line": l.line, "column": l.column});
         }
+        if let Some(l) = &h.input_site {
+            v["fix_hint"]["input_site"] =
+                json!({"file": l.file, "line": l.line, "column": l.column});
+        }
     }
     v
 }

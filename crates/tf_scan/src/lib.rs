@@ -750,6 +750,7 @@ pub fn fix(
     let hint = hinted.fix_hint.clone().expect("found by its hint");
     let sites = match site {
         Some(s) => vec![s],
+        None if hint.input_site().is_some() => vec![FixSite::Input],
         None if hint.default_site(&r.files).is_some() => {
             vec![FixSite::Default, FixSite::Attribute]
         }
@@ -898,6 +899,9 @@ pub enum FixSite {
     /// The default of the variable the attribute is written as
     /// ([`tf_linter::FixHint::default_site`]).
     Default,
+    /// The caller's module argument or tfvars binding the value is passed in
+    /// from ([`tf_linter::FixHint::input_site`]). The only site for such a value.
+    Input,
 }
 
 impl FixSite {
@@ -905,6 +909,7 @@ impl FixSite {
         match self {
             FixSite::Attribute => "attribute",
             FixSite::Default => "default",
+            FixSite::Input => "input",
         }
     }
 }
@@ -939,10 +944,23 @@ pub fn apply_fix_at(
     let files = &output.result.files;
     let value = hcl_literal(&hint.value);
     let at = match site {
+        FixSite::Attribute if hint.source != tf_linter::ValueSource::Module => {
+            return Err(format!(
+                "{} {}: the value is passed in from outside the module; editing the \
+                 attribute would override it for every caller (use the input site)",
+                hint.resource, hint.attribute
+            ));
+        }
         FixSite::Attribute => hint.site,
         FixSite::Default => Some(hint.default_site(files).ok_or_else(|| {
             format!(
                 "{} {}: not written as a variable with a default",
+                hint.resource, hint.attribute
+            )
+        })?),
+        FixSite::Input => Some(hint.input_site().ok_or_else(|| {
+            format!(
+                "{} {}: not passed in from a module argument or tfvars binding",
                 hint.resource, hint.attribute
             )
         })?),
