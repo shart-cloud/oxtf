@@ -7297,6 +7297,13 @@
           "fix_hint": {
             "action": "set",
             "attribute": "uniform_bucket_level_access",
+            "input_site": {
+              "column": 1,
+              "end": 22,
+              "file": "fixtures/rules/gcp-storage-uniform-access/fail_tfvars_variable/terraform.tfvars",
+              "line": 1,
+              "start": 0
+            },
             "resource": {
               "address": "google_storage_bucket.b",
               "base_address": "google_storage_bucket.b",

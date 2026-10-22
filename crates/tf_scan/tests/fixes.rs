@@ -165,36 +165,78 @@ fn a_variable_default_is_fixed_before_the_attribute() {
     );
 }
 
-/// A caller passes its own value: the default edit leaves that occurrence,
-/// so the fix falls back to the attribute.
+/// A caller passes its own value: the fix writes where the caller sets it.
+/// Rewriting the module's attribute would override that input for every caller.
 #[test]
-fn an_overridden_default_falls_back_to_the_attribute() {
-    let dir = PathBuf::from("/nonexistent/oxtf-fix-override");
+fn a_passed_in_value_is_fixed_where_the_caller_sets_it() {
+    let dir = PathBuf::from("/nonexistent/oxtf-fix-input");
+    let secure_default = VARIABLES.replace("default = false", "default = true");
     let files = [
         ("modules/web/main.tf", INSTANCE),
-        ("modules/web/variables.tf", VARIABLES),
+        ("modules/web/variables.tf", secure_default.as_str()),
         (
             "main.tf",
             "module \"web\" {\n  source     = \"./modules/web\"\n  monitoring = false\n}\n",
         ),
     ];
+    let (fp, hint) = finding(request(&dir, &files, "CKV_AWS_126"));
+    assert!(hint.unwrap().input_site().is_some());
+    let o = tf_scan::fix(request(&dir, &files, "CKV_AWS_126"), &fp, None).unwrap();
+    assert_eq!(o.site, FixSite::Input);
+    assert!(o.verified);
+    assert_eq!(o.edit.file, dir.join("main.tf"));
+    assert!(
+        o.edit.text.contains("  monitoring = true\n"),
+        "{}",
+        o.edit.text
+    );
+    for site in [FixSite::Attribute, FixSite::Default] {
+        let refused = tf_scan::fix(request(&dir, &files, "CKV_AWS_126"), &fp, Some(site));
+        assert!(refused.is_err(), "{site:?}");
+    }
+}
+
+/// A root variable bound in tfvars is fixed in the tfvars file.
+#[test]
+fn a_tfvars_value_is_fixed_in_the_tfvars_file() {
+    let dir = PathBuf::from("/nonexistent/oxtf-fix-tfvars");
+    let files = [
+        ("main.tf", INSTANCE),
+        ("variables.tf", VARIABLES),
+        ("terraform.tfvars", "monitoring = false\n"),
+    ];
     let (fp, _) = finding(request(&dir, &files, "CKV_AWS_126"));
     let o = tf_scan::fix(request(&dir, &files, "CKV_AWS_126"), &fp, None).unwrap();
-    assert_eq!(o.site, FixSite::Attribute);
+    assert_eq!(o.site, FixSite::Input);
     assert!(o.verified);
-    let o = tf_scan::fix(
-        request(&dir, &files, "CKV_AWS_126"),
-        &fp,
-        Some(FixSite::Default),
-    )
-    .unwrap();
-    assert!(!o.verified);
-    assert!(!o.target_resolved);
-    assert!(o.no_new_findings);
-    assert!(o.finding_delta.added.is_empty());
-    assert!(o.finding_delta.removed.is_empty());
-    assert_eq!(o.finding_delta.changed.len(), 1);
-    assert!(!o.finding_delta.changed[0].removed_occurrences.is_empty());
+    assert_eq!(o.edit.file, dir.join("terraform.tfvars"));
+    assert_eq!(o.edit.text, "monitoring = true\n");
+}
+
+/// A value the caller computes has no single place a literal belongs: no hint.
+#[test]
+fn a_computed_input_gets_no_hint() {
+    let dir = PathBuf::from("/nonexistent/oxtf-fix-computed");
+    let files = [
+        ("modules/web/main.tf", INSTANCE),
+        (
+            "modules/web/variables.tf",
+            "variable \"monitoring\" {\n  type = bool\n}\n",
+        ),
+        (
+            "main.tf",
+            "locals { off = false }\nmodule \"web\" {\n  source     = \"./modules/web\"\n  monitoring = local.off\n}\n",
+        ),
+    ];
+    let out = scan(request(&dir, &files, "CKV_AWS_126")).unwrap();
+    let definite: Vec<_> = out
+        .result
+        .findings
+        .iter()
+        .filter(|f| f.root == dir)
+        .collect();
+    assert_eq!(definite.len(), 1, "{:#?}", out.result.findings);
+    assert!(definite[0].fix_hint.is_none());
 }
 
 /// Two roots each declare `aws_instance.this`: the fix edits the file of
@@ -352,4 +394,41 @@ fn an_insertion_does_not_turn_shifted_findings_into_new_ones() {
     assert_eq!(outcome.finding_delta.unchanged, 1);
     assert!(outcome.finding_delta.added.is_empty());
     assert!(outcome.finding_delta.changed.is_empty());
+}
+
+/// An installed package is never edited, but a value the user's root passes to
+/// it is the user's own code: the fix writes the caller's argument.
+#[test]
+fn an_installed_module_is_fixed_through_the_callers_argument() {
+    let dir = PathBuf::from("/nonexistent/oxtf-fix-installed");
+    let manifest = r#"{"Modules": [{"Key": "web", "Source": "acme/web/aws", "Version": "1.0.0", "Dir": "cache/modules/web"}]}"#;
+    let files = [
+        (
+            "main.tf",
+            "module \"web\" {\n  source     = \"acme/web/aws\"\n  monitoring = false\n}\n",
+        ),
+        ("cache/modules/modules.json", manifest),
+        ("cache/modules/web/main.tf", INSTANCE),
+        ("cache/modules/web/variables.tf", VARIABLES),
+    ];
+    let with_data_dir = || {
+        let mut req = request(&dir, &files, "CKV_AWS_126");
+        req.input = tf_scan::ScanInput::Dirs {
+            paths: vec![dir.clone()],
+            recursive: false,
+        };
+        req.data_dir = Some("cache".into());
+        req
+    };
+    let (fp, hint) = finding(with_data_dir());
+    assert!(hint.unwrap().input_site().is_some());
+    let o = tf_scan::fix(with_data_dir(), &fp, None).unwrap();
+    assert_eq!(o.site, FixSite::Input);
+    assert!(o.verified, "{:?}", o.verification_errors);
+    assert_eq!(o.edit.file, dir.join("main.tf"));
+    assert!(
+        o.edit.text.contains("  monitoring = true\n"),
+        "{}",
+        o.edit.text
+    );
 }

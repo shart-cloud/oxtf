@@ -99,7 +99,8 @@ impl Rule for AwsS3PublicAccessBlock {
     /// it. No hint when no block refers to the bucket: adding a resource is
     /// not a mechanical edit.
     fn fix_hint(&self, _b: &Resource, v: &Verdict) -> Option<FixHint> {
-        let step = v.witness.as_ref()?.prov.last()?.clone();
+        let witness = v.witness.as_ref()?;
+        let step = witness.prov.last()?.clone();
         let resource = Address::parse(step.resource.as_deref()?).ok()?;
         Some(FixHint {
             resource,
@@ -108,6 +109,7 @@ impl Rule for AwsS3PublicAccessBlock {
             value: serde_json::Value::Bool(true),
             site: (step.kind != StepKind::Default).then_some(step.at),
             variable: None,
+            source: crate::rule::ValueSource::of(&witness.prov),
         })
     }
 
