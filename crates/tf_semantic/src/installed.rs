@@ -19,6 +19,8 @@ mod storage_tests;
 #[derive(Clone, Debug)]
 pub enum ResolveError {
     Storage(tf_limits::Exhaustion),
+    /// No installed-module manifest: the root was never initialized or fetched.
+    NotInstalled(String),
     Invalid(String),
 }
 
@@ -38,7 +40,7 @@ impl std::fmt::Display for ResolveError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Storage(error) => error.fmt(f),
-            Self::Invalid(message) => message.fmt(f),
+            Self::NotInstalled(message) | Self::Invalid(message) => message.fmt(f),
         }
     }
 }
@@ -144,6 +146,11 @@ impl<'a> InstalledModules<'a> {
                 let sf = self.files.load(&self.manifest).map_err(|error| {
                     if let Some(error) = tf_limits::input::exhaustion(&error) {
                         ResolveError::Storage(error)
+                    } else if error.kind() == std::io::ErrorKind::NotFound {
+                        ResolveError::NotInstalled(format!(
+                            "not installed: no module manifest at {}",
+                            self.manifest.display()
+                        ))
                     } else {
                         ResolveError::Invalid(format!(
                             "cannot read installed module manifest {}: {error}",

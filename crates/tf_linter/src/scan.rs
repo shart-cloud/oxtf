@@ -147,6 +147,19 @@ pub struct ScanResult {
     /// Findings of Checkov-sourced rules that a `checkov:skip` line
     /// suppressed ([`crate::suppress`]).
     pub suppressed: Vec<crate::suppress::Suppressed>,
+    /// Each scanned root's own completion, in scan order. Scan-wide terminal
+    /// diagnostics (storage, results) apply to every root and appear only in
+    /// [`ScanResult::status`].
+    pub roots: Vec<RootOutcome>,
+}
+
+/// One root module and whether its analysis and rules completed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RootOutcome {
+    pub dir: PathBuf,
+    pub status: ScanStatus,
+    /// Some remote module call had no installed package to read.
+    pub needs_install: bool,
 }
 
 /// Whether analysis completed, independently of whether it found violations.
@@ -186,20 +199,27 @@ pub fn limits_analysis(d: &Diagnostic) -> bool {
         )
 }
 
+/// A remote module call whose package is not installed under the data directory.
+pub const NOT_INSTALLED: &str = "coverage-module-not-installed";
+
+/// Failure wins over incomplete; shared by the scan and each root.
+pub fn status_of(diagnostics: &[Diagnostic], rule_errors: &[RuleError]) -> ScanStatus {
+    if !rule_errors.is_empty()
+        || diagnostics
+            .iter()
+            .any(|d| d.severity == DiagSeverity::Error)
+    {
+        ScanStatus::Failed
+    } else if diagnostics.iter().any(limits_analysis) {
+        ScanStatus::Incomplete
+    } else {
+        ScanStatus::Complete
+    }
+}
+
 impl ScanResult {
     pub fn status(&self) -> ScanStatus {
-        if !self.rule_errors.is_empty()
-            || self
-                .diagnostics
-                .iter()
-                .any(|d| d.severity == DiagSeverity::Error)
-        {
-            ScanStatus::Failed
-        } else if self.diagnostics.iter().any(limits_analysis) {
-            ScanStatus::Incomplete
-        } else {
-            ScanStatus::Complete
-        }
+        status_of(&self.diagnostics, &self.rule_errors)
     }
 
     /// Reasons a scan cannot establish that a proposed fix was checked.
@@ -418,9 +438,20 @@ pub fn scan_with_files(
     let mut analyses = Vec::new();
     let mut module_instances = 0;
     let mut resources = 0;
-    for r in results {
+    let mut outcomes = Vec::with_capacity(roots.len());
+    assert_eq!(results.len(), roots.len());
+    for (dir, r) in roots.iter().zip(results) {
         module_instances += r.module_instances;
         resources += r.resources;
+        let own = r
+            .analysis
+            .as_ref()
+            .map_or(&r.diagnostics[..], |a| &a.diagnostics[..]);
+        outcomes.push(RootOutcome {
+            dir: dir.clone(),
+            status: status_of(own, &r.out.rule_errors),
+            needs_install: own.iter().any(|d| d.code == NOT_INSTALLED),
+        });
         findings.extend(r.out.findings);
         rule_errors.extend(r.out.rule_errors);
         suppressed.extend(r.out.suppressed);
@@ -451,6 +482,7 @@ pub fn scan_with_files(
             rule_errors,
             files,
             suppressed,
+            roots: outcomes,
         },
         analyses,
     ))
@@ -466,6 +498,7 @@ pub fn limited_scan(files: Arc<FileTable>) -> ScanResult {
         rule_errors: Vec::new(),
         files,
         suppressed: Vec::new(),
+        roots: Vec::new(),
     }
 }
 

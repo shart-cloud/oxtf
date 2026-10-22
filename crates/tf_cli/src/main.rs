@@ -33,7 +33,7 @@ use tf_linter::Linter;
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 use tf_linter::Certainty;
 use tf_linter::record::ScanRecord;
-use tf_linter::render::{location, render_finding};
+use tf_linter::render::render_finding;
 use tf_scan::{Catalog, ScanInput, ScanRequest};
 
 const USAGE: &str = "usage:
@@ -71,6 +71,8 @@ scan options:
                           (default), conditional, indeterminate, or never
       --var-file FILE     extra HCL/JSON variable file (repeatable)
       --data-dir DIR      installed modules data directory (default: .terraform; relative to each root)
+      --fetch             first install remote modules for roots that lack them (as `oxtf fetch`
+                          does, using the network and writing the data directory), then scan
       --rule ID           only run this rule (repeatable); ids come from the whole
                           catalog: bundled Checkov rules, seed rules, --rule-file rules
                           and Rego policies
@@ -123,6 +125,8 @@ enum Format {
 /// The command line, as parsed: a scan request plus output switches.
 struct Args {
     request: ScanRequest,
+    /// Install missing remote modules before scanning.
+    fetch: bool,
     format: Format,
     /// Exit 1 when a finding is at least this certain; `None` never.
     fail_on: Option<Certainty>,
@@ -187,6 +191,7 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, ArgsError> {
         fail_on: Some(Certainty::Definite),
         color: std::io::stdout().is_terminal(),
         diagnostics: true,
+        fetch: false,
         quiet: false,
     };
     while let Some(arg) = it.next() {
@@ -281,6 +286,7 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, ArgsError> {
             "--color" => a.color = true,
             "--no-color" => a.color = false,
             "--no-diagnostics" => a.diagnostics = false,
+            "--fetch" => a.fetch = true,
             "-q" | "--quiet" => a.quiet = true,
             s if s.starts_with('-') => return Err(format!("unknown option {s}").into()),
             p => paths.push(p.into()),
@@ -703,13 +709,19 @@ fn load_message(message: &str, severity: miette::Severity, color: bool) -> Strin
 fn scan(a: Args) -> ExitCode {
     let Args {
         request,
+        fetch,
         format,
         fail_on,
         color,
         diagnostics,
         quiet,
     } = a;
-    let output = match tf_scan::scan(request) {
+    let run = if fetch {
+        tf_scan::scan_fetching
+    } else {
+        tf_scan::scan
+    };
+    let output = match run(request) {
         Ok(o) => o,
         Err(e) => {
             eprint!(
@@ -814,12 +826,17 @@ fn print_result(
         }
         if diagnostics {
             // Skipped rule files were already printed to stderr.
-            for d in r.diagnostics.iter().filter(|d| d.code != "rule-skipped") {
-                let at =
-                    d.at.map(|x| format!("{}: ", location(&r.files, x)))
-                        .unwrap_or_default();
-                let _ = writeln!(out, "{:?} [{}] {at}{}", d.severity, d.code, d.message);
-            }
+            let shown: Vec<_> = r
+                .diagnostics
+                .iter()
+                .filter(|d| d.code != "rule-skipped")
+                .cloned()
+                .collect();
+            let _ = write!(
+                out,
+                "{}",
+                tf_linter::render::diagnostics_text(&r.files, &shown)
+            );
         }
     }
     let s = &record.stats;
@@ -850,6 +867,11 @@ fn print_result(
             format!("\n  by rule: {}", by_rule.join(", "))
         }
     );
+    if record.roots.len() > 1
+        && let Some(roots) = tf_linter::render::roots_text(&record.roots)
+    {
+        let _ = writeln!(out, "{roots}");
+    }
     if !r.suppressed.is_empty() {
         let _ = writeln!(out, "  suppressed by checkov:skip: {}", r.suppressed.len());
     }

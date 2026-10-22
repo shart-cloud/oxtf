@@ -239,6 +239,13 @@ class ScanResult:
         return self._inner.status
 
     @property
+    def roots(self) -> list[dict]:
+        """Each scanned root's own ``path`` and ``status``. Scan-wide limits
+        affect only :attr:`status`, so a complete root can sit inside an
+        incomplete scan."""
+        return self._inner.roots
+
+    @property
     def suppressed(self) -> list[dict]:
         """Findings a ``checkov:skip`` line suppressed (``rule``,
         ``resource``, ``comment``, ``file``, ``line``)."""
@@ -308,6 +315,7 @@ def _run(
     threads: Optional[int] = None,
     limits: Mapping[str, int] | None = None,
     profiles: Optional[Sequence[str]] = None,
+    fetch: bool = False,
 ) -> ScanResult:
     ir, callbacks = _split_rules(rules)
     inner, calls = _tfscan.scan(
@@ -335,6 +343,7 @@ def _run(
         policy_entries=list(policy_entries),
         rego_v0=rego_v0,
         profiles=None if profiles is None else list(profiles),
+        fetch=fetch,
     )
     return ScanResult(inner, calls)
 
@@ -362,6 +371,7 @@ def scan(
     threads: Optional[int] = None,
     limits: Mapping[str, int] | None = None,
     profiles: Optional[Sequence[str]] = None,
+    fetch: bool = False,
 ) -> ScanResult:
     """Scan Terraform root module directories.
 
@@ -370,6 +380,10 @@ def scan(
     remote modules are resolved offline; ``data_dir`` defaults to ``.terraform``
     and is relative to each root unless absolute. Pass a custom Terraform
     data directory explicitly, including when your workflow uses ``TF_DATA_DIR``.
+    ``fetch=True`` first installs remote modules for roots that lack them, as
+    ``oxtf fetch`` does (network access, writing each root's data directory),
+    then scans; a root that cannot be fetched gains a ``coverage-fetch``
+    diagnostic. ``result.roots`` gives each root's own ``status``.
 
     ``recursive``: every directory under ``path`` containing ``.tf`` or ``.tf.json`` files is
     a root module. The rule catalog is the shipped rules (unless
@@ -433,6 +447,7 @@ def scan(
         threads=threads,
         limits=None if limits is None else dict(limits),
         profiles=profiles,
+        fetch=fetch,
     )
 
 

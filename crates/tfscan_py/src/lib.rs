@@ -772,6 +772,18 @@ impl ScanResult {
         }
         Ok(out)
     }
+    /// Each scanned root's own completion: `path` and `status`.
+    #[getter]
+    fn roots<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let out = PyList::empty(py);
+        for root in &self.data.result.roots {
+            let d = PyDict::new(py);
+            d.set_item("path", root.dir.display().to_string())?;
+            d.set_item("status", root.status.as_str())?;
+            out.append(d)?;
+        }
+        Ok(out)
+    }
     #[getter]
     fn diagnostics<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
         let out = PyList::empty(py);
@@ -1155,7 +1167,7 @@ fn scan_error(e: tf_scan::ScanError) -> PyErr {
 /// one entry. `overlay`: `(path, text)` pairs that shadow the disk for this
 /// scan.
 #[pyfunction]
-#[pyo3(signature = (paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], callbacks=vec![], policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, _release_gil=true, rule_files=vec![], data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], rego_v0=false, bundled=true, profiles=None, data_dir=None, limits=None))]
+#[pyo3(signature = (paths=vec![], recursive=false, plan=None, source=None, var_files=vec![], builtin=true, select=None, ir_rules=vec![], callbacks=vec![], policies=vec![], policy_shape=None, policy_entry=None, overlay=vec![], threads=None, _release_gil=true, rule_files=vec![], data=vec![], namespaces=vec![], all_namespaces=false, policy_entries=vec![], rego_v0=false, bundled=true, profiles=None, data_dir=None, limits=None, fetch=false))]
 #[allow(clippy::too_many_arguments)]
 fn scan(
     py: Python<'_>,
@@ -1184,6 +1196,7 @@ fn scan(
     profiles: Option<Vec<String>>,
     data_dir: Option<PathBuf>,
     limits: Option<Bound<'_, PyDict>>,
+    fetch: bool,
 ) -> PyResult<(ScanResult, u64)> {
     if !_release_gil && !callbacks.is_empty() {
         // Workers would block on the GIL held by this thread.
@@ -1217,7 +1230,12 @@ fn scan(
         bundled,
         profiles,
     })?;
-    let work = move || tf_scan::scan(request).map(|o| ScanData::new(o.result, o.analyses));
+    let run = if fetch {
+        tf_scan::scan_fetching
+    } else {
+        tf_scan::scan
+    };
+    let work = move || run(request).map(|o| ScanData::new(o.result, o.analyses));
     let data = if _release_gil {
         py.detach(work)
     } else {

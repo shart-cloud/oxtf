@@ -30,6 +30,7 @@ fn schema_3_field_set_is_pinned() {
         [
             "diagnostics",
             "findings",
+            "roots",
             "rule_errors",
             "rules",
             "schema",

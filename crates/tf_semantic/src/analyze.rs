@@ -1374,14 +1374,18 @@ impl<'a, 'o> Analyzer<'a, 'o> {
     }
 
     fn report_limits(&self, value: &Value, at: FileSpan) {
-        if let Some(Origin::Error(_)) = value.origin() {
-            // Avoid echoing value-bearing error details into unredacted diagnostics.
-            self.diag(
-                DiagSeverity::Error,
-                "evaluation-error",
-                "expression evaluation failed".into(),
-                Some(at),
-            );
+        if let Some(Origin::Error(message)) = value.origin() {
+            // Avoid echoing value-bearing error details into unredacted diagnostics:
+            // only a builtin's name, which carries no input value, is shown.
+            let function = message
+                .split_once(':')
+                .map(|(name, _)| name)
+                .filter(|name| tf_eval::functions::SUPPORTED.contains(name));
+            let text = match function {
+                Some(name) => format!("expression evaluation failed in {name}()"),
+                None => "expression evaluation failed".into(),
+            };
+            self.diag(DiagSeverity::Error, "evaluation-error", text, Some(at));
         }
         if let Some(o @ (Origin::UnsupportedFunction(_) | Origin::Limit(_))) = value.origin() {
             // One located root diagnostic suffices for the shared allowance. Emitting
