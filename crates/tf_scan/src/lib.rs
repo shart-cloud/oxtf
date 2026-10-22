@@ -33,6 +33,8 @@ pub use finding_delta::{FindingChange, FindingDelta};
 pub use tf_fetch::{FetchLimits, FetchReport, FetchRequest, FetchedModule, fetch};
 pub use tf_rego::Shape;
 pub use tf_rego::foreign::{TestOutcome, TestResult};
+/// The Checkov release whose Terraform checks are bundled.
+pub use tf_rule_ir::bundled::CHECKOV_VERSION;
 
 /// Run the `test_*` rules of the catalog's Rego (its rule files and
 /// policy paths) as `conftest verify` does.

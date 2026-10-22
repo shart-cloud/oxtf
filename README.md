@@ -5,10 +5,38 @@ A Rust Terraform security analyzer with a CLI and Python bindings
 an abstract model, then runs native rules, a bundled Checkov catalog, and optional Rego
 policies. Findings retain source provenance and stable fingerprints.
 
+## Install
+
+Prebuilt binaries for Linux (x86-64 and ARM64, glibc 2.17 or later) and macOS
+(Apple silicon and Intel) are attached to each
+[release](https://github.com/shart-cloud/oxtf/releases), with `SHA256SUMS`:
+
 ```sh
-cargo build --locked -p tf_cli
-target/debug/oxtf scan ./terraform --format json
+VERSION=0.1.0 TARGET=x86_64-unknown-linux-gnu  # or aarch64-unknown-linux-gnu,
+                                               # aarch64-apple-darwin, x86_64-apple-darwin
+curl -fsSL "https://github.com/shart-cloud/oxtf/releases/download/v$VERSION/oxtf-$VERSION-$TARGET.tar.gz" \
+  | tar -xz && sudo mv "oxtf-$VERSION-$TARGET/oxtf" /usr/local/bin/
+oxtf --version
 ```
+
+The Python package (`tfscan`, Python 3.10+) installs from the same release:
+
+```sh
+pip install tfscan --find-links https://github.com/shart-cloud/oxtf/releases/expanded_assets/v0.1.0
+```
+
+To build from source instead: `cargo build --release --locked -p tf_cli`.
+
+## Quick start
+
+```sh
+oxtf scan -r .            # every directory with .tf files is a root module
+oxtf scan -r --fetch .    # first install remote modules the roots need, then scan
+oxtf scan -r . -f json    # the finding record (docs/FINDING_SCHEMA.md)
+```
+
+Results compared with Checkov on public modules are in
+[docs/RECONCILIATION.md](docs/RECONCILIATION.md).
 
 CLI, Python, and Rust `ScanRequest::dirs()` / `ScanRequest::plan()` scans default
 to the bundled Checkov catalog plus native seed rules in the security profile.

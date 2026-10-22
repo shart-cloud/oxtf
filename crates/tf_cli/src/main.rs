@@ -59,6 +59,7 @@ const USAGE: &str = "usage:
                                   description, resource types and source file:line
   oxtf rules test --policy PATH... [--data PATH]... [--namespace NS]... [--rego-v0]
                                   run the policies' test_* rules (as `conftest verify`)
+  oxtf --version                  the version and the bundled Checkov catalog it carries
 
 Built in are the seed rules and the bundled Checkov catalog: Checkov 3.2.328's Terraform
 value checks, graph policies and Python resource checks (1079 rules), run natively.
@@ -376,6 +377,15 @@ fn main() -> ExitCode {
         },
         Some("fix") => fix(args),
         Some("fetch") => fetch(args),
+        Some("--version" | "-V" | "version") => {
+            println!(
+                "oxtf {} (bundled Checkov {} catalog, finding schema {})",
+                env!("CARGO_PKG_VERSION"),
+                tf_scan::CHECKOV_VERSION,
+                tf_linter::record::SCHEMA
+            );
+            ExitCode::SUCCESS
+        }
         Some("rules") => {
             let mut args = args.peekable();
             if args.peek().map(String::as_str) == Some("test") {

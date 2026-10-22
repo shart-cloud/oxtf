@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "tfscan"
-version = "0.0.1"
+dynamic = ["version"]
 description = "Terraform security scanner (oxtf): Rust engine, polars-style rule expressions, Arrow output"
 requires-python = ">=3.10"
 license = { text = "MIT" }

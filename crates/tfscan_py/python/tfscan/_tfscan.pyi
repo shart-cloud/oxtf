@@ -9,6 +9,9 @@ PYO3_VERSION: str
 
 Kind = Literal["known", "unknown", "tainted", "one_of"]
 
+__version__: str
+CHECKOV_VERSION: str
+
 class Step(TypedDict, total=False):
     kind: str
     label: str
