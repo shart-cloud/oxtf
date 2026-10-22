@@ -941,6 +941,7 @@ impl ViewGen<'_> {
         name
     }
 
+    #[expect(clippy::too_many_lines)]
     fn emit(&mut self, struct_name: &str, path: &[String], shape: Shape<'_, '_>, doc: &str) {
         let mut children: Vec<(String, Vec<String>, Shape<'_, '_>)> = Vec::new();
         let mut methods = String::new();

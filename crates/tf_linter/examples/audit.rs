@@ -67,7 +67,8 @@ fn main() {
             recursive: true,
             ..Default::default()
         },
-    );
+    )
+    .unwrap();
     let mut counts: BTreeMap<(String, String, String), usize> = BTreeMap::new();
     let mut instances: BTreeMap<String, usize> = BTreeMap::new();
     for a in &analyses {

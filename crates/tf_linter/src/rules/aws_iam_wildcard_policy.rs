@@ -16,6 +16,14 @@ use crate::rule::{Category, Level, Rule, RuleMeta};
 pub struct AwsIamWildcardPolicy;
 
 impl RuleMeta for AwsIamWildcardPolicy {
+    const RATIONALE: Option<&'static str> = Some(
+        "Allowing every action on every resource is an administrative grant with account-wide potential impact. Conditions, explicit denies, permissions boundaries, and organization policies can constrain effective access; this check does not evaluate all of them.",
+    );
+    const REMEDIATION: Option<&'static str> = Some(
+        "Replace Action = * with the actions the workload needs and scope Resource to supported ARNs. Keep Resource = * only for actions that require it, in separate statements with applicable conditions. Validate with IAM Access Analyzer and test required operations before rollout.",
+    );
+    const GUIDELINE: Option<&'static str> =
+        Some("https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html");
     const NAME: &'static str = "aws-iam-wildcard-policy";
     const CATEGORY: Category = Category::Iam;
     const LEVEL: Level = Level::Critical;

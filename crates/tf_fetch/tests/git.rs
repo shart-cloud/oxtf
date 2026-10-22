@@ -197,6 +197,7 @@ fn git_fetch_pins_a_subdirectory_and_nested_local_module_for_offline_scans() {
 }
 
 #[test]
+#[expect(clippy::too_many_lines)]
 fn refresh_records_a_new_commit_without_mutating_the_old_package() {
     let tmp = tempfile::tempdir().unwrap();
     let repo = tmp.path().join("repo");

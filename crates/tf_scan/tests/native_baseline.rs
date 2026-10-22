@@ -25,9 +25,10 @@ fn normalize(value: &mut Value, repo: &str) {
     }
 }
 
-/// One request, as the CLI would build it for `--threads 1`, as JSON with
+/// One request, as the CLI would build it for `--no-bundled --threads 1`, as JSON with
 /// the checkout location and timing removed.
 fn run(repo: &Path, mut req: ScanRequest) -> Value {
+    req.catalog = tf_scan::Catalog::seed();
     req.threads = Some(1);
     let out = scan(req).unwrap();
     assert!(out.result.rule_errors.is_empty());
@@ -60,6 +61,7 @@ fn plan(repo: &Path, plan: &str, source: &str) -> Value {
 }
 
 #[test]
+#[expect(clippy::too_many_lines)]
 fn native_findings_match_baseline() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")

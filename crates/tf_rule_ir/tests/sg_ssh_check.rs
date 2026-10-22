@@ -11,7 +11,7 @@ use tf_linter::{Linter, ScanOptions, discover_roots, scan_with};
 type Key = (String, String, String, String);
 
 fn keys(l: &Linter, roots: &[PathBuf]) -> BTreeSet<Key> {
-    let (r, _) = scan_with(l, roots, &ScanOptions::default());
+    let (r, _) = scan_with(l, roots, &ScanOptions::default()).unwrap();
     r.findings
         .iter()
         .map(|f| {

@@ -283,6 +283,7 @@ fn gen_ast_kind(s: &Schema) -> TokenStream {
     }
 }
 
+#[expect(clippy::too_many_lines)]
 fn gen_visit(s: &Schema, mutable: bool) -> TokenStream {
     let mut methods = Vec::new();
     let mut walks = Vec::new();

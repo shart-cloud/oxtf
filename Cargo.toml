@@ -9,6 +9,7 @@ license = "MIT"
 publish = false
 
 [workspace.dependencies]
+tf_limits = { path = "crates/tf_limits" }
 tf_span = { path = "crates/tf_span" }
 tf_allocator = { path = "crates/tf_allocator" }
 tf_ast = { path = "crates/tf_ast" }
@@ -44,3 +45,9 @@ debug = 1
 # oxtf; see FIRST_CLASS_RULES_PLAN.md F3). Drop once upstream releases them.
 [patch.crates-io]
 regorus = { git = "https://github.com/jlgore/regorus", rev = "b395fb851e73d94a61d395ee3258ffbe1710961c" }
+
+[workspace.lints.clippy]
+# Threshold in clippy.toml. Existing long functions carry
+# #[expect(clippy::too_many_lines)]; an expectation that no longer fires fails
+# the build, so the allowlist only shrinks.
+too_many_lines = "warn"

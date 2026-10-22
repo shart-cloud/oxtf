@@ -11,8 +11,12 @@ name = "oxtf"
 path = "src/main.rs"
 
 [dependencies]
+tf_limits.workspace = true
 tf_linter.workspace = true
 tf_scan.workspace = true
 serde_json.workspace = true
 miette.workspace = true
 mimalloc = "0.1"
+
+[lints]
+workspace = true

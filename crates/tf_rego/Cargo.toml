@@ -6,6 +6,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+tf_limits.workspace = true
 tf_eval.workspace = true
 tf_linter.workspace = true
 tf_semantic.workspace = true
@@ -19,3 +20,6 @@ serde.workspace = true
 serde_json.workspace = true
 regorus = { version = "=0.13.0", default-features = false, features = ["std", "arc", "base64", "base64url", "glob", "graph", "hex", "jsonpatch", "net", "regex", "semver", "time", "urlquery", "uuid", "yaml"] }
 
+
+[lints]
+workspace = true

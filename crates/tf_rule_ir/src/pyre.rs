@@ -100,6 +100,7 @@ impl Translator<'_> {
         self.p[self.i..].starts_with(&s)
     }
 
+    #[expect(clippy::too_many_lines)]
     fn run(&mut self) -> Result<(), String> {
         // Global inline flags: Python accepts them only at the start.
         if self.at("(?") {
@@ -380,6 +381,7 @@ impl Translator<'_> {
 
     /// A character class, rebuilt with every literal escaped so that the
     /// `regex` crate's nested classes and set operators never apply.
+    #[expect(clippy::too_many_lines)]
     fn class(&mut self) -> Result<(), String> {
         let mut out = String::from("[");
         if self.peek() == Some('^') {

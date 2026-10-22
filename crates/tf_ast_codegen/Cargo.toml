@@ -25,3 +25,6 @@ syn = { version = "2", features = ["full"] }
 quote = "1"
 proc-macro2 = "1"
 prettyplease = { version = "0.2", optional = true }
+
+[lints]
+workspace = true

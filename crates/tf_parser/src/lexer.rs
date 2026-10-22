@@ -141,6 +141,7 @@ impl<'s> Lexer<'s> {
 
     /// Next token in normal mode. Skips spaces and tabs; emits comments and
     /// newlines as tokens.
+    #[expect(clippy::too_many_lines)]
     pub fn next_token(&mut self) -> Token {
         let b = self.bytes();
         while self.pos < b.len() && matches!(b[self.pos], b' ' | b'\t' | b'\r') {
@@ -394,6 +395,7 @@ impl<'s> Lexer<'s> {
     ///
     /// `at_line_start` must be true when `pos` is at the beginning of a
     /// heredoc line (so a terminator there is recognised).
+    #[expect(clippy::too_many_lines)]
     pub fn scan_template_literal(
         &mut self,
         ctx: TemplateCtx<'_>,

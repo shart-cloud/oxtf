@@ -136,6 +136,7 @@ fn compound_filters_keep_missing_paths_distinct_from_null() {
 }
 
 #[test]
+#[expect(clippy::too_many_lines)]
 fn jsonpath_preserves_unknowns_alternatives_and_evidence() {
     use Truth::*;
     for (body, expected) in [

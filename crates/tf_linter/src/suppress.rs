@@ -97,7 +97,7 @@ pub fn checkov_skips(
     findings: Vec<Finding>,
     analysis: &Analysis,
     files: &FileTable,
-    store: Option<&ModuleStore>,
+    store: Option<(&ModuleStore, tf_limits::Limits)>,
 ) -> (Vec<Finding>, Vec<Suppressed>) {
     // A rule that aliases a Checkov rule is suppressed by its IDs too.
     let skippable = |f: &Finding| f.source.engine == Engine::Checkov || !f.aliases.is_empty();
@@ -151,7 +151,7 @@ fn blocks(
     r: &Resource,
     analysis: &Analysis,
     files: &FileTable,
-    store: Option<&ModuleStore>,
+    store: Option<(&ModuleStore, tf_limits::Limits)>,
 ) -> Vec<(FileId, u32, u32)> {
     let line = |at: FileSpan| files.get(at.file).line_col(at.span.start).0;
     let mut out = vec![(
@@ -162,7 +162,7 @@ fn blocks(
             Span::empty(r.body.span.span.end),
         )),
     )];
-    let Some(store) = store else {
+    let Some((store, limits)) = store else {
         return out;
     };
     let mut module = analysis.modules.iter().find(|m| m.address == r.module);
@@ -177,7 +177,9 @@ fn blocks(
             .next()
             .map(|s| s.split(['[', '.']).next().unwrap_or(s))
             .unwrap_or_default();
-        let def = store.module(files, &parent.dir);
+        let Ok(def) = store.module_with_limits(files, &parent.dir, limits) else {
+            break;
+        };
         if let Some(call) = def.module_call(name).map(|i| &def.module_calls[i]) {
             let span = call.block.span;
             let at = |offset: u32| line(FileSpan::new(call.file, Span::empty(offset)));

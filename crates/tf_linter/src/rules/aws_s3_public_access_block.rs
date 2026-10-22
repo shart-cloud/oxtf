@@ -22,10 +22,19 @@ pub struct AwsS3PublicAccessBlock;
 impl RuleMeta for AwsS3PublicAccessBlock {
     const NAME: &'static str = "aws-s3-public-access-block";
     const CATEGORY: Category = Category::Storage;
-    const LEVEL: Level = Level::High;
+    const LEVEL: Level = Level::Medium;
     const DESCRIPTION: &'static str =
         "S3 bucket has no aws_s3_bucket_public_access_block with all four protections enabled";
     const RUNS_ON_MODULE: bool = true;
+    const RATIONALE: Option<&'static str> = Some(
+        "Missing explicit bucket-level guardrails can permit public grants, but does not prove the bucket is public. New-bucket defaults and account or organization controls may already block public access.",
+    );
+    const REMEDIATION: Option<&'static str> = Some(
+        "Manage an aws_s3_bucket_public_access_block for the bucket with block_public_acls, ignore_public_acls, block_public_policy, and restrict_public_buckets set to true. Review effective account controls and any intentional public-content workflow before applying; inspect bucket policies and ACLs separately.",
+    );
+    const GUIDELINE: Option<&'static str> = Some(
+        "https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html",
+    );
 }
 
 const FLAGS: &[&str] = &[

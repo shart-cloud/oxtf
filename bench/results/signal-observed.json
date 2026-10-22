@@ -1,0 +1,1758 @@
+{
+  "schema": 3,
+  "roots": 504,
+  "resources": 5379,
+  "status": "failed",
+  "rule_errors": 14,
+  "diagnostics": 728,
+  "findings": 568,
+  "occurrences": 1576,
+  "rules_firing": 192,
+  "json_bytes": 2155330,
+  "json_bytes_per_finding": 3795,
+  "ndjson_bytes": 698031,
+  "ndjson_bytes_per_finding": 1229,
+  "with_attribute_pct": 83.1,
+  "with_fix_hint_pct": 9.9,
+  "header_only_pct": 16.9,
+  "not_medium_pct": 73.6,
+  "with_rationale_pct": 99.6,
+  "with_remediation_pct": 41.7,
+  "levels": {
+    "critical": 3,
+    "high": 47,
+    "low": 368,
+    "medium": 150
+  },
+  "ndjson_breakdown": {
+    "diagnostic": 328891,
+    "finding": 263345,
+    "rule_error": 2592,
+    "rule_metadata": 102960,
+    "summary": 243
+  },
+  "analysis_inventory": {
+    "diagnostics_by_code": {
+      "coverage-evaluation": 19,
+      "coverage-remote-module": 600,
+      "evaluation-error": 109
+    },
+    "evaluation_gaps": [
+      {
+        "reason": "unsupported function fileset",
+        "count": 6
+      },
+      {
+        "reason": "analysis limit: merge: too many alternatives",
+        "count": 5
+      },
+      {
+        "reason": "unsupported function timeadd",
+        "count": 4
+      },
+      {
+        "reason": "analysis limit: for: too many filter alternatives",
+        "count": 2
+      },
+      {
+        "reason": "unsupported function uuid",
+        "count": 1
+      },
+      {
+        "reason": "unsupported function formatdate",
+        "count": 1
+      }
+    ],
+    "rule_errors": [
+      {
+        "rule": "CKV_GCP_24",
+        "message": "checkov_python GKEPodSecurityPolicyEnabled.scan_resource_conf: raised AttributeError",
+        "count": 13
+      },
+      {
+        "rule": "CKV_GCP_22",
+        "message": "checkov_python GKEUseCosImage.scan_resource_conf: raised AttributeError",
+        "count": 1
+      }
+    ],
+    "guidance_backlog": [
+      {
+        "rule": "CKV_GCP_26",
+        "findings": 38,
+        "description": "Ensure that VPC Flow Logs is enabled for every subnet in a VPC Network",
+        "level": "low",
+        "profile": "audit"
+      },
+      {
+        "rule": "CKV_GCP_74",
+        "findings": 36,
+        "description": "Ensure that private_ip_google_access is enabled for Subnet",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_GCP_65",
+        "findings": 11,
+        "description": "Manage Kubernetes RBAC users with Google Groups for GKE",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_GCP_21",
+        "findings": 11,
+        "description": "Ensure Kubernetes Clusters are configured with Labels",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_GCP_61",
+        "findings": 11,
+        "description": "Enable VPC Flow Logs and Intranode Visibility",
+        "level": "low",
+        "profile": "audit"
+      },
+      {
+        "rule": "CKV2_AWS_41",
+        "findings": 7,
+        "description": "Ensure an IAM role is attached to EC2 instance",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_126",
+        "findings": 7,
+        "description": "Ensure that detailed monitoring is enabled for EC2 instances",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_135",
+        "findings": 7,
+        "description": "Ensure that EC2 is EBS optimized",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_338",
+        "findings": 7,
+        "description": "Ensure CloudWatch log groups retains logs for at least 1 year",
+        "level": "low",
+        "profile": "audit"
+      },
+      {
+        "rule": "CKV_GCP_123",
+        "findings": 7,
+        "description": "GKE Don't Use NodePools in the Cluster configuration",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV2_AWS_5",
+        "findings": 6,
+        "description": "Ensure that Security Groups are attached to another resource",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_GCP_76",
+        "findings": 5,
+        "description": "Ensure that Private google access is enabled for IPV6",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_23",
+        "findings": 4,
+        "description": "Ensure every security group and rule has a description",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_K8S_21",
+        "findings": 4,
+        "description": "The default namespace should not be used",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV2_AZURE_32",
+        "findings": 3,
+        "description": "Ensure private endpoint is configured to key vault",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AZURE_227",
+        "findings": 3,
+        "description": "Ensure that the AKS cluster encrypt temp disks, caches, and data flows between Compute and Storage resources",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AZURE_168",
+        "findings": 3,
+        "description": "Ensure Azure Kubernetes Cluster (AKS) nodes should use a minimum number of 50 pods.",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AZURE_114",
+        "findings": 3,
+        "description": "Ensure that key vault secrets have \"content_type\" set",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AZURE_41",
+        "findings": 3,
+        "description": "Ensure that the expiration date is set on all secrets",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_7",
+        "findings": 3,
+        "description": "Ensure rotation for customer created CMKs is enabled",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AZURE_112",
+        "findings": 2,
+        "description": "Ensure that key vault key is backed by HSM",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_315",
+        "findings": 2,
+        "description": "Ensure EC2 Auto Scaling groups use EC2 launch templates",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_341",
+        "findings": 2,
+        "description": "Ensure Launch template should not have a metadata response hop limit greater than 1",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_353",
+        "findings": 2,
+        "description": "Ensure that RDS instances have performance insights enabled",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_354",
+        "findings": 2,
+        "description": "Ensure RDS Performance Insights are encrypted using KMS CMKs",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_133",
+        "findings": 2,
+        "description": "Ensure that RDS instances has backup policy",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_118",
+        "findings": 2,
+        "description": "Ensure that enhanced monitoring is enabled for Amazon RDS instances",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_304",
+        "findings": 2,
+        "description": "Ensure Secrets Manager secrets should be rotated within 90 days",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_GCP_62",
+        "findings": 2,
+        "description": "Bucket should log access",
+        "level": "low",
+        "profile": "audit"
+      },
+      {
+        "rule": "CKV_GCP_114",
+        "findings": 2,
+        "description": "Ensure public access prevention is enforced on Cloud Storage bucket",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_GCP_83",
+        "findings": 2,
+        "description": "Ensure PubSub Topics are encrypted with Customer Supplied Encryption Keys (CSEK)",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_GCP_13",
+        "findings": 2,
+        "description": "Ensure client certificate authentication to Kubernetes Engine Clusters is disabled",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_GCP_18",
+        "findings": 2,
+        "description": "Ensure GKE Control Plane is not public",
+        "level": "high",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_GCP_23",
+        "findings": 2,
+        "description": "Ensure Kubernetes Cluster is created with Alias IP ranges enabled",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AZURE_109",
+        "findings": 1,
+        "description": "Ensure that key vault allows firewall rules settings",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AZURE_139",
+        "findings": 1,
+        "description": "Ensure ACR set to disable public networking",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AZURE_164",
+        "findings": 1,
+        "description": "Ensures that ACR uses signed/trusted images",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AZURE_165",
+        "findings": 1,
+        "description": "Ensure geo-replicated container registries to match multi-region container deployments.",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AZURE_166",
+        "findings": 1,
+        "description": "Ensure container image quarantine, scan, and mark images verified",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AZURE_167",
+        "findings": 1,
+        "description": "Ensure a retention policy is set to cleanup untagged manifests.",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AZURE_233",
+        "findings": 1,
+        "description": "Ensure Azure Container Registry (ACR) is zone redundant",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AZURE_237",
+        "findings": 1,
+        "description": "Ensure dedicated data endpoints are enabled.",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AZURE_116",
+        "findings": 1,
+        "description": "Ensure that AKS uses Azure Policies Add-on",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AZURE_172",
+        "findings": 1,
+        "description": "Ensure autorotation of Secrets Store CSI Driver secrets for AKS clusters",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AZURE_4",
+        "findings": 1,
+        "description": "Ensure AKS logging to Azure Monitoring is Configured",
+        "level": "low",
+        "profile": "audit"
+      },
+      {
+        "rule": "CKV_AZURE_5",
+        "findings": 1,
+        "description": "Ensure RBAC is enabled on AKS clusters",
+        "level": "high",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AZURE_6",
+        "findings": 1,
+        "description": "Ensure AKS has an API Server Authorized IP Ranges enabled",
+        "level": "high",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AZURE_117",
+        "findings": 1,
+        "description": "Ensure that AKS uses disk encryption set",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AZURE_141",
+        "findings": 1,
+        "description": "Ensure AKS local admin account is disabled",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AZURE_115",
+        "findings": 1,
+        "description": "Ensure that AKS enables private clusters",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AZURE_170",
+        "findings": 1,
+        "description": "Ensure that AKS use the Paid Sku for its SLA",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AZURE_232",
+        "findings": 1,
+        "description": "Ensure that only critical system pods run on system nodes",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AZURE_226",
+        "findings": 1,
+        "description": "Ensure ephemeral disks are used for OS disks",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV2_AZURE_29",
+        "findings": 1,
+        "description": "Ensure AKS cluster has Azure CNI networking enabled",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AZURE_7",
+        "findings": 1,
+        "description": "Ensure AKS cluster has Network Policy configured",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AZURE_40",
+        "findings": 1,
+        "description": "Ensure that the expiration date is set on all keys",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV2_AWS_20",
+        "findings": 1,
+        "description": "Ensure that ALB redirects HTTP requests into HTTPS ones",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_91",
+        "findings": 1,
+        "description": "Ensure the ELBv2 (Application/Network) has access logging enabled",
+        "level": "low",
+        "profile": "audit"
+      },
+      {
+        "rule": "CKV_AWS_150",
+        "findings": 1,
+        "description": "Ensure that Load Balancer has deletion protection enabled",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV2_AWS_28",
+        "findings": 1,
+        "description": "Ensure public facing ALB are protected by WAF",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_103",
+        "findings": 1,
+        "description": "Ensure that load balancer is using at least TLS 1.2",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_2",
+        "findings": 1,
+        "description": "Ensure ALB protocol is HTTPS",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_378",
+        "findings": 1,
+        "description": "Ensure AWS Load Balancer doesn't use HTTP protocol",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_260",
+        "findings": 1,
+        "description": "Ensure no security groups allow ingress from 0.0.0.0:0 to port 80",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV2_AWS_32",
+        "findings": 1,
+        "description": "Ensure CloudFront distribution has a response headers policy attached",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV2_AWS_47",
+        "findings": 1,
+        "description": "Ensure AWS CloudFront attached WAFv2 WebACL is configured with AMR for Log4j Vulnerability",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_310",
+        "findings": 1,
+        "description": "Ensure CloudFront distributions should have origin failover configured",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_86",
+        "findings": 1,
+        "description": "Ensure CloudFront distribution has Access Logging enabled",
+        "level": "low",
+        "profile": "audit"
+      },
+      {
+        "rule": "CKV_AWS_34",
+        "findings": 1,
+        "description": "Ensure CloudFront distribution ViewerProtocolPolicy is set to HTTPS",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_305",
+        "findings": 1,
+        "description": "Ensure CloudFront distribution has a default root object configured",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_374",
+        "findings": 1,
+        "description": "Ensure AWS CloudFront web distribution has geo restriction enabled",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV2_AWS_42",
+        "findings": 1,
+        "description": "Ensure AWS CloudFront distribution uses custom SSL certificate",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_174",
+        "findings": 1,
+        "description": "Verify CloudFront Distribution Viewer Certificate is using TLS v1.2",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_68",
+        "findings": 1,
+        "description": "CloudFront Distribution should have WAF enabled",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_259",
+        "findings": 1,
+        "description": "Ensure CloudFront response header policy enforces Strict Transport Security",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV2_AWS_64",
+        "findings": 1,
+        "description": "Ensure KMS key Policy is defined",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV2_AWS_9",
+        "findings": 1,
+        "description": "Ensure that EBS are added in the backup plans of AWS Backup",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_189",
+        "findings": 1,
+        "description": "Ensure EBS Volume is encrypted by KMS using a customer managed Key (CMK)",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_339",
+        "findings": 1,
+        "description": "Ensure EKS clusters run on a supported Kubernetes version",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_37",
+        "findings": 1,
+        "description": "Ensure Amazon EKS control plane logging is enabled for all log types",
+        "level": "low",
+        "profile": "audit"
+      },
+      {
+        "rule": "CKV_AWS_39",
+        "findings": 1,
+        "description": "Ensure Amazon EKS public endpoint disabled",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_38",
+        "findings": 1,
+        "description": "Ensure Amazon EKS public endpoint not accessible to 0.0.0.0/0",
+        "level": "high",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_382",
+        "findings": 1,
+        "description": "Ensure no security groups allow egress from 0.0.0.0:0 to port -1",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_9",
+        "findings": 1,
+        "description": "Ensure IAM password policy expires passwords within 90 days or less",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_10",
+        "findings": 1,
+        "description": "Ensure IAM password policy requires minimum length of 14 or greater",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_12",
+        "findings": 1,
+        "description": "Ensure IAM password policy requires at least one number",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV2_AWS_22",
+        "findings": 1,
+        "description": "Ensure an IAM User does not have access to the console",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_273",
+        "findings": 1,
+        "description": "Ensure access is controlled through SSO and not AWS IAM defined users",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_40",
+        "findings": 1,
+        "description": "Ensure IAM policies are attached only to groups or roles (Reducing access management complexity may in-turn reduce opportunity for a principal to inadvertently receive or retain excessive privileges.)",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_119",
+        "findings": 1,
+        "description": "Ensure DynamoDB Tables are encrypted using a KMS Customer Managed CMK",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_28",
+        "findings": 1,
+        "description": "Ensure DynamoDB point in time recovery (backup) is enabled",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_185",
+        "findings": 1,
+        "description": "Ensure Kinesis Stream is encrypted by KMS using a customer managed Key (CMK)",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_43",
+        "findings": 1,
+        "description": "Ensure Kinesis Stream is securely encrypted",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_207",
+        "findings": 1,
+        "description": "Ensure MQ Broker minor version updates are enabled",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_209",
+        "findings": 1,
+        "description": "Ensure MQ broker encrypted by KMS using a customer managed Key (CMK)",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_48",
+        "findings": 1,
+        "description": "Ensure MQ Broker logging is enabled",
+        "level": "low",
+        "profile": "audit"
+      },
+      {
+        "rule": "CKV2_AWS_57",
+        "findings": 1,
+        "description": "Ensure Secrets Manager secrets should have automatic rotation enabled",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_149",
+        "findings": 1,
+        "description": "Ensure that Secrets Manager secret is encrypted using KMS CMK",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV2_AWS_18",
+        "findings": 1,
+        "description": "Ensure that Elastic File System (Amazon EFS) file systems are added in the backup plans of AWS Backup",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_184",
+        "findings": 1,
+        "description": "Ensure resource is encrypted by KMS using a customer managed Key (CMK)",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_42",
+        "findings": 1,
+        "description": "Ensure EFS is securely encrypted",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_116",
+        "findings": 1,
+        "description": "Ensure that AWS Lambda function is configured for a Dead Letter Queue(DLQ)",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_117",
+        "findings": 1,
+        "description": "Ensure that AWS Lambda function is configured inside a VPC",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_50",
+        "findings": 1,
+        "description": "X-Ray tracing is enabled for Lambda",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_173",
+        "findings": 1,
+        "description": "Check encryption settings for Lambda environmental variable",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_272",
+        "findings": 1,
+        "description": "Ensure AWS Lambda function is configured to validate code-signing",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_66",
+        "findings": 1,
+        "description": "Ensure that CloudWatch Log Group specifies retention days",
+        "level": "low",
+        "profile": "audit"
+      },
+      {
+        "rule": "CKV_AWS_258",
+        "findings": 1,
+        "description": "Ensure that Lambda function URLs AuthType is not None",
+        "level": "high",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_136",
+        "findings": 1,
+        "description": "Ensure that ECR repositories are encrypted using KMS",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_51",
+        "findings": 1,
+        "description": "Ensure ECR Image Tags are immutable",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_163",
+        "findings": 1,
+        "description": "Ensure ECR image scanning on push is enabled",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV2_AWS_30",
+        "findings": 1,
+        "description": "Ensure Postgres RDS as aws_db_instance has Query Logging enabled",
+        "level": "low",
+        "profile": "audit"
+      },
+      {
+        "rule": "CKV2_AWS_69",
+        "findings": 1,
+        "description": "Ensure AWS RDS database instance configured with encryption in transit",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_161",
+        "findings": 1,
+        "description": "Ensure RDS database has IAM authentication enabled",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_157",
+        "findings": 1,
+        "description": "Ensure that RDS instances have Multi-AZ enabled",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_129",
+        "findings": 1,
+        "description": "Ensure that respective logs of Amazon Relational Database Service (Amazon RDS) are enabled",
+        "level": "low",
+        "profile": "audit"
+      },
+      {
+        "rule": "CKV_AWS_293",
+        "findings": 1,
+        "description": "Ensure that AWS database instances have deletion protection enabled",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_245",
+        "findings": 1,
+        "description": "Ensure replicated backups are encrypted at rest using KMS CMKs",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV2_AWS_27",
+        "findings": 1,
+        "description": "Ensure Postgres RDS as aws_rds_cluster has Query Logging enabled",
+        "level": "low",
+        "profile": "audit"
+      },
+      {
+        "rule": "CKV2_AWS_8",
+        "findings": 1,
+        "description": "Ensure that RDS clusters has backup plan of AWS Backup",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_326",
+        "findings": 1,
+        "description": "Ensure that RDS Aurora Clusters have backtracking enabled",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_139",
+        "findings": 1,
+        "description": "Ensure that RDS clusters have deletion protection enabled",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_324",
+        "findings": 1,
+        "description": "Ensure that RDS Cluster log capture is enabled",
+        "level": "low",
+        "profile": "audit"
+      },
+      {
+        "rule": "CKV_AWS_325",
+        "findings": 1,
+        "description": "Ensure that RDS Cluster audit logging is enabled for MySQL engine",
+        "level": "low",
+        "profile": "audit"
+      },
+      {
+        "rule": "CKV_AWS_162",
+        "findings": 1,
+        "description": "Ensure RDS cluster has IAM authentication enabled",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_AWS_327",
+        "findings": 1,
+        "description": "Ensure RDS Clusters are encrypted using KMS CMKs",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_226",
+        "findings": 1,
+        "description": "Ensure DB instance gets all minor upgrades automatically",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV2_AWS_61",
+        "findings": 1,
+        "description": "Ensure that an S3 bucket has a lifecycle configuration",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV2_AWS_62",
+        "findings": 1,
+        "description": "Ensure S3 buckets should have event notifications enabled",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_144",
+        "findings": 1,
+        "description": "Ensure that S3 bucket has cross-region replication enabled",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_18",
+        "findings": 1,
+        "description": "Ensure the S3 bucket has access logging enabled",
+        "level": "low",
+        "profile": "audit"
+      },
+      {
+        "rule": "CKV_AWS_21",
+        "findings": 1,
+        "description": "Ensure all data stored in the S3 bucket have versioning enabled",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_AWS_300",
+        "findings": 1,
+        "description": "Ensure S3 lifecycle configuration sets period for aborting failed uploads",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV2_AWS_65",
+        "findings": 1,
+        "description": "Ensure access control lists for S3 buckets are disabled",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV2_AWS_11",
+        "findings": 1,
+        "description": "Ensure VPC flow logging is enabled in all VPCs",
+        "level": "low",
+        "profile": "audit"
+      },
+      {
+        "rule": "CKV_AWS_231",
+        "findings": 1,
+        "description": "Ensure no NACL allow ingress from 0.0.0.0:0 to port 3389",
+        "level": "medium",
+        "profile": "unreviewed"
+      },
+      {
+        "rule": "CKV_AWS_232",
+        "findings": 1,
+        "description": "Ensure no NACL allow ingress from 0.0.0.0:0 to port 22",
+        "level": "medium",
+        "profile": "unreviewed"
+      },
+      {
+        "rule": "CKV_AWS_148",
+        "findings": 1,
+        "description": "Ensure no default VPC is planned to be provisioned",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_GCP_78",
+        "findings": 1,
+        "description": "Ensure Cloud storage has versioning enabled",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_K8S_10",
+        "findings": 1,
+        "description": "CPU requests should be set",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_K8S_11",
+        "findings": 1,
+        "description": "CPU Limits should be set",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_K8S_12",
+        "findings": 1,
+        "description": "Memory Limits should be set",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_K8S_13",
+        "findings": 1,
+        "description": "Memory requests should be set",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_K8S_15",
+        "findings": 1,
+        "description": "Image Pull Policy should be Always",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_K8S_28",
+        "findings": 1,
+        "description": "Minimize the admission of containers with the NET_RAW capability",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_K8S_29",
+        "findings": 1,
+        "description": "Apply security context to your pods, deployments and daemon_sets",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_K8S_30",
+        "findings": 1,
+        "description": "Apply security context to your pods and containers",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_K8S_8",
+        "findings": 1,
+        "description": "Liveness Probe Should be Configured",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_K8S_9",
+        "findings": 1,
+        "description": "Readiness Probe Should be Configured",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_K8S_43",
+        "findings": 1,
+        "description": "Image should use digest",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_GCP_70",
+        "findings": 1,
+        "description": "Ensure the GKE Release Channel is set",
+        "level": "low",
+        "profile": "hygiene"
+      },
+      {
+        "rule": "CKV_K8S_41",
+        "findings": 1,
+        "description": "Ensure that default service accounts are not actively used",
+        "level": "low",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_GCP_43",
+        "findings": 1,
+        "description": "Ensure KMS encryption keys are rotated within a period of 90 days",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_GCP_42",
+        "findings": 1,
+        "description": "Ensure that Service Account has no Admin privileges",
+        "level": "high",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_GCP_46",
+        "findings": 1,
+        "description": "Ensure Default Service account is not used at a project level",
+        "level": "medium",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_GCP_117",
+        "findings": 1,
+        "description": "Ensure basic roles are not used at project level.",
+        "level": "high",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_GCP_2",
+        "findings": 1,
+        "description": "Ensure Google compute firewall ingress does not allow unrestricted ssh access",
+        "level": "high",
+        "profile": "security"
+      },
+      {
+        "rule": "CKV_GCP_106",
+        "findings": 1,
+        "description": "Ensure Google compute firewall ingress does not allow unrestricted http port 80 access",
+        "level": "medium",
+        "profile": "security"
+      }
+    ]
+  },
+  "default_profile": {
+    "schema": 3,
+    "roots": 504,
+    "resources": 5379,
+    "status": "failed",
+    "rule_errors": 14,
+    "diagnostics": 728,
+    "findings": 262,
+    "occurrences": 507,
+    "rules_firing": 100,
+    "json_bytes": 1277479,
+    "json_bytes_per_finding": 4876,
+    "ndjson_bytes": 511501,
+    "ndjson_bytes_per_finding": 1952,
+    "with_attribute_pct": 87.4,
+    "with_fix_hint_pct": 8.4,
+    "header_only_pct": 12.6,
+    "not_medium_pct": 42.7,
+    "with_rationale_pct": 99.2,
+    "with_remediation_pct": 68.3,
+    "levels": {
+      "critical": 3,
+      "high": 47,
+      "low": 62,
+      "medium": 150
+    },
+    "ndjson_breakdown": {
+      "diagnostic": 328891,
+      "finding": 120890,
+      "rule_error": 2592,
+      "rule_metadata": 58885,
+      "summary": 243
+    },
+    "analysis_inventory": {
+      "diagnostics_by_code": {
+        "coverage-evaluation": 19,
+        "coverage-remote-module": 600,
+        "evaluation-error": 109
+      },
+      "evaluation_gaps": [
+        {
+          "reason": "unsupported function fileset",
+          "count": 6
+        },
+        {
+          "reason": "analysis limit: merge: too many alternatives",
+          "count": 5
+        },
+        {
+          "reason": "unsupported function timeadd",
+          "count": 4
+        },
+        {
+          "reason": "analysis limit: for: too many filter alternatives",
+          "count": 2
+        },
+        {
+          "reason": "unsupported function uuid",
+          "count": 1
+        },
+        {
+          "reason": "unsupported function formatdate",
+          "count": 1
+        }
+      ],
+      "rule_errors": [
+        {
+          "rule": "CKV_GCP_24",
+          "message": "checkov_python GKEPodSecurityPolicyEnabled.scan_resource_conf: raised AttributeError",
+          "count": 13
+        },
+        {
+          "rule": "CKV_GCP_22",
+          "message": "checkov_python GKEUseCosImage.scan_resource_conf: raised AttributeError",
+          "count": 1
+        }
+      ],
+      "guidance_backlog": [
+        {
+          "rule": "CKV2_AZURE_32",
+          "findings": 3,
+          "description": "Ensure private endpoint is configured to key vault",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AZURE_227",
+          "findings": 3,
+          "description": "Ensure that the AKS cluster encrypt temp disks, caches, and data flows between Compute and Storage resources",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AZURE_41",
+          "findings": 3,
+          "description": "Ensure that the expiration date is set on all secrets",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_7",
+          "findings": 3,
+          "description": "Ensure rotation for customer created CMKs is enabled",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_341",
+          "findings": 2,
+          "description": "Ensure Launch template should not have a metadata response hop limit greater than 1",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_304",
+          "findings": 2,
+          "description": "Ensure Secrets Manager secrets should be rotated within 90 days",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_GCP_114",
+          "findings": 2,
+          "description": "Ensure public access prevention is enforced on Cloud Storage bucket",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_GCP_13",
+          "findings": 2,
+          "description": "Ensure client certificate authentication to Kubernetes Engine Clusters is disabled",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_GCP_18",
+          "findings": 2,
+          "description": "Ensure GKE Control Plane is not public",
+          "level": "high",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AZURE_109",
+          "findings": 1,
+          "description": "Ensure that key vault allows firewall rules settings",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AZURE_139",
+          "findings": 1,
+          "description": "Ensure ACR set to disable public networking",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AZURE_164",
+          "findings": 1,
+          "description": "Ensures that ACR uses signed/trusted images",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AZURE_166",
+          "findings": 1,
+          "description": "Ensure container image quarantine, scan, and mark images verified",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AZURE_116",
+          "findings": 1,
+          "description": "Ensure that AKS uses Azure Policies Add-on",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AZURE_172",
+          "findings": 1,
+          "description": "Ensure autorotation of Secrets Store CSI Driver secrets for AKS clusters",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AZURE_5",
+          "findings": 1,
+          "description": "Ensure RBAC is enabled on AKS clusters",
+          "level": "high",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AZURE_6",
+          "findings": 1,
+          "description": "Ensure AKS has an API Server Authorized IP Ranges enabled",
+          "level": "high",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AZURE_141",
+          "findings": 1,
+          "description": "Ensure AKS local admin account is disabled",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AZURE_115",
+          "findings": 1,
+          "description": "Ensure that AKS enables private clusters",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AZURE_7",
+          "findings": 1,
+          "description": "Ensure AKS cluster has Network Policy configured",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AZURE_40",
+          "findings": 1,
+          "description": "Ensure that the expiration date is set on all keys",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV2_AWS_20",
+          "findings": 1,
+          "description": "Ensure that ALB redirects HTTP requests into HTTPS ones",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV2_AWS_28",
+          "findings": 1,
+          "description": "Ensure public facing ALB are protected by WAF",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_103",
+          "findings": 1,
+          "description": "Ensure that load balancer is using at least TLS 1.2",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_2",
+          "findings": 1,
+          "description": "Ensure ALB protocol is HTTPS",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_378",
+          "findings": 1,
+          "description": "Ensure AWS Load Balancer doesn't use HTTP protocol",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_260",
+          "findings": 1,
+          "description": "Ensure no security groups allow ingress from 0.0.0.0:0 to port 80",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV2_AWS_32",
+          "findings": 1,
+          "description": "Ensure CloudFront distribution has a response headers policy attached",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV2_AWS_47",
+          "findings": 1,
+          "description": "Ensure AWS CloudFront attached WAFv2 WebACL is configured with AMR for Log4j Vulnerability",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_34",
+          "findings": 1,
+          "description": "Ensure CloudFront distribution ViewerProtocolPolicy is set to HTTPS",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_174",
+          "findings": 1,
+          "description": "Verify CloudFront Distribution Viewer Certificate is using TLS v1.2",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_68",
+          "findings": 1,
+          "description": "CloudFront Distribution should have WAF enabled",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_259",
+          "findings": 1,
+          "description": "Ensure CloudFront response header policy enforces Strict Transport Security",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV2_AWS_64",
+          "findings": 1,
+          "description": "Ensure KMS key Policy is defined",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_339",
+          "findings": 1,
+          "description": "Ensure EKS clusters run on a supported Kubernetes version",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_39",
+          "findings": 1,
+          "description": "Ensure Amazon EKS public endpoint disabled",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_38",
+          "findings": 1,
+          "description": "Ensure Amazon EKS public endpoint not accessible to 0.0.0.0/0",
+          "level": "high",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_382",
+          "findings": 1,
+          "description": "Ensure no security groups allow egress from 0.0.0.0:0 to port -1",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_9",
+          "findings": 1,
+          "description": "Ensure IAM password policy expires passwords within 90 days or less",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_10",
+          "findings": 1,
+          "description": "Ensure IAM password policy requires minimum length of 14 or greater",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_12",
+          "findings": 1,
+          "description": "Ensure IAM password policy requires at least one number",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV2_AWS_22",
+          "findings": 1,
+          "description": "Ensure an IAM User does not have access to the console",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_273",
+          "findings": 1,
+          "description": "Ensure access is controlled through SSO and not AWS IAM defined users",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_43",
+          "findings": 1,
+          "description": "Ensure Kinesis Stream is securely encrypted",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_207",
+          "findings": 1,
+          "description": "Ensure MQ Broker minor version updates are enabled",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV2_AWS_57",
+          "findings": 1,
+          "description": "Ensure Secrets Manager secrets should have automatic rotation enabled",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_42",
+          "findings": 1,
+          "description": "Ensure EFS is securely encrypted",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_272",
+          "findings": 1,
+          "description": "Ensure AWS Lambda function is configured to validate code-signing",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_258",
+          "findings": 1,
+          "description": "Ensure that Lambda function URLs AuthType is not None",
+          "level": "high",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_51",
+          "findings": 1,
+          "description": "Ensure ECR Image Tags are immutable",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_163",
+          "findings": 1,
+          "description": "Ensure ECR image scanning on push is enabled",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV2_AWS_69",
+          "findings": 1,
+          "description": "Ensure AWS RDS database instance configured with encryption in transit",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_161",
+          "findings": 1,
+          "description": "Ensure RDS database has IAM authentication enabled",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_162",
+          "findings": 1,
+          "description": "Ensure RDS cluster has IAM authentication enabled",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_226",
+          "findings": 1,
+          "description": "Ensure DB instance gets all minor upgrades automatically",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV2_AWS_65",
+          "findings": 1,
+          "description": "Ensure access control lists for S3 buckets are disabled",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_AWS_231",
+          "findings": 1,
+          "description": "Ensure no NACL allow ingress from 0.0.0.0:0 to port 3389",
+          "level": "medium",
+          "profile": "unreviewed"
+        },
+        {
+          "rule": "CKV_AWS_232",
+          "findings": 1,
+          "description": "Ensure no NACL allow ingress from 0.0.0.0:0 to port 22",
+          "level": "medium",
+          "profile": "unreviewed"
+        },
+        {
+          "rule": "CKV_AWS_148",
+          "findings": 1,
+          "description": "Ensure no default VPC is planned to be provisioned",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_K8S_28",
+          "findings": 1,
+          "description": "Minimize the admission of containers with the NET_RAW capability",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_K8S_29",
+          "findings": 1,
+          "description": "Apply security context to your pods, deployments and daemon_sets",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_K8S_30",
+          "findings": 1,
+          "description": "Apply security context to your pods and containers",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_K8S_43",
+          "findings": 1,
+          "description": "Image should use digest",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_K8S_41",
+          "findings": 1,
+          "description": "Ensure that default service accounts are not actively used",
+          "level": "low",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_GCP_43",
+          "findings": 1,
+          "description": "Ensure KMS encryption keys are rotated within a period of 90 days",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_GCP_42",
+          "findings": 1,
+          "description": "Ensure that Service Account has no Admin privileges",
+          "level": "high",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_GCP_46",
+          "findings": 1,
+          "description": "Ensure Default Service account is not used at a project level",
+          "level": "medium",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_GCP_117",
+          "findings": 1,
+          "description": "Ensure basic roles are not used at project level.",
+          "level": "high",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_GCP_2",
+          "findings": 1,
+          "description": "Ensure Google compute firewall ingress does not allow unrestricted ssh access",
+          "level": "high",
+          "profile": "security"
+        },
+        {
+          "rule": "CKV_GCP_106",
+          "findings": 1,
+          "description": "Ensure Google compute firewall ingress does not allow unrestricted http port 80 access",
+          "level": "medium",
+          "profile": "security"
+        }
+      ]
+    }
+  }
+}

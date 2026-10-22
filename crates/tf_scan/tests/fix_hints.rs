@@ -18,6 +18,7 @@ fn run(
     overlay: Vec<(PathBuf, Arc<str>)>,
 ) -> ScanOutput {
     let mut req = ScanRequest::dirs(vec![dir.to_path_buf()], false);
+    req.catalog = tf_scan::Catalog::seed();
     configure(&mut req);
     req.overlay = overlay;
     let out = scan(req).unwrap();

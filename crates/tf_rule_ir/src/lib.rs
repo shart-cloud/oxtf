@@ -48,7 +48,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tf_eval::truth::{self, Truth};
 use tf_eval::{Kind, Known, Prov, Value, Verdict};
-use tf_linter::{Category, DynRule, Judgement, Level, RuleFailure, RuleInfo};
+use tf_linter::{Category, DynRule, Judgement, Level, RuleBudget, RuleFailure, RuleInfo};
 use tf_semantic::{Module, Resource};
 
 pub mod bundled;
@@ -101,6 +101,10 @@ pub struct RuleSpec {
     /// A page explaining the rule and its fix.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub guideline: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rationale: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remediation: Option<String>,
     /// Where the rule was loaded from: set by the loader, not part of the
     /// IR, and ignored by equality.
     #[serde(skip)]
@@ -242,6 +246,20 @@ enum RulesFile {
 /// Parse a rules document: a rule object, a list of rules, or
 /// `{"rules": [...]}`.
 pub fn parse_rules(json: &str) -> Result<Vec<RuleSpec>, String> {
+    parse_rules_with_limits(json, tf_limits::Limits::default())
+}
+
+pub fn parse_rules_with_limits(
+    json: &str,
+    limits: tf_limits::Limits,
+) -> Result<Vec<RuleSpec>, String> {
+    if json.len() as u64 > limits.input_bytes() {
+        return Err(tf_limits::Exhaustion {
+            resource: tf_limits::Resource::InputBytes,
+            allowance: limits.input_bytes(),
+        }
+        .to_string());
+    }
     // Parse strictly first so that the error message of a single rule is
     // useful (untagged enums only say "did not match any variant").
     let v: serde_json::Value = serde_json::from_str(json).map_err(|e| e.to_string())?;
@@ -297,6 +315,13 @@ pub struct SkippedFile {
 /// rule IR is a data document or test mock (Conftest ignores it unless it
 /// is named with `--data`), not a broken rule.
 pub fn load_rules_file(path: &std::path::Path) -> Result<LoadedRules, String> {
+    load_rules_file_with_sources(path, &tf_semantic::FileTable::new())
+}
+
+pub fn load_rules_file_with_sources(
+    path: &std::path::Path,
+    sources: &tf_semantic::FileTable,
+) -> Result<LoadedRules, String> {
     if !path.is_dir() {
         if path.extension().is_some_and(|e| e == "rego") {
             return Ok(LoadedRules {
@@ -304,7 +329,7 @@ pub fn load_rules_file(path: &std::path::Path) -> Result<LoadedRules, String> {
                 ..LoadedRules::default()
             });
         }
-        return load_one(path).map(|rules| LoadedRules {
+        return load_one(path, sources).map(|rules| LoadedRules {
             rules,
             claimed: vec![path.to_path_buf()],
             ..LoadedRules::default()
@@ -312,7 +337,7 @@ pub fn load_rules_file(path: &std::path::Path) -> Result<LoadedRules, String> {
     }
     let mut files = Vec::new();
     let mut rego = Vec::new();
-    collect_rule_files(path, &mut files, &mut rego)
+    collect_rule_files(path, &mut files, &mut rego, sources)
         .map_err(|e| format!("{}: {e}", path.display()))?;
     let mut out = LoadedRules {
         rego,
@@ -320,13 +345,16 @@ pub fn load_rules_file(path: &std::path::Path) -> Result<LoadedRules, String> {
     };
     let mut seen: std::collections::HashMap<String, std::path::PathBuf> = Default::default();
     for file in files {
-        if !out.rego.is_empty() && !is_rule_document(&file) {
+        if !out.rego.is_empty() && !is_rule_document(&file, sources) {
             continue;
         }
         out.claimed.push(file.clone());
-        let specs = match load_one(&file) {
+        let specs = match load_one(&file, sources) {
             Ok(specs) => specs,
             Err(reason) => {
+                if sources.input_budget().exhaustion().is_some() {
+                    return Err(reason);
+                }
                 out.skipped.push(SkippedFile { path: file, reason });
                 continue;
             }
@@ -363,21 +391,24 @@ fn collect_rule_files(
     dir: &std::path::Path,
     out: &mut Vec<std::path::PathBuf>,
     rego: &mut Vec<std::path::PathBuf>,
+    sources: &tf_semantic::FileTable,
 ) -> std::io::Result<()> {
-    let mut entries: Vec<_> = std::fs::read_dir(dir)?.collect::<Result<_, _>>()?;
-    entries.sort_by_key(|e| e.file_name());
-    for entry in entries {
-        let path = entry.path();
-        if entry.file_type()?.is_dir() {
-            collect_rule_files(&path, out, rego)?;
-        } else {
-            match path.extension().and_then(|e| e.to_str()) {
-                Some("json" | "yaml" | "yml") => out.push(path),
-                Some("rego") => rego.push(path),
-                _ => {}
+    let mut pending = vec![dir.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        for (path, kind) in sources.input_budget().entries(&dir)?.into_iter().rev() {
+            if kind.is_dir() {
+                pending.push(path);
+            } else {
+                match path.extension().and_then(|e| e.to_str()) {
+                    Some("json" | "yaml" | "yml") => out.push(path),
+                    Some("rego") => rego.push(path),
+                    _ => {}
+                }
             }
         }
     }
+    out.sort();
+    rego.sort();
     Ok(())
 }
 
@@ -419,8 +450,8 @@ fn ir_error(path: &std::path::Path, text: &str, message: String) -> String {
 /// IR (a rule with `clauses`, a list of them, or `{"rules": [...]}`). An
 /// unparsable file counts as one when it is `.json` with a `clauses` key in
 /// its text, so a broken rule is reported rather than ignored.
-fn is_rule_document(path: &std::path::Path) -> bool {
-    let Ok(text) = std::fs::read_to_string(path) else {
+fn is_rule_document(path: &std::path::Path, sources: &tf_semantic::FileTable) -> bool {
+    let Ok(text) = sources.read_text(path) else {
         return true;
     };
     let value = match path.extension().and_then(|e| e.to_str()) {
@@ -442,8 +473,13 @@ fn is_rule_document(path: &std::path::Path) -> bool {
     }
 }
 
-fn load_one(path: &std::path::Path) -> Result<Vec<RuleSpec>, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+fn load_one(
+    path: &std::path::Path,
+    sources: &tf_semantic::FileTable,
+) -> Result<Vec<RuleSpec>, String> {
+    let text = sources
+        .read_text(path)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
     let source = match path.extension().and_then(|e| e.to_str()) {
         Some("yaml" | "yml") => checkov_policy::PolicySource::parse(path, &text),
         _ => match serde_json::from_str::<serde_json::Value>(&text) {
@@ -451,7 +487,8 @@ fn load_one(path: &std::path::Path) -> Result<Vec<RuleSpec>, String> {
                 Ok(checkov_policy::PolicySource::from_json(v, &text))
             }
             _ => {
-                let mut specs = parse_rules(&text).map_err(|e| ir_error(path, &text, e))?;
+                let mut specs = parse_rules_with_limits(&text, sources.input_budget().limits())
+                    .map_err(|e| ir_error(path, &text, e))?;
                 for spec in &mut specs {
                     spec.origin = Origin(tf_linter::RuleSource {
                         engine: tf_linter::Engine::Ir,
@@ -683,6 +720,7 @@ fn compile_message(m: &str) -> Result<Vec<Piece>, String> {
 }
 
 /// Validate and compile a rule.
+#[expect(clippy::too_many_lines)]
 pub fn compile(spec: RuleSpec) -> Result<CompiledRule, String> {
     let ctx = |e: String| format!("rule {:?}: {e}", spec.name);
     if !(1..=IR_VERSION).contains(&spec.version) {
@@ -743,6 +781,8 @@ pub fn compile(spec: RuleSpec) -> Result<CompiledRule, String> {
         resource_types: types,
         runs_on_module: false,
         guideline: spec.guideline.as_deref().map(Arc::from),
+        rationale: spec.rationale.as_deref().map(Arc::from),
+        remediation: spec.remediation.as_deref().map(Arc::from),
         source: spec.origin.0.clone(),
         aliases: Vec::new(),
         profile: tf_linter::Profile::Security,
@@ -768,6 +808,7 @@ pub fn compile(spec: RuleSpec) -> Result<CompiledRule, String> {
 /// ([`tf_linter::FixHint::set_path`]). A type whose clauses imply
 /// different fixes gets none. `exists` and other operators do not say what
 /// to write, so they derive none.
+#[expect(clippy::too_many_lines)]
 fn derive_fix(spec: &RuleSpec) -> HashMap<String, (Vec<String>, serde_json::Value)> {
     use checkov::AttributeOp::*;
     fn leaves<'g>(e: &'g graph::GraphExpr, out: &mut Vec<&'g graph::GraphExpr>) -> bool {
@@ -849,7 +890,17 @@ fn derive_fix(spec: &RuleSpec) -> HashMap<String, (Vec<String>, serde_json::Valu
 
 /// Parse and compile every rule of a rules document.
 pub fn compile_json(json: &str) -> Result<Vec<CompiledRule>, String> {
-    parse_rules(json)?.into_iter().map(compile).collect()
+    compile_json_with_limits(json, tf_limits::Limits::default())
+}
+
+pub fn compile_json_with_limits(
+    json: &str,
+    limits: tf_limits::Limits,
+) -> Result<Vec<CompiledRule>, String> {
+    parse_rules_with_limits(json, limits)?
+        .into_iter()
+        .map(compile)
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -913,9 +964,11 @@ fn cmp(op: CmpOp, a: &Value, b: &Value) -> bool {
     }
 }
 
-fn eval_value(n: &Node, s: Scope<'_>) -> Result<Value, RuleFailure> {
+fn eval_value(n: &Node, s: Scope<'_>, budget: &RuleBudget) -> Result<Value, RuleFailure> {
+    budget.charge(1)?;
     Ok(match n {
         Node::Col { path, default } => {
+            budget.charge(path.len() as u64)?;
             let (mut v, rest) = match s {
                 Scope::Resource(r) => {
                     let first = &path[0].name;
@@ -939,7 +992,7 @@ fn eval_value(n: &Node, s: Scope<'_>) -> Result<Value, RuleFailure> {
         },
         Node::Lit(v) => v.clone(),
         pred => {
-            let v = eval_pred(pred, s)?;
+            let v = eval_pred(pred, s, budget)?;
             match v.truth {
                 Truth::True => Value::bool(true),
                 Truth::False => Value::bool(false),
@@ -954,7 +1007,8 @@ fn is_true(v: &Value) -> Verdict {
     truth::test(v, &|x| x.as_bool() == Some(true))
 }
 
-fn eval_pred(n: &Node, s: Scope<'_>) -> Result<Verdict, RuleFailure> {
+fn eval_pred(n: &Node, s: Scope<'_>, budget: &RuleBudget) -> Result<Verdict, RuleFailure> {
+    budget.charge(1)?;
     Ok(match n {
         Node::CheckovGraph(_) => Verdict::new(Truth::Unknown, None),
         Node::CheckovAttribute(check) => match s {
@@ -966,73 +1020,110 @@ fn eval_pred(n: &Node, s: Scope<'_>) -> Result<Verdict, RuleFailure> {
             Scope::Value(_) => Verdict::new(Truth::Unknown, None),
         },
         Node::CheckovPython(check) => match s {
-            Scope::Resource(r) => check.evaluate(r)?,
+            Scope::Resource(r) => check.evaluate_with_budget(r, budget)?,
             Scope::Value(_) => Verdict::new(Truth::Unknown, None),
         },
-        Node::Col { .. } | Node::Element | Node::Lit(_) => is_true(&eval_value(n, s)?),
+        Node::Col { .. } | Node::Element | Node::Lit(_) => is_true(&eval_value(n, s, budget)?),
         Node::Cmp(op, l, r, witness_left) => {
-            let (lv, rv) = (eval_value(l, s)?, eval_value(r, s)?);
-            truth::map(&lv, &|a| {
-                truth::map(&rv, &|b| {
-                    Verdict::new(
+            let (lv, rv) = (eval_value(l, s, budget)?, eval_value(r, s, budget)?);
+            truth::try_map::<RuleFailure>(&lv, &|a| {
+                truth::try_map::<RuleFailure>(&rv, &|b| {
+                    budget.charge(1)?;
+                    Ok(Verdict::new(
                         Truth::from_bool(cmp(*op, a, b)),
                         Some(if *witness_left { a.clone() } else { b.clone() }),
-                    )
+                    ))
                 })
-            })
+            })?
         }
         Node::IsIn(e, vals) => {
-            let v = eval_value(e, s)?;
-            truth::test(&v, &|x| vals.iter().any(|l| eq(x, l)))
-        }
-        Node::ListContains(l, val) => {
-            let list = eval_value(l, s)?;
-            truth::exists(&list, &|e| truth::test(e, &|x| eq(x, val)))
-        }
-        Node::ListAny(l, p) => {
-            let list = eval_value(l, s)?;
-            truth::try_exists(&list, &|e| eval_pred(p, Scope::Value(e)))?
-        }
-        Node::ListAll(l, p) => {
-            let list = eval_value(l, s)?;
-            truth::try_exists(&list, &|e| {
-                eval_pred(p, Scope::Value(e)).map(Verdict::negate)
+            let v = eval_value(e, s, budget)?;
+            truth::try_map::<RuleFailure>(&v, &|x| {
+                for candidate in vals {
+                    budget.charge(1)?;
+                    if eq(x, candidate) {
+                        return Ok(Verdict::new(Truth::True, Some(x.clone())));
+                    }
+                }
+                Ok(Verdict::new(Truth::False, Some(x.clone())))
             })?
-            .negate()
         }
-        Node::And(args) => {
-            let mut acc = eval_pred(&args[0], s)?;
-            for a in &args[1..] {
-                if acc.truth == Truth::False {
-                    break;
-                }
-                acc = acc.and(eval_pred(a, s)?);
-            }
-            acc
+        Node::ListContains(..) | Node::ListAny(..) | Node::ListAll(..) => eval_list(n, s, budget)?,
+        Node::And(args) | Node::Or(args) => {
+            eval_boolean(args, s, matches!(n, Node::And(_)), budget)?
         }
-        Node::Or(args) => {
-            let mut acc = eval_pred(&args[0], s)?;
-            for a in &args[1..] {
-                if acc.truth == Truth::True {
-                    break;
-                }
-                acc = acc.or(eval_pred(a, s)?);
-            }
-            acc
-        }
-        Node::Not(a) => eval_pred(a, s)?.negate(),
-        Node::IsNull(e) => truth::test(&eval_value(e, s)?, &|x| x.is_null()),
+        Node::Not(a) => eval_pred(a, s, budget)?.negate(),
+        Node::IsNull(e) => truth::test(&eval_value(e, s, budget)?, &|x| x.is_null()),
         Node::IsKnown(e) => {
-            let v = eval_value(e, s)?;
+            let v = eval_value(e, s, budget)?;
             Verdict::new(Truth::from_bool(v.is_wholly_known()), Some(v))
         }
     })
+}
+
+fn eval_list(n: &Node, s: Scope<'_>, budget: &RuleBudget) -> Result<Verdict, RuleFailure> {
+    match n {
+        Node::ListContains(l, val) => {
+            let list = eval_value(l, s, budget)?;
+            truth::try_exists(&list, &|e| {
+                budget.charge(1)?;
+                truth::try_map::<RuleFailure>(e, &|x| {
+                    budget.charge(1)?;
+                    Ok(Verdict::new(Truth::from_bool(eq(x, val)), Some(x.clone())))
+                })
+            })
+        }
+        Node::ListAny(l, p) | Node::ListAll(l, p) => {
+            let list = eval_value(l, s, budget)?;
+            let all = matches!(n, Node::ListAll(..));
+            let result = truth::try_exists(&list, &|e| {
+                let verdict = eval_pred(p, Scope::Value(e), budget)?;
+                Ok::<_, RuleFailure>(if all { verdict.negate() } else { verdict })
+            })?;
+            Ok(if all { result.negate() } else { result })
+        }
+        _ => unreachable!("list operator dispatched by eval_pred"),
+    }
+}
+
+fn eval_boolean(
+    args: &[Node],
+    s: Scope<'_>,
+    and: bool,
+    budget: &RuleBudget,
+) -> Result<Verdict, RuleFailure> {
+    assert!(!args.is_empty());
+    let mut acc = eval_pred(&args[0], s, budget)?;
+    for arg in &args[1..] {
+        if acc.truth == if and { Truth::False } else { Truth::True } {
+            break;
+        }
+        let next = eval_pred(arg, s, budget)?;
+        acc = if and { acc.and(next) } else { acc.or(next) };
+    }
+    Ok(acc)
 }
 
 impl CompiledRule {
     /// The verdict of this rule for one resource (`None` when no clause
     /// applies to its type).
     pub fn verdict(&self, r: &Resource) -> Result<Option<Verdict>, RuleFailure> {
+        self.verdict_with_budget(r, &RuleBudget::default())
+    }
+
+    pub fn verdict_with_budget(
+        &self,
+        r: &Resource,
+        budget: &RuleBudget,
+    ) -> Result<Option<Verdict>, RuleFailure> {
+        budget.finish(self.verdict_inner(r, budget))
+    }
+
+    fn verdict_inner(
+        &self,
+        r: &Resource,
+        budget: &RuleBudget,
+    ) -> Result<Option<Verdict>, RuleFailure> {
         let typed = self.by_type.get(&*r.ty);
         let wildcard = self.by_type.get("*");
         if typed.is_none() && wildcard.is_none() {
@@ -1044,18 +1135,22 @@ impl CompiledRule {
             .chain(wildcard.into_iter().flatten());
         let mut acc = Verdict::FALSE;
         for &i in idx {
+            budget.charge(1)?;
             let c = &self.clauses[i];
             if matches!(c.condition, Node::CheckovGraph(_)) {
                 continue;
             }
             let v = match &c.for_each {
                 Some(fe) => {
-                    let list = eval_value(fe, Scope::Resource(r))?;
+                    let list = eval_value(fe, Scope::Resource(r), budget)?;
                     truth::try_exists(&list, &|e| {
-                        truth::try_map(e, &|e| eval_pred(&c.condition, Scope::Value(e)))
+                        budget.charge(1)?;
+                        truth::try_map::<RuleFailure>(e, &|e| {
+                            eval_pred(&c.condition, Scope::Value(e), budget)
+                        })
                     })?
                 }
-                None => eval_pred(&c.condition, Scope::Resource(r))?,
+                None => eval_pred(&c.condition, Scope::Resource(r), budget)?,
             };
             acc = acc.or(v);
             if acc.truth == Truth::True {
@@ -1112,8 +1207,24 @@ impl DynRule for CompiledRule {
         &self,
         graph: &tf_semantic::graph::ResourceGraph<'a>,
     ) -> Result<Vec<(&'a Resource, Judgement)>, RuleFailure> {
-        if let Some(r) = graph.resources.iter().find(|r| !r.dependencies_complete && self.clauses.iter().any(|c| matches!(&c.condition, Node::CheckovGraph(e) if e.connection_tree() && e.targets(r)))) {
-            return Err(format!("graph dependencies unavailable for {}; include Terraform source or a plan with complete configuration references", r.address));
+        self.judge_graph_with_budget(graph, &RuleBudget::default())
+    }
+    fn judge_graph_with_budget<'a>(
+        &self,
+        graph: &tf_semantic::graph::ResourceGraph<'a>,
+        budget: &RuleBudget,
+    ) -> Result<Vec<(&'a Resource, Judgement)>, RuleFailure> {
+        budget.charge(graph.resources.len() as u64)?;
+        if let Some(r) = graph.resources.iter().find(|r| {
+            !r.dependencies_complete && self.clauses.iter().any(|c| {
+                matches!(&c.condition, Node::CheckovGraph(e) if e.connection_tree() && e.targets(r))
+            })
+        }) {
+            return Err(format!(
+                "graph dependencies unavailable for {}; include Terraform source \
+                 or a plan with complete configuration references",
+                r.address
+            ));
         }
 
         let mut verdicts: Vec<_> = graph
@@ -1121,7 +1232,7 @@ impl DynRule for CompiledRule {
             .iter()
             .map(|r| {
                 if r.mode == tf_semantic::Mode::Managed {
-                    self.verdict(r)
+                    self.verdict_with_budget(r, budget)
                         .map(|v| v.unwrap_or(Verdict::FALSE))
                         .map_err(|e| format!("{}: {e}", r.address))
                 } else {
@@ -1131,6 +1242,7 @@ impl DynRule for CompiledRule {
             .collect::<Result<_, _>>()?;
         for (clause, spec) in self.clauses.iter().zip(&self.spec.clauses) {
             if let Node::CheckovGraph(expr) = &clause.condition {
+                budget.charge(graph.resources.len() as u64)?;
                 for (i, result) in expr.evaluate(graph).into_iter().enumerate() {
                     let r = graph.resources[i];
                     if !graph::matches(&spec.resource_types, r) {
@@ -1156,13 +1268,20 @@ impl DynRule for CompiledRule {
         self.info.clone()
     }
     fn judge_resource(&self, r: &Resource) -> Result<Vec<Judgement>, RuleFailure> {
+        self.judge_resource_with_budget(r, &RuleBudget::default())
+    }
+    fn judge_resource_with_budget(
+        &self,
+        r: &Resource,
+        budget: &RuleBudget,
+    ) -> Result<Vec<Judgement>, RuleFailure> {
         // Mixed packs can merge resource and graph clauses under the same ID.
         // Their verdicts are combined once by judge_graph, avoiding duplicates.
         if self.needs_graph() {
             return Ok(Vec::new());
         }
         Ok(self
-            .verdict(r)?
+            .verdict_with_budget(r, budget)?
             .and_then(|v| Judgement::from_verdict(v, |v| self.render(r, v.witness.as_ref())))
             .map(|j| self.with_fix(r, j))
             .into_iter()
@@ -1212,7 +1331,11 @@ mod tests {
             Box::new(Node::Lit(Value::number(22.0))),
             true,
         );
-        let t = |v: Value| eval_pred(&n, Scope::Value(&v)).unwrap().truth;
+        let t = |v: Value| {
+            eval_pred(&n, Scope::Value(&v), &RuleBudget::default())
+                .unwrap()
+                .truth
+        };
         assert_eq!(t(Value::number(0.0)), Truth::True);
         assert_eq!(t(Value::string("0")), Truth::True);
         assert_eq!(t(Value::number(80.0)), Truth::False);
@@ -1221,7 +1344,9 @@ mod tests {
         let c = Node::ListContains(Box::new(Node::Element), Value::string("0.0.0.0/0"));
         let l = Value::list(vec![Value::string("10.0.0.0/8"), Value::tainted("v")]);
         assert_eq!(
-            eval_pred(&c, Scope::Value(&l)).unwrap().truth,
+            eval_pred(&c, Scope::Value(&l), &RuleBudget::default())
+                .unwrap()
+                .truth,
             Truth::Tainted
         );
         let all = Node::ListAll(
@@ -1234,13 +1359,19 @@ mod tests {
             )),
         );
         assert_eq!(
-            eval_pred(&all, Scope::Value(&Value::list(vec![])))
-                .unwrap()
-                .truth,
+            eval_pred(
+                &all,
+                Scope::Value(&Value::list(vec![])),
+                &RuleBudget::default()
+            )
+            .unwrap()
+            .truth,
             Truth::True
         );
         assert_eq!(
-            eval_pred(&all, Scope::Value(&l)).unwrap().truth,
+            eval_pred(&all, Scope::Value(&l), &RuleBudget::default())
+                .unwrap()
+                .truth,
             Truth::Tainted
         );
     }

@@ -153,7 +153,7 @@ fn skipped_rule_files_are_located() {
 fn checkov_skip_comments_suppress_checkov_rules() {
     let base = repo().join("fixtures/checkov_skip");
     let mut req = ScanRequest::dirs(vec![base.join("tf")], false);
-    req.catalog.builtin = false;
+    req.catalog = Catalog::default();
     req.catalog.rule_files = vec![base.join("policies")];
     let out = scan(req).unwrap();
     let record = serde_json::to_value(out.record()).unwrap();

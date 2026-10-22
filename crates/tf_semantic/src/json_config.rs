@@ -20,15 +20,27 @@ pub fn parse<'a>(
         errors,
         providers,
     };
-    let body = value.map(|v| p.body(v, "", None)).unwrap_or(Body {
-        span,
-        items: Vec::new_in(alloc),
-    });
+    let body = value
+        .and_then(|v| match p.body(v, "", None) {
+            Ok(body) => Some(body),
+            Err(error) => {
+                p.errors.push(Diagnostic::limit(
+                    span,
+                    tf_parser::ParseLimit::Storage(error),
+                ));
+                None
+            }
+        })
+        .unwrap_or(Body {
+            span,
+            items: Vec::new_in(alloc),
+        });
     ParseResult {
         file: File { span, body },
         errors: p.errors,
         comments: std::vec::Vec::new(),
     }
+    .bounded(alloc)
 }
 
 struct Mapping<'a, 'p> {
@@ -41,17 +53,19 @@ struct Mapping<'a, 'p> {
 impl<'a> Mapping<'a, '_> {
     fn error(&mut self, span: Span, message: &str) {
         self.errors.push(Diagnostic {
+            kind: tf_parser::DiagnosticKind::Syntax,
             span,
             message: message.into(),
         });
     }
 
+    #[expect(clippy::too_many_lines)]
     fn body(
         &mut self,
         value: Expression<'a>,
         kind: &str,
         schema: Option<&'static tf_schema::Block<'static>>,
-    ) -> Body<'a> {
+    ) -> tf_allocator::AllocResult<Body<'a>> {
         let span = value.span();
         let mut items = Vec::new_in(self.alloc);
         let properties = match value {
@@ -72,7 +86,7 @@ impl<'a> Mapping<'a, '_> {
                     span,
                     "JSON block body must be an object or an array of objects",
                 );
-                return Body { span, items };
+                return Ok(Body { span, items });
             }
         };
         let mut attrs = HashSet::new();
@@ -127,12 +141,12 @@ impl<'a> Mapping<'a, '_> {
                 } else {
                     schema.and_then(|s| s.block_type(name)).map(|b| b.block())
                 };
-                self.blocks(ident, item.value, labels, &[], child_schema, &mut items);
+                self.blocks(ident, item.value, labels, &[], child_schema, &mut items)?;
             } else {
                 if !attrs.insert(key.value) {
                     self.error(key.span, "duplicate JSON attribute");
                 }
-                let value = self.attribute_value(kind, name, item.value);
+                let value = self.attribute_value(kind, name, item.value)?;
                 items.push(BodyItem::Attribute(Box::new_in(
                     Attribute {
                         span: item.span,
@@ -140,21 +154,26 @@ impl<'a> Mapping<'a, '_> {
                         value,
                     },
                     self.alloc,
-                )));
+                )?))?;
             }
         }
-        Body { span, items }
+        Ok(Body { span, items })
     }
 
-    fn attribute_value(&mut self, kind: &str, name: &str, value: Expression<'a>) -> Expression<'a> {
-        match (kind, name) {
+    fn attribute_value(
+        &mut self,
+        kind: &str,
+        name: &str,
+        value: Expression<'a>,
+    ) -> tf_allocator::AllocResult<Expression<'a>> {
+        Ok(match (kind, name) {
             ("variable", "type")
             | ("resource" | "data", "provider")
             | ("dynamic", "iterator")
             | ("moved", "from" | "to")
             | ("removed" | "import", "to" | "from") => self.native(value),
             ("resource" | "data" | "module" | "output", "depends_on")
-            | ("lifecycle", "ignore_changes" | "replace_triggered_by") => self.references(value),
+            | ("lifecycle", "ignore_changes" | "replace_triggered_by") => self.references(value)?,
             ("module", "providers") => {
                 if let Expression::Object(mut o) = value {
                     let mut items = Vec::new_in(self.alloc);
@@ -163,7 +182,7 @@ impl<'a> Mapping<'a, '_> {
                             span: item.span,
                             key: item.key,
                             value: self.native(item.value),
-                        });
+                        })?;
                     }
                     Expression::Object(Box::new_in(
                         Object {
@@ -171,7 +190,7 @@ impl<'a> Mapping<'a, '_> {
                             items,
                         },
                         self.alloc,
-                    ))
+                    )?)
                 } else {
                     self.error(value.span(), "provider mapping must be a JSON object");
                     value
@@ -188,13 +207,13 @@ impl<'a> Mapping<'a, '_> {
                 self.check_literal(&value);
                 value
             }
-            _ => self.expression(value),
-        }
+            _ => self.expression(value)?,
+        })
     }
 
     fn native(&mut self, value: Expression<'a>) -> Expression<'a> {
         if let Expression::String(s) = value {
-            self.string_expression(&s, true)
+            self.string_expression(s, true)
         } else {
             self.error(
                 value.span(),
@@ -204,20 +223,20 @@ impl<'a> Mapping<'a, '_> {
         }
     }
 
-    fn references(&mut self, value: Expression<'a>) -> Expression<'a> {
-        if let Expression::Tuple(mut t) = value {
+    fn references(&mut self, value: Expression<'a>) -> tf_allocator::AllocResult<Expression<'a>> {
+        Ok(if let Expression::Tuple(mut t) = value {
             let mut elements = Vec::new_in(self.alloc);
-            elements.extend(t.elements.drain(..).map(|v| self.native(v)));
+            elements.extend(t.elements.drain(..).map(|v| self.native(v)))?;
             Expression::Tuple(Box::new_in(
                 Tuple {
                     span: t.span,
                     elements,
                 },
                 self.alloc,
-            ))
+            )?)
         } else {
             self.native(value)
-        }
+        })
     }
 
     fn check_literal(&mut self, value: &Expression<'a>) {
@@ -238,6 +257,7 @@ impl<'a> Mapping<'a, '_> {
         }
     }
 
+    #[expect(clippy::too_many_lines)]
     fn blocks(
         &mut self,
         ident: Identifier<'a>,
@@ -246,7 +266,7 @@ impl<'a> Mapping<'a, '_> {
         labels: &[(Atom<'a>, Span)],
         schema: Option<&'static tf_schema::Block<'static>>,
         out: &mut Vec<'a, BodyItem<'a>>,
-    ) {
+    ) -> tf_allocator::AllocResult<()> {
         if let Expression::Tuple(mut array) = value {
             for value in array.elements.drain(..) {
                 if !matches!(value, Expression::Object(_)) {
@@ -263,13 +283,13 @@ impl<'a> Mapping<'a, '_> {
                     labels,
                     schema,
                     out,
-                );
+                )?;
             }
         } else if remaining > 0 {
             let span = value.span();
             let Expression::Object(mut object) = value else {
                 self.error(span, "JSON block labels must be represented by objects");
-                return;
+                return Ok(());
             };
             for item in object.items.drain(..) {
                 let ObjectKey::Expression(Expression::String(key)) = item.key else {
@@ -287,7 +307,7 @@ impl<'a> Mapping<'a, '_> {
                     &next,
                     schema,
                     out,
-                );
+                )?;
             }
         } else {
             let schema = match (ident.name.as_str(), labels.first()) {
@@ -304,14 +324,14 @@ impl<'a> Mapping<'a, '_> {
                 }
                 _ => schema,
             };
-            let body = self.body(value, ident.name.as_str(), schema);
+            let body = self.body(value, ident.name.as_str(), schema)?;
             let span = Span::new(ident.span.start, body.span.end);
             let mut ast_labels = Vec::new_in(self.alloc);
             ast_labels.extend(labels.iter().map(|(value, span)| BlockLabel {
                 span: *span,
                 value: *value,
                 quoted: true,
-            }));
+            }))?;
             out.push(BodyItem::Block(Box::new_in(
                 Block {
                     span,
@@ -320,23 +340,27 @@ impl<'a> Mapping<'a, '_> {
                     body,
                 },
                 self.alloc,
-            )));
+            )?))?;
         }
+
+        Ok(())
     }
 
-    fn expression(&mut self, value: Expression<'a>) -> Expression<'a> {
-        match value {
-            Expression::String(s) => self.string_expression(&s, false),
+    fn expression(&mut self, value: Expression<'a>) -> tf_allocator::AllocResult<Expression<'a>> {
+        Ok(match value {
+            Expression::String(s) => self.string_expression(s, false),
             Expression::Tuple(mut t) => {
                 let mut elements = Vec::new_in(self.alloc);
-                elements.extend(t.elements.drain(..).map(|e| self.expression(e)));
+                for value in t.elements.drain(..) {
+                    elements.push(self.expression(value)?)?;
+                }
                 Expression::Tuple(Box::new_in(
                     Tuple {
                         span: t.span,
                         elements,
                     },
                     self.alloc,
-                ))
+                )?)
             }
             Expression::Object(mut o) => {
                 let mut items = Vec::new_in(self.alloc);
@@ -348,14 +372,14 @@ impl<'a> Mapping<'a, '_> {
                         self.error(item.span, "duplicate JSON object key");
                     }
                     let key = match item.key {
-                        ObjectKey::Expression(e) => ObjectKey::Expression(self.expression(e)),
+                        ObjectKey::Expression(e) => ObjectKey::Expression(self.expression(e)?),
                         k => k,
                     };
                     items.push(ObjectItem {
                         span: item.span,
                         key,
-                        value: self.expression(item.value),
-                    });
+                        value: self.expression(item.value)?,
+                    })?;
                 }
                 Expression::Object(Box::new_in(
                     Object {
@@ -363,13 +387,17 @@ impl<'a> Mapping<'a, '_> {
                         items,
                     },
                     self.alloc,
-                ))
+                )?)
             }
             v => v,
-        }
+        })
     }
 
-    fn string_expression(&mut self, string: &StringLiteral<'a>, native: bool) -> Expression<'a> {
+    fn string_expression(
+        &mut self,
+        string: Box<'a, StringLiteral<'a>>,
+        native: bool,
+    ) -> Expression<'a> {
         let decoded = string.value.as_str();
         let (mut expr, errors) = if native {
             tf_parser::parse_expression(self.alloc, decoded)
@@ -377,12 +405,14 @@ impl<'a> Mapping<'a, '_> {
             tf_parser::parse_template(self.alloc, decoded)
         };
         let mut mapping = StringLocations::new(self.source, string.span);
-        mapping.visit_expression(&mut expr);
+        if let Some(expr) = &mut expr {
+            mapping.visit_expression(expr);
+        }
         self.errors.extend(errors.into_iter().map(|mut e| {
             mapping.visit_span(&mut e.span);
             e
         }));
-        expr
+        expr.unwrap_or(Expression::String(string))
     }
 }
 

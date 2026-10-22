@@ -92,6 +92,7 @@ fn plans_preserve_sensitive_values_for_rules_and_mask_source_context() {
 fn sensitive_provider_attributes_are_masked_even_beside_unrelated_findings() {
     let root = PathBuf::from("/nonexistent/oxtf-sensitive-schema");
     let mut req = ScanRequest::dirs(vec![root.clone()], false);
+    req.catalog = tf_scan::Catalog::seed();
     req.overlay = vec![(
         root.join("main.tf"),
         Arc::from(format!(
@@ -109,6 +110,7 @@ fn sensitive_provider_attributes_are_masked_even_beside_unrelated_findings() {
     assert!(!text.contains(SECRET), "{text}");
     let fp = &out.record().findings[0].fingerprint;
     let mut req = ScanRequest::dirs(vec![root.clone()], false);
+    req.catalog = tf_scan::Catalog::seed();
     req.overlay = vec![(
         root.join("main.tf"),
         Arc::from(format!(
@@ -153,6 +155,7 @@ fn sensitive_default_crosses_module_output_and_json_boundaries() {
 fn native_messages_mask_sensitive_witnesses() {
     let root = PathBuf::from("/nonexistent/oxtf-sensitive-native");
     let mut req = ScanRequest::dirs(vec![root.clone()], false);
+    req.catalog = tf_scan::Catalog::seed();
     req.overlay = vec![(
         root.join("main.tf"),
         Arc::from(

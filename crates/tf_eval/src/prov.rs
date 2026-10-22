@@ -13,6 +13,7 @@
 //! projects an element out of a container (`x.attr`, `x[i]`, `for`, `dynamic`
 //! iteration), and rules do it when they report a witness.
 
+use std::collections::HashSet;
 use std::fmt;
 use std::sync::Arc;
 
@@ -130,7 +131,7 @@ pub struct Prov(Option<Arc<Node>>);
 /// A resource traversal evaluated by the resolver. Separate from the bounded
 /// explanation chain: dependencies survive transformations and are not identity
 /// comparisons between values. An unresolved instance index has uncertain edges.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ResourceDependency {
     pub resource: Arc<str>,
     pub key: Option<Arc<str>>,
@@ -169,7 +170,9 @@ impl Prov {
     }
 
     /// A direct traversal names this resource, not all of its dependencies.
+    /// Each new list is charged to the active evaluation's collection allowance.
     pub fn referencing(self, dependencies: Vec<ResourceDependency>) -> Self {
+        crate::depth::admit_provenance(dependencies.len() * size_of::<ResourceDependency>());
         Prov(Some(Arc::new(Node {
             step: None,
             len: self.len() as u32,
@@ -192,11 +195,7 @@ impl Prov {
         }
         let mut refs = self.dependencies().to_vec();
         let old_len = refs.len();
-        for dependency in other.dependencies() {
-            if !refs.contains(dependency) {
-                refs.push(dependency.clone());
-            }
-        }
+        extend_unique(&mut refs, other.dependencies());
         if refs.len() != old_len {
             *self = self.clone().referencing(refs);
         }
@@ -240,11 +239,7 @@ impl Prov {
                 _ => {}
             }
             if !single {
-                for dependency in deps {
-                    if !refs.contains(dependency) {
-                        refs.push(dependency.clone());
-                    }
-                }
+                extend_unique(&mut refs, deps);
             }
         }
         let p = match first {
@@ -370,6 +365,28 @@ impl Prov {
     pub fn any(&self, f: impl FnMut(&Step) -> bool) -> bool {
         self.iter_newest_first().any(f)
     }
+}
+
+/// Below this many comparisons a scan beats hashing; above it, unions stay linear.
+const LINEAR_UNION_COMPARISONS_MAX: usize = 256;
+
+/// Append each dependency of `extra` not already in `refs`, preserving first-seen order.
+pub(crate) fn extend_unique(refs: &mut Vec<ResourceDependency>, extra: &[ResourceDependency]) {
+    if refs.len().saturating_mul(extra.len()) <= LINEAR_UNION_COMPARISONS_MAX {
+        for dependency in extra {
+            if !refs.contains(dependency) {
+                refs.push(dependency.clone());
+            }
+        }
+        return;
+    }
+    let mut seen: HashSet<ResourceDependency> = refs.iter().cloned().collect();
+    for dependency in extra {
+        if seen.insert(dependency.clone()) {
+            refs.push(dependency.clone());
+        }
+    }
+    assert_eq!(seen.len(), refs.len());
 }
 
 impl fmt::Debug for Prov {

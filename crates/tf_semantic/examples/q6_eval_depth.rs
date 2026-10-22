@@ -317,6 +317,7 @@ fn print_table(title: &str, m: &BTreeMap<String, usize>, total: usize, limit: us
     }
 }
 
+#[expect(clippy::too_many_lines)]
 fn main() {
     let dir = std::env::args()
         .nth(1)
@@ -453,7 +454,7 @@ fn main() {
     let mut n_calls = 0usize;
     for sf in files.all() {
         let alloc = tf_allocator::Allocator::new();
-        let text = alloc.alloc_str(&sf.text);
+        let text = alloc.alloc_str(&sf.text).unwrap();
         let ret = tf_parser::parse(&alloc, text);
         // (body, is a `variable` block): its `type` constraint is not a
         // function call (`object(...)`, `optional(...)`, `list(...)`).

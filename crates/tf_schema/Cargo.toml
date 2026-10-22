@@ -21,3 +21,6 @@ phf = { workspace = true, optional = true }
 [[example]]
 name = "bench_lookup"
 required-features = ["embedded"]
+
+[lints]
+workspace = true

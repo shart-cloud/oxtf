@@ -90,6 +90,7 @@ fn sub(e: &E, indent: usize) -> String {
     s
 }
 
+#[expect(clippy::too_many_lines)]
 pub fn expr_into(s: &mut String, e: &E, indent: usize) {
     match e {
         E::Null(_) => s.push_str("null"),

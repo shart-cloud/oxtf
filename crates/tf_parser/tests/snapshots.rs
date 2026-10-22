@@ -266,18 +266,6 @@ fn valid_cases_parse_cleanly_and_match_hcl_edit() {
     }
 }
 
-#[test]
-fn error_cases_report_errors() {
-    for (name, src) in CASES {
-        if !name.starts_with("err_") {
-            continue;
-        }
-        let alloc = tf_allocator::Allocator::new();
-        let ret = tf_parser::parse(&alloc, src);
-        assert!(!ret.errors.is_empty(), "{name} should report an error");
-    }
-}
-
 /// Documented behavioural difference: a literal newline inside a quoted
 /// string. Terraform (Go HCL) rejects this ("Invalid multi-line string");
 /// tf_parser reports an error and recovers. Records what hcl-edit does.

@@ -10,6 +10,12 @@ fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+fn request(paths: Vec<PathBuf>, recursive: bool) -> ScanRequest {
+    let mut req = ScanRequest::dirs(paths, recursive);
+    req.catalog = tf_scan::Catalog::seed();
+    req
+}
+
 const FIXED: &str = r#"resource "aws_db_instance" "db" {
   identifier        = "db"
   engine            = "postgres"
@@ -24,7 +30,7 @@ const FIXED: &str = r#"resource "aws_db_instance" "db" {
 #[test]
 fn overlay_verifies_a_fix_without_writing() {
     let dir = repo().join("fixtures/rules/aws-rds-unencrypted/fail_explicit_false");
-    let before = scan(ScanRequest::dirs(vec![dir.clone()], false)).unwrap();
+    let before = scan(request(vec![dir.clone()], false)).unwrap();
     let f = &before.result.findings[0];
     let fp = fingerprint(
         &f.rule,
@@ -34,7 +40,7 @@ fn overlay_verifies_a_fix_without_writing() {
     );
     assert_eq!(before.record().findings[0].fingerprint, fp);
 
-    let mut req = ScanRequest::dirs(vec![dir.clone()], false);
+    let mut req = request(vec![dir.clone()], false);
     req.overlay = vec![(dir.join("main.tf"), Arc::from(FIXED))];
     let after = scan(req).unwrap();
     assert!(after.result.findings.is_empty());
@@ -57,7 +63,7 @@ fn fingerprints_do_not_depend_on_how_the_path_is_spelled() {
         .join("fixtures/rules/aws-rds-unencrypted/fail_explicit_false");
     let dotted = repo().join("crates/../fixtures/rules/aws-rds-unencrypted/fail_explicit_false");
     let fps = |dir: PathBuf| -> Vec<String> {
-        let out = scan(ScanRequest::dirs(vec![dir], false)).unwrap();
+        let out = scan(request(vec![dir], false)).unwrap();
         out.record()
             .findings
             .into_iter()
@@ -73,7 +79,7 @@ fn fingerprints_do_not_depend_on_how_the_path_is_spelled() {
 #[test]
 fn overlay_only_module_in_a_directory_that_does_not_exist() {
     let dir = PathBuf::from("/nonexistent/oxtf-overlay/mod");
-    let mut req = ScanRequest::dirs(vec![dir.clone()], false);
+    let mut req = request(vec![dir.clone()], false);
     req.overlay = vec![
         (
             dir.join("main.tf"),
@@ -100,7 +106,7 @@ fn overlay_only_module_in_a_directory_that_does_not_exist() {
     );
     assert_eq!(out.result.stats.files, 3);
     // Without the overlay the same path is refused.
-    let err = scan(ScanRequest::dirs(vec![dir], false)).err().unwrap();
+    let err = scan(request(vec![dir], false)).err().unwrap();
     assert!(err.to_string().contains("not a directory"));
 }
 
@@ -108,8 +114,8 @@ fn overlay_only_module_in_a_directory_that_does_not_exist() {
 #[test]
 fn recursive_discovery_includes_overlay_only_roots() {
     let base = repo().join("fixtures/rules/aws-rds-unencrypted");
-    let on_disk = scan(ScanRequest::dirs(vec![base.clone()], true)).unwrap();
-    let mut req = ScanRequest::dirs(vec![base.clone()], true);
+    let on_disk = scan(request(vec![base.clone()], true)).unwrap();
+    let mut req = request(vec![base.clone()], true);
     req.overlay = vec![
         (
             base.join("zz_memory/main.tf"),

@@ -17,8 +17,53 @@ use crate::engine::Linter;
 use crate::record::RuleError;
 use crate::rule::{Certainty, Finding};
 
+/// At most 64 workers of 4 MiB each: 256 MiB of reserved stack.
+pub use tf_limits::WORKERS_MAX;
+/// Guarded recursion at every depth ceiling needs at most 274 KiB in release and
+/// 635 KiB in debug (docs/LIMITS.md); `tests/stack.rs` in tf_scan enforces the fit.
+const WORKER_STACK_BYTES: usize = 4 << 20;
+
+#[derive(Debug)]
+pub enum ScanError {
+    Workers(usize),
+    Discovery(std::io::Error),
+    ThreadPool(rayon::ThreadPoolBuildError),
+}
+
+impl std::fmt::Display for ScanError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Workers(n) => write!(f, "worker count {n} must be between 1 and {WORKERS_MAX}"),
+            Self::Discovery(e) => write!(f, "cannot discover module roots: {e}"),
+            Self::ThreadPool(e) => write!(f, "cannot create scan thread pool: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for ScanError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Workers(_) => None,
+            Self::Discovery(e) => Some(e),
+            Self::ThreadPool(e) => Some(e),
+        }
+    }
+}
+
+pub fn validate_threads(threads: Option<usize>) -> Result<(), ScanError> {
+    if let Some(n) = threads {
+        if !(1..=WORKERS_MAX).contains(&n) {
+            return Err(ScanError::Workers(n));
+        }
+        assert!(n > 0);
+        assert!(n <= WORKERS_MAX);
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug)]
 pub struct ScanOptions {
+    pub limits: tf_limits::Limits,
     /// Treat every directory under the path that contains `.tf` files as a
     /// root module (hidden directories and `.terraform` are skipped).
     /// Otherwise the path itself is the root module.
@@ -26,7 +71,7 @@ pub struct ScanOptions {
     /// Extra `-var-file`s for the root module(s).
     pub var_files: Vec<PathBuf>,
     pub data_dir: Option<PathBuf>,
-    /// Worker threads (rayon); `None` = number of CPUs.
+    /// Worker threads (1..=WORKERS_MAX); `None` uses CPUs, capped by roots and WORKERS_MAX.
     pub threads: Option<usize>,
     /// In-memory files that shadow the disk (`FileTable::with_overlay`):
     /// unsaved editor buffers, stdin, a proposed patch.
@@ -41,6 +86,7 @@ pub struct ScanOptions {
 impl Default for ScanOptions {
     fn default() -> Self {
         ScanOptions {
+            limits: tf_limits::Limits::default(),
             recursive: false,
             var_files: Vec::new(),
             data_dir: None,
@@ -177,52 +223,56 @@ pub fn discover_roots(path: &Path, recursive: bool) -> Vec<PathBuf> {
 
 /// Root discovery that does not hide directory read failures.
 pub fn discover_roots_checked(path: &Path, recursive: bool) -> std::io::Result<Vec<PathBuf>> {
-    if !recursive {
-        return Ok(vec![path.to_path_buf()]);
-    }
-    let mut out = Vec::new();
-    walk(path, &mut out)?;
-    Ok(out)
+    discover_roots_with_budget(path, recursive, &tf_limits::input::InputBudget::default())
 }
 
-fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
-    let rd = std::fs::read_dir(dir)?;
-    // The entry type comes with the listing; a stat per entry would triple
-    // the syscalls of a recursive scan. A symlink is never followed into
-    // (one pointing at an ancestor would recurse until the path length
-    // limit) but one pointing at a `.tf` file still makes a root.
-    let mut entries: Vec<(PathBuf, std::fs::FileType)> = rd
-        .map(|e| {
-            let e = e?;
-            Ok((e.path(), e.file_type()?))
-        })
-        .collect::<std::io::Result<_>>()?;
-    entries.sort_by(|a, b| a.0.cmp(&b.0));
-    if entries.iter().any(|(p, t)| {
-        tf_semantic::module::is_config(p) && (t.is_file() || (t.is_symlink() && p.is_file()))
-    }) {
-        out.push(dir.to_path_buf());
+pub fn discover_roots_with_budget(
+    path: &Path,
+    recursive: bool,
+    budget: &tf_limits::input::InputBudget,
+) -> std::io::Result<Vec<PathBuf>> {
+    if !recursive {
+        budget.root()?;
+        return Ok(vec![path.to_path_buf()]);
     }
-    for (p, t) in entries {
-        let hidden = p
-            .file_name()
-            .is_some_and(|n| n.to_string_lossy().starts_with('.'));
-        if t.is_dir() && !hidden {
-            walk(&p, out)?;
+    let mut roots = Vec::new();
+    let mut pending = vec![path.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        let entries = budget.entries(&dir)?;
+        if entries.iter().any(|(p, t)| {
+            tf_semantic::module::is_config(p) && (t.is_file() || (t.is_symlink() && p.is_file()))
+        }) {
+            budget.root()?;
+            roots.push(dir);
         }
+        // Reverse the stack insertion to retain lexical depth-first order. Never follow links.
+        for (path, kind) in entries.into_iter().rev() {
+            let hidden = path
+                .file_name()
+                .is_some_and(|n| n.to_string_lossy().starts_with('.'));
+            if kind.is_dir() && !hidden {
+                pending.push(path);
+            }
+        }
+        assert!(pending.len() as u64 <= budget.limits().directory_entries());
     }
-    Ok(())
+    Ok(roots)
 }
 
 /// Scan `path` with the seed rules. A convenience for tests and examples;
 /// scans with a catalog, selection or plan input go through `tf_scan`.
-pub fn scan_dir(path: &Path, opts: &ScanOptions) -> ScanResult {
-    scan_with(
-        &Linter::with_seed_rules(),
-        &discover_roots(path, opts.recursive),
-        opts,
-    )
-    .0
+pub fn scan_dir(path: &Path, opts: &ScanOptions) -> Result<ScanResult, ScanError> {
+    validate_threads(opts.threads)?;
+    let files = Arc::new(FileTable::with_overlay_and_limits(
+        opts.overlay.iter().cloned(),
+        opts.limits,
+    ));
+    let roots = match discover_roots_with_budget(path, opts.recursive, files.input_budget()) {
+        Ok(roots) => roots,
+        Err(e) if tf_limits::input::exhaustion(&e).is_some() => Vec::new(),
+        Err(e) => return Err(ScanError::Discovery(e)),
+    };
+    scan_with_files(&Linter::with_seed_rules(), &roots, opts, files).map(|(result, _)| result)
 }
 
 /// Scan explicit root module directories with a given linter: the one
@@ -231,7 +281,30 @@ pub fn scan_with(
     linter: &Linter,
     roots: &[PathBuf],
     opts: &ScanOptions,
-) -> (ScanResult, Vec<Analysis>) {
+) -> Result<(ScanResult, Vec<Analysis>), ScanError> {
+    let files = Arc::new(FileTable::with_overlay_and_limits(
+        opts.overlay.iter().cloned(),
+        opts.limits,
+    ));
+    scan_with_files(linter, roots, opts, files)
+}
+
+/// Reuse the snapshot and admission counters established during discovery/catalog loading.
+#[expect(clippy::too_many_lines)]
+pub fn scan_with_files(
+    linter: &Linter,
+    roots: &[PathBuf],
+    opts: &ScanOptions,
+    files: Arc<FileTable>,
+) -> Result<(ScanResult, Vec<Analysis>), ScanError> {
+    validate_threads(opts.threads)?;
+    if files
+        .input_budget()
+        .ensure_roots(roots.len() as u64)
+        .is_err()
+    {
+        return Ok((limited_scan(files), Vec::new()));
+    }
     // Discovery can include overlay-only directories or a custom data
     // directory without a leading dot. Installed packages are reached through
     // their calls, never added as independent roots by a recursive scan.
@@ -260,11 +333,11 @@ pub fn scan_with(
         .collect();
     let roots = filtered.as_slice();
     let start = Instant::now();
-    let files = Arc::new(FileTable::with_overlay(opts.overlay.iter().cloned()));
     // Parsed modules shared by every root: a recursive scan reaches most
     // module directories from several roots.
     let store = ModuleStore::new();
     let aopts = AnalyzeOptions {
+        limits: opts.limits,
         var_files: opts.var_files.clone(),
         data_dir: opts.data_dir.clone(),
         whole_files: linter.needs_files(),
@@ -286,6 +359,7 @@ pub fn scan_with(
                 let mut out = linter.run_with(
                     &a,
                     Some(crate::engine::Sources {
+                        limits: opts.limits,
                         store: &store,
                         files: &files,
                     }),
@@ -294,7 +368,7 @@ pub fn scan_with(
                     std::mem::take(&mut out.findings),
                     &a,
                     &files,
-                    Some(&store),
+                    Some((&store, opts.limits)),
                 );
                 out.findings = findings;
                 out.suppressed = suppressed;
@@ -312,21 +386,23 @@ pub fn scan_with(
             })
             .collect()
     };
-    // Deep reference chains recurse; give workers generous stacks. No more
-    // workers than roots: a one-root scan (an editor buffer, a patch) must
-    // not spawn a thread per CPU to use one of them.
-    let threads = opts.threads.unwrap_or_else(|| {
-        std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(1)
-            .min(roots.len().max(1))
-    });
-    let pool = rayon::ThreadPoolBuilder::new()
-        .stack_size(64 << 20)
-        .num_threads(threads)
-        .build()
-        .expect("thread pool");
-    let results = pool.install(work);
+    // No more workers than roots: a one-root scan (an editor buffer, a patch)
+    // must not spawn a thread per CPU to use one of them.
+    let threads = opts
+        .threads
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+                .min(WORKERS_MAX)
+        })
+        .min(roots.len().max(1));
+    let results = run_in_pool(roots.len(), threads, work, |threads| {
+        rayon::ThreadPoolBuilder::new()
+            .stack_size(WORKER_STACK_BYTES)
+            .num_threads(threads)
+            .build()
+    })?;
     let mut findings = Vec::new();
     let mut rule_errors = Vec::new();
     let mut suppressed = Vec::new();
@@ -356,6 +432,9 @@ pub fn scan_with(
             None => diagnostics.extend(r.diagnostics),
         }
     }
+    diagnostics.retain(|d| d.code != "coverage-storage");
+    diagnostics.extend(files.limit_diagnostic());
+    diagnostics.extend(files.results_diagnostic());
     let stats = ScanStats {
         roots: roots.len(),
         module_instances,
@@ -364,7 +443,7 @@ pub fn scan_with(
         elapsed: start.elapsed(),
         ..ScanStats::from_findings(&findings)
     };
-    (
+    Ok((
         ScanResult {
             findings,
             diagnostics,
@@ -374,5 +453,67 @@ pub fn scan_with(
             suppressed,
         },
         analyses,
-    )
+    ))
+}
+
+/// A terminal admission refusal is evidence, even when no root or plan could be loaded.
+pub fn limited_scan(files: Arc<FileTable>) -> ScanResult {
+    let diagnostic = files.limit_diagnostic().expect("typed input exhaustion");
+    ScanResult {
+        findings: Vec::new(),
+        diagnostics: vec![diagnostic],
+        stats: ScanStats::default(),
+        rule_errors: Vec::new(),
+        files,
+        suppressed: Vec::new(),
+    }
+}
+
+fn run_in_pool<T: Send>(
+    roots: usize,
+    threads: usize,
+    work: impl FnOnce() -> Vec<T> + Send,
+    build: impl FnOnce(usize) -> Result<rayon::ThreadPool, rayon::ThreadPoolBuildError>,
+) -> Result<Vec<T>, ScanError> {
+    assert!(threads > 0);
+    assert!(threads <= WORKERS_MAX);
+    if roots == 0 {
+        return Ok(Vec::new());
+    }
+    assert!(threads <= roots);
+    let pool = build(threads).map_err(ScanError::ThreadPool)?;
+    Ok(pool.install(work))
+}
+
+#[cfg(test)]
+mod pool_tests {
+    use super::*;
+
+    #[test]
+    fn operating_failure_returns_an_error_without_running_work() {
+        let result = run_in_pool::<()>(
+            1,
+            1,
+            || panic!("work must not run"),
+            |threads| {
+                rayon::ThreadPoolBuilder::new()
+                    .num_threads(threads)
+                    .spawn_handler(|_| Err(std::io::Error::other("injected spawn failure")))
+                    .build()
+            },
+        );
+        assert!(matches!(result, Err(ScanError::ThreadPool(_))));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("injected spawn failure")
+        );
+    }
+
+    #[test]
+    fn no_roots_never_builds_a_pool() {
+        let result = run_in_pool::<()>(0, 1, || panic!("no work"), |_| panic!("no pool"));
+        assert!(result.unwrap().is_empty());
+    }
 }

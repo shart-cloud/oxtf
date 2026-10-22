@@ -14,6 +14,7 @@
 //! failure on a resource is returned from the rule hook, so the engine
 //! records it as a rule error on the scan.
 
+mod budget;
 pub mod foreign;
 pub mod hcl2json;
 pub mod projection;
@@ -75,17 +76,27 @@ impl From<String> for PolicyError {
 /// The rules the policies contribute: one rule per entry rule. Every
 /// policy is compiled and its interface checked here.
 pub fn catalog(policies: &Policies) -> Result<Vec<Box<dyn DynRule>>, PolicyError> {
+    catalog_with_sources(policies, std::sync::Arc::new(tf_semantic::FileTable::new()))
+}
+
+pub fn catalog_with_sources(
+    policies: &Policies,
+    sources: std::sync::Arc<tf_semantic::FileTable>,
+) -> Result<Vec<Box<dyn DynRule>>, PolicyError> {
     if policies.foreign.is_empty() {
         return Ok(Vec::new());
     }
-    Ok(foreign::rules(&foreign::Options {
-        paths: &policies.foreign,
-        data: &policies.data,
-        entries: &policies.entries,
-        namespaces: &policies.namespaces,
-        all_namespaces: policies.all_namespaces,
-        exclude: &policies.exclude,
-        shape: policies.shape.unwrap_or(Shape::Plan),
-        rego_v0: policies.rego_v0,
-    })?)
+    Ok(foreign::rules_with_sources(
+        &foreign::Options {
+            paths: &policies.foreign,
+            data: &policies.data,
+            entries: &policies.entries,
+            namespaces: &policies.namespaces,
+            all_namespaces: policies.all_namespaces,
+            exclude: &policies.exclude,
+            shape: policies.shape.unwrap_or(Shape::Plan),
+            rego_v0: policies.rego_v0,
+        },
+        sources,
+    )?)
 }

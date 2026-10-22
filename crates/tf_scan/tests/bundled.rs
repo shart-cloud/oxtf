@@ -29,7 +29,6 @@ fn a_scan_compiles_only_the_bundled_rules_it_uses() {
 
     let dir = Path::new("/oxtf-test/bundled-lazy");
     let mut req = ScanRequest::dirs(vec![dir.into()], false);
-    req.catalog = Catalog::standard();
     req.overlay = vec![(dir.join("main.tf"), Arc::from(DB))];
     let out = scan(req).unwrap();
     assert!(

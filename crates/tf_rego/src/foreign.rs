@@ -104,7 +104,15 @@ enum RuleKind {
 /// (unreadable file, compile error, missing entry, bad metadata, merge
 /// conflict) is an `Err` naming the file.
 pub fn rules(opts: &Options) -> Result<Vec<Box<dyn DynRule>>, String> {
-    let bundle = Bundle::load(opts)?;
+    rules_with_sources(opts, Arc::new(tf_semantic::FileTable::new()))
+}
+
+#[expect(clippy::too_many_lines)]
+pub fn rules_with_sources(
+    opts: &Options,
+    sources: Arc<tf_semantic::FileTable>,
+) -> Result<Vec<Box<dyn DynRule>>, String> {
+    let bundle = Bundle::load_with_sources(opts, sources)?;
     let mut units = Vec::new();
     if opts.entries.is_empty() {
         for (path, kind) in bundle.conftest_rules(opts)? {
@@ -186,6 +194,8 @@ pub fn rules(opts: &Options) -> Result<Vec<Box<dyn DynRule>>, String> {
                 },
                 runs_on_module: false,
                 guideline: u.meta.guideline.as_deref().map(Into::into),
+                rationale: None,
+                remediation: None,
                 source: tf_linter::RuleSource {
                     engine: if u.kind.is_some() {
                         tf_linter::Engine::Conftest
@@ -221,12 +231,22 @@ pub fn new_engine(rego_v0: bool) -> regorus::Engine {
     use std::num::{NonZeroU32, NonZeroUsize};
     let mut engine = regorus::Engine::new();
     engine.set_rego_v0(rego_v0);
+    engine.set_execution_timer_config(timer_config(std::time::Duration::from_millis(
+        tf_limits::REGO_TIME_MS_DEFAULT,
+    )));
     engine.set_policy_length_config(regorus::PolicyLengthConfig {
         max_col: NonZeroU32::new(1 << 24).expect("nonzero"),
         max_file_bytes: NonZeroUsize::new(1 << 30).expect("nonzero"),
         max_lines: NonZeroUsize::new(1 << 24).expect("nonzero"),
     });
     engine
+}
+
+fn timer_config(limit: std::time::Duration) -> regorus::utils::limits::ExecutionTimerConfig {
+    regorus::utils::limits::ExecutionTimerConfig {
+        limit,
+        check_interval: std::num::NonZeroU32::new(128).expect("positive check interval"),
+    }
 }
 
 struct PackageDef {
@@ -244,7 +264,7 @@ struct RuleDef {
 }
 
 struct Bundle {
-    /// Unique per bundle (keys the per-thread working engines).
+    /// Unique per bundle (keys the root-owned working engines).
     id: u64,
     engine: regorus::Engine,
     /// Rules whose evaluation may read `data.conftest` (see
@@ -281,7 +301,16 @@ struct Unit {
 }
 
 impl Bundle {
+    #[cfg(test)]
     fn load(opts: &Options) -> Result<Bundle, String> {
+        Self::load_with_sources(opts, Arc::new(tf_semantic::FileTable::new()))
+    }
+
+    #[expect(clippy::too_many_lines)]
+    fn load_with_sources(
+        opts: &Options,
+        sources: Arc<tf_semantic::FileTable>,
+    ) -> Result<Bundle, String> {
         let mut modules = Vec::new();
         let mut data = Json::Object(JsonMap::new());
         // Conftest loads only `.rego` from policy paths; `opa eval -d`
@@ -292,10 +321,17 @@ impl Bundle {
             None
         };
         for root in opts.paths {
-            collect(root, root, only, opts.exclude, &mut modules, &mut data)?;
+            collect(root, only, opts.exclude, &mut modules, &mut data, &sources)?;
         }
         for root in opts.data {
-            collect(root, root, Some(Load::Data), &[], &mut modules, &mut data)?;
+            collect(
+                root,
+                Some(Load::Data),
+                &[],
+                &mut modules,
+                &mut data,
+                &sources,
+            )?;
         }
         if modules.is_empty() {
             return Err("no .rego files in the policy paths".into());
@@ -307,9 +343,13 @@ impl Bundle {
         // silent pass.
         engine.set_strict_builtin_errors(true);
         if opts.entries.is_empty() {
-            conftest_builtins(&mut engine, &modules)?;
+            conftest_builtins(&mut engine, &modules, sources.clone())?;
         }
         for (path, source) in &modules {
+            sources
+                .input_budget()
+                .admit(source.len() as u64)
+                .map_err(|e| e.to_string())?;
             engine
                 .add_policy(path.display().to_string(), source.clone())
                 .map_err(|e| e.to_string())?;
@@ -342,7 +382,13 @@ impl Bundle {
         let file_info = conftest_readers(&modules, &rules);
         static IDS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         Ok(Bundle {
-            id: IDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            id: IDS
+                .fetch_update(
+                    std::sync::atomic::Ordering::Relaxed,
+                    std::sync::atomic::Ordering::Relaxed,
+                    |id| id.checked_add(1),
+                )
+                .expect("bundle identity exhausted"),
             engine,
             file_info,
             packages,
@@ -491,15 +537,15 @@ impl Bundle {
 }
 
 /// A configuration in one of the formats `parse_config` reproduces.
-fn parse_with(parser: &str, text: &str) -> anyhow::Result<Json> {
+fn parse_with(parser: &str, text: &str, sources: &tf_semantic::FileTable) -> anyhow::Result<Json> {
     Ok(match parser {
         "hcl2" => {
-            let alloc = tf_allocator::Allocator::new();
+            let alloc = sources.allocator();
             let parsed = tf_parser::parse(&alloc, text);
             if !parsed.errors.is_empty() {
                 anyhow::bail!("parse_config: hcl2: the configuration does not parse");
             }
-            let file = alloc.alloc(parsed.file);
+            let file = alloc.alloc(parsed.file)?;
             crate::hcl2json::raw(file, text).map_err(|e| anyhow::anyhow!("parse_config: {e}"))?
         }
         "json" => {
@@ -520,15 +566,23 @@ fn parse_with(parser: &str, text: &str) -> anyhow::Result<Json> {
 ///   resolves, any other is an error;
 /// - `parse_combined_config_files` fails: Conftest's combined document is
 ///   not reproduced.
+#[expect(clippy::too_many_lines)]
 fn conftest_builtins(
     engine: &mut regorus::Engine,
     modules: &[(PathBuf, String)],
+    sources: Arc<tf_semantic::FileTable>,
 ) -> Result<(), String> {
-    let parse_config = |args: Vec<regorus::Value>| -> anyhow::Result<regorus::Value> {
+    let inline_sources = sources.clone();
+    let parse_config = move |args: Vec<regorus::Value>| -> anyhow::Result<regorus::Value> {
         let (Ok(parser), Ok(text)) = (args[0].as_string(), args[1].as_string()) else {
             anyhow::bail!("parse_config: expected (parser, configuration) strings");
         };
-        Ok(regorus::Value::from(parse_with(parser, text)?))
+        inline_sources.input_budget().admit(text.len() as u64)?;
+        Ok(regorus::Value::from(parse_with(
+            parser,
+            text,
+            &inline_sources,
+        )?))
     };
     let mut callers: HashMap<String, std::collections::BTreeSet<PathBuf>> = HashMap::new();
     for (path, source) in modules {
@@ -570,9 +624,10 @@ fn conftest_builtins(
                 path.display()
             ),
         };
-        let text = std::fs::read_to_string(&path)
+        let text = sources
+            .read_text(&path)
             .map_err(|e| anyhow::anyhow!("read config file {}: {e}", path.display()))?;
-        Ok(regorus::Value::from(parse_with(parser, &text)?))
+        Ok(regorus::Value::from(parse_with(parser, &text, &sources)?))
     };
     let unsupported = |name: &'static str| {
         move |_: Vec<regorus::Value>| -> anyhow::Result<regorus::Value> {
@@ -616,7 +671,14 @@ pub enum TestResult {
 /// rule named `test_*` passes when it evaluates to `true`; `todo_test_*`
 /// is skipped. `namespaces` narrows the packages reported.
 pub fn verify(opts: &Options) -> Result<Vec<TestOutcome>, String> {
-    let bundle = Bundle::load(opts)?;
+    verify_with_sources(opts, Arc::new(tf_semantic::FileTable::new()))
+}
+
+pub fn verify_with_sources(
+    opts: &Options,
+    sources: Arc<tf_semantic::FileTable>,
+) -> Result<Vec<TestOutcome>, String> {
+    let bundle = Bundle::load_with_sources(opts, sources)?;
     let mut seen = std::collections::BTreeSet::new();
     let mut out = Vec::new();
     for r in &bundle.rules {
@@ -752,17 +814,17 @@ fn reads_conftest(src: &str) -> bool {
     false
 }
 
-/// Per-root work shared by every rule of a bundle: each file's rendered
-/// document and exception results. Rules run one
-/// after another per root on one thread, so the cache lives in a
-/// thread-local keyed by (bundle, analysis) and is replaced per root.
+/// Documents and exceptions shared by the rules of one bundle in one root.
 #[derive(Default)]
 struct RootCache {
-    /// The bundle and [`ConfigFile::run`] the entries belong to.
-    key: (usize, u64),
     documents: HashMap<(usize, tf_span::FileId), Arc<CachedDocument>>,
-    /// The `exception` set's value, by (exception rule, file).
     exceptions: HashMap<(String, PathBuf), regorus::Value>,
+}
+
+#[derive(Default)]
+struct BackendCache {
+    roots: HashMap<u64, RootCache>,
+    engines: HashMap<u64, regorus::Engine>,
 }
 
 /// A rendered file document without borrows: instances by index into the
@@ -771,14 +833,6 @@ struct CachedDocument {
     doc: regorus::Value,
     abstractions: Vec<Abstraction>,
     instances: Vec<(usize, regorus::Value)>,
-}
-
-thread_local! {
-    static ROOT_CACHE: std::cell::RefCell<RootCache> = std::cell::RefCell::new(RootCache::default());
-    /// Working copies of bundle engines, by bundle id. regorus engines are
-    /// reusable: `set_input` replaces the input and `eval_rule` clears the
-    /// previous evaluation's state.
-    static WORK: std::cell::RefCell<HashMap<u64, regorus::Engine>> = std::cell::RefCell::new(HashMap::new());
 }
 
 /// What a path may contribute; `None` in [`collect`] is both.
@@ -793,29 +847,45 @@ enum Load {
 /// ignored.
 fn collect(
     root: &Path,
-    path: &Path,
     only: Option<Load>,
     exclude: &[PathBuf],
     modules: &mut Vec<(PathBuf, String)>,
     data: &mut Json,
+    sources: &tf_semantic::FileTable,
 ) -> Result<(), String> {
-    if exclude.iter().any(|e| e == path) {
-        return Ok(());
-    }
-    let meta = std::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    if meta.is_dir() {
-        let mut children: Vec<PathBuf> = std::fs::read_dir(path)
-            .map_err(|e| format!("{}: {e}", path.display()))?
-            .map(|e| e.map(|e| e.path()))
-            .collect::<Result<_, _>>()
-            .map_err(|e| format!("{}: {e}", path.display()))?;
-        children.sort();
-        for child in children {
-            collect(root, &child, only, exclude, modules, data)?;
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(path) = pending.pop() {
+        if exclude.iter().any(|e| e == &path) {
+            continue;
         }
-        return Ok(());
+        let meta = std::fs::metadata(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        if meta.is_dir() {
+            let children = sources
+                .input_budget()
+                .entries(&path)
+                .map_err(|e| format!("{}: {e}", path.display()))?;
+            pending.extend(children.into_iter().rev().map(|(path, _)| path));
+        } else {
+            collect_document(root, &path, only, modules, data, sources)?;
+        }
     }
-    let read = || std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()));
+    Ok(())
+}
+
+#[expect(clippy::too_many_lines)]
+fn collect_document(
+    root: &Path,
+    path: &Path,
+    only: Option<Load>,
+    modules: &mut Vec<(PathBuf, String)>,
+    data: &mut Json,
+    sources: &tf_semantic::FileTable,
+) -> Result<(), String> {
+    let read = || {
+        sources
+            .read_text(path)
+            .map_err(|e| format!("{}: {e}", path.display()))
+    };
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
     let wanted = match ext {
         "rego" => Load::Rego,
@@ -838,7 +908,12 @@ fn collect(
     }
     let doc = match ext {
         "rego" => {
-            modules.push((path.to_path_buf(), read()?));
+            let text = read()?;
+            sources
+                .input_budget()
+                .admit(text.len() as u64)
+                .map_err(|e| e.to_string())?;
+            modules.push((path.to_path_buf(), text.to_string()));
             return Ok(());
         }
         "json" => serde_json::from_str::<Json>(&read()?)
@@ -1027,6 +1102,7 @@ fn comment(l: &str) -> Option<&str> {
     l.trim_start().strip_prefix('#')
 }
 
+#[expect(clippy::too_many_lines)]
 fn parse_annotations(
     file: &Path,
     source: &str,
@@ -1158,6 +1234,7 @@ fn level(s: &str, at: &str) -> Result<Level, String> {
 }
 
 impl Meta {
+    #[expect(clippy::too_many_lines)]
     fn fill(&mut self, fields: &JsonMap<String, Json>, at: &str) -> Result<(), String> {
         let string = |v: &Json, name: &str| {
             v.as_str()
@@ -1546,12 +1623,24 @@ struct ForeignPolicy {
     trace: Option<Trace>,
 }
 
-impl ForeignPolicy {
+struct PolicyRun<'a> {
+    policy: &'a ForeignPolicy,
+    budget: &'a tf_linter::RuleBudget,
+}
+
+impl std::ops::Deref for PolicyRun<'_> {
+    type Target = ForeignPolicy;
+    fn deref(&self) -> &Self::Target {
+        self.policy
+    }
+}
+
+impl PolicyRun<'_> {
     fn run(&self, input: Json) -> Result<Vec<Violation>, String> {
         self.run_on(regorus::Value::from(input), None, true)
     }
 
-    /// [`ForeignPolicy::run`] with Conftest's `data.conftest.file` set to
+    /// [`PolicyRun::run`] with Conftest's `data.conftest.file` set to
     /// the file under evaluation.
     /// A file document (`whole`) or one instance alone (ablation, which
     /// asks only whether the instance produces the violation: exceptions
@@ -1574,11 +1663,58 @@ impl ForeignPolicy {
         input: regorus::Value,
         rule: &str,
     ) -> Result<regorus::Value, String> {
+        let with = self.file_info(file, rule);
+        self.budget.charge(1)?;
+        let remaining = self.budget.rego_remaining()?;
+        let started = std::time::Instant::now();
+        let mut engine = self
+            .budget
+            .with_cache(|cache: &mut BackendCache| cache.engines.remove(&self.bundle.id))
+            .unwrap_or_else(|| self.bundle.engine.clone());
+        engine.set_execution_timer_config(timer_config(remaining));
+        engine.set_input(input);
+        let failure = |error: anyhow::Error| {
+            if matches!(
+                error.downcast_ref::<regorus::utils::limits::LimitError>(),
+                Some(regorus::utils::limits::LimitError::TimeLimitExceeded { .. })
+            ) {
+                self.budget.exhaust_rego_time()
+            } else {
+                error.to_string()
+            }
+        };
+        let result = match &with {
+            None => engine.eval_rule(rule.to_string()).map_err(failure),
+            Some(info) => engine
+                .eval_query(
+                    format!("__oxtf_result := {rule} with data.conftest.file as {info}"),
+                    false,
+                )
+                .map_err(failure)
+                .map(|r| {
+                    r.result
+                        .first()
+                        .and_then(|r| {
+                            r.bindings.as_object().ok().and_then(|b| {
+                                b.get(&regorus::Value::from("__oxtf_result")).cloned()
+                            })
+                        })
+                        .unwrap_or(regorus::Value::Undefined)
+                }),
+        };
+        self.budget.with_cache(|cache: &mut BackendCache| {
+            cache.engines.insert(self.bundle.id, engine);
+        });
+        self.budget.record_rego_elapsed(started.elapsed())?;
+        result
+    }
+
+    fn file_info(&self, file: Option<&Path>, rule: &str) -> Option<Json> {
         let reads = rule
             .strip_prefix("data.")
             .map(|r| r.split('.').map(str::to_string).collect::<Vec<_>>())
             .is_some_and(|p| self.bundle.file_info.contains(&p));
-        let with = match file {
+        match file {
             Some(f) if reads => {
                 let abs = std::path::absolute(f).unwrap_or_else(|_| f.to_path_buf());
                 Some(json!({
@@ -1587,59 +1723,26 @@ impl ForeignPolicy {
                 }))
             }
             _ => None,
-        };
-        WORK.with(|w| {
-            // Taken out while evaluating: an extension may evaluate too.
-            let mut engine = w
-                .borrow_mut()
-                .remove(&self.bundle.id)
-                .unwrap_or_else(|| self.bundle.engine.clone());
-            engine.set_input(input);
-            let result = match &with {
-                None => engine
-                    .eval_rule(rule.to_string())
-                    .map_err(|e| e.to_string()),
-                Some(info) => engine
-                    .eval_query(
-                        format!("__oxtf_result := {rule} with data.conftest.file as {info}"),
-                        false,
-                    )
-                    .map_err(|e| e.to_string())
-                    .map(|r| {
-                        r.result
-                            .first()
-                            .and_then(|r| {
-                                r.bindings.as_object().ok().and_then(|b| {
-                                    b.get(&regorus::Value::from("__oxtf_result")).cloned()
-                                })
-                            })
-                            .unwrap_or(regorus::Value::Undefined)
-                    }),
-            };
-            w.borrow_mut().insert(self.bundle.id, engine);
-            result
-        })
+        }
     }
 
-    /// Start (or keep) the per-root cache for `run`.
-    fn enter_root(&self, run: u64) {
-        let key = (Arc::as_ptr(&self.bundle) as usize, run);
-        ROOT_CACHE.with(|c| {
-            let mut c = c.borrow_mut();
-            if c.key != key {
-                *c = RootCache {
-                    key,
-                    ..RootCache::default()
-                };
-            }
-        });
+    fn cache<R>(&self, f: impl FnOnce(&mut RootCache) -> R) -> R {
+        self.budget.with_cache(|cache: &mut BackendCache| {
+            f(cache.roots.entry(self.bundle.id).or_default())
+        })
     }
 
     /// The file's rendered document, shared by the bundle's rules for this
     /// root.
     fn document(&self, cf: &ConfigFile<'_>) -> Result<Arc<CachedDocument>, String> {
+        crate::budget::text(self.budget, &cf.source.text)?;
+        for resource in &cf.module.resources {
+            if resource.span.file == cf.source.id {
+                crate::budget::body(self.budget, &resource.body)?;
+            }
+        }
         let key = (std::ptr::from_ref(cf.module) as usize, cf.source.id);
-        if let Some(d) = ROOT_CACHE.with(|c| c.borrow().documents.get(&key).cloned()) {
+        if let Some(d) = self.cache(|cache| cache.documents.get(&key).cloned()) {
             return Ok(d);
         }
         let fd = crate::hcl2json::evaluated(cf)?;
@@ -1661,7 +1764,7 @@ impl ForeignPolicy {
             abstractions: fd.abstractions,
             instances,
         });
-        ROOT_CACHE.with(|c| c.borrow_mut().documents.insert(key, d.clone()));
+        self.cache(|cache| cache.documents.insert(key, d.clone()));
         Ok(d)
     }
 
@@ -1681,6 +1784,9 @@ impl ForeignPolicy {
             return Ok(Vec::new());
         }
         let result = self.evaluate(path, input.clone(), &self.entry);
+        if let Ok(value) = &result {
+            crate::budget::result(self.budget, value)?;
+        }
         if let Some(t) = &self.trace {
             t.record(
                 &self.entry,
@@ -1701,20 +1807,23 @@ impl ForeignPolicy {
         e: &Exception,
     ) -> Result<bool, String> {
         let Some(file) = file else {
-            return exception_names(&self.evaluate(None, input.clone(), &e.rule)?, e);
+            let value = self.evaluate(None, input.clone(), &e.rule)?;
+            crate::budget::result(self.budget, &value)?;
+            return exception_names(&value, e);
         };
         // The set depends on the file, not on the rule asking: evaluate it
         // once per file and test each rule's name against it.
         let key = (e.rule.clone(), file.to_path_buf());
-        let cached = ROOT_CACHE.with(|c| c.borrow().exceptions.get(&key).cloned());
+        let cached = self.cache(|cache| cache.exceptions.get(&key).cloned());
         let value = match cached {
             Some(v) => v,
             None => {
                 let v = self.evaluate(Some(file), input.clone(), &e.rule)?;
-                ROOT_CACHE.with(|c| c.borrow_mut().exceptions.insert(key, v.clone()));
+                self.cache(|cache| cache.exceptions.insert(key, v.clone()));
                 v
             }
         };
+        crate::budget::result(self.budget, &value)?;
         exception_names(&value, e)
     }
 
@@ -1771,6 +1880,7 @@ impl ForeignPolicy {
     }
 
     fn judge(&self, r: &Resource) -> Result<Vec<Judgement>, String> {
+        crate::budget::body(self.budget, &r.body)?;
         let projection = projection::project(r);
         let input = projection::input(r, &projection, self.shape);
         let found = self.run(input)?;
@@ -1788,7 +1898,8 @@ impl ForeignPolicy {
 
     /// Every managed instance of the root (of the declared types) in one
     /// plan document, and each instance alone.
-    fn plan_document<'a>(&self, resources: &[&'a Resource]) -> PlanDocument<'a> {
+    fn plan_document<'a>(&self, resources: &[&'a Resource]) -> Result<PlanDocument<'a>, String> {
+        self.budget.charge(resources.len() as u64)?;
         let selected = resources
             .iter()
             .copied()
@@ -1803,6 +1914,7 @@ impl ForeignPolicy {
         let mut abstractions = Vec::new();
         let mut instances = Vec::new();
         for r in selected {
+            crate::budget::body(self.budget, &r.body)?;
             let p = projection::project(r);
             let doc = projection::input(r, &p, Shape::Plan);
             changes.extend(
@@ -1834,7 +1946,7 @@ impl ForeignPolicy {
             }
             instances.push((r, doc));
         }
-        PlanDocument {
+        Ok(PlanDocument {
             doc: json!({
                 "format_version": "1.2",
                 "resource_changes": changes,
@@ -1842,7 +1954,7 @@ impl ForeignPolicy {
             }),
             abstractions,
             instances,
-        }
+        })
     }
 
     /// Module input: results attributed by `address`.
@@ -1850,7 +1962,7 @@ impl ForeignPolicy {
         &self,
         resources: &[&'a Resource],
     ) -> Result<Vec<(&'a Resource, Judgement)>, String> {
-        let pd = self.plan_document(resources);
+        let pd = self.plan_document(resources)?;
         let found = self.run(pd.doc)?;
         found
             .iter()
@@ -1881,6 +1993,8 @@ impl ForeignPolicy {
         if found.is_empty() {
             return Ok(Vec::new());
         }
+        self.budget.charge(instances.len() as u64)?;
+        self.budget.charge(found.len() as u64)?;
         // The ablation runs are only needed for violations that name no
         // instance.
         let mut alone: Vec<Vec<String>> = Vec::new();
@@ -1892,6 +2006,7 @@ impl ForeignPolicy {
         found
             .into_iter()
             .map(|v| {
+                self.budget.charge(instances.len() as u64)?;
                 let owners: Vec<&'a Resource> = match &v.address {
                     Some(a) => vec![
                         instances
@@ -1920,74 +2035,87 @@ impl ForeignPolicy {
         analysis: &'a tf_semantic::Analysis,
         files: &[ConfigFile<'a>],
     ) -> Result<Vec<(Subject<'a>, Judgement)>, String> {
-        let mut out = Vec::new();
         match self.shape {
-            Shape::Hcl => {
-                if files.is_empty() && analysis.modules.iter().any(|m| !m.resources.is_empty()) {
-                    return Err(
-                        "the HCL input shape needs source files; scan a plan with the plan shape"
-                            .into(),
-                    );
+            Shape::Hcl => self.judge_hcl(analysis, files),
+            Shape::Plan => self.judge_plan(analysis),
+        }
+    }
+
+    fn judge_hcl<'a>(
+        &self,
+        analysis: &'a tf_semantic::Analysis,
+        files: &[ConfigFile<'a>],
+    ) -> Result<Vec<(Subject<'a>, Judgement)>, String> {
+        self.budget.charge(files.len() as u64)?;
+        let mut out = Vec::new();
+        if files.is_empty() && analysis.modules.iter().any(|m| !m.resources.is_empty()) {
+            return Err(
+                "the HCL input shape needs source files; scan a plan with the plan shape".into(),
+            );
+        }
+        for cf in files {
+            let path = &cf.source.path;
+            let at = |e: String| format!("{}: {e}", path.display());
+            let fd = self.document(cf).map_err(at)?;
+            let found = self.run_file(fd.doc.clone(), path, true).map_err(at)?;
+            let instances: Vec<(&'a Resource, regorus::Value)> = fd
+                .instances
+                .iter()
+                .map(|(i, doc)| (&cf.module.resources[*i], doc.clone()))
+                .collect();
+            for (v, owners) in self
+                .attribute(found, &instances, |d| self.run_file(d, path, false))
+                .map_err(at)?
+            {
+                if owners.is_empty() {
+                    out.push((
+                        Subject::File {
+                            module: cf.module,
+                            file: cf.source.id,
+                        },
+                        self.judgement_on(None, &v, &fd.abstractions),
+                    ));
                 }
-                if let Some(first) = files.first() {
-                    self.enter_root(first.run);
-                }
-                for cf in files {
-                    let path = &cf.source.path;
-                    let at = |e: String| format!("{}: {e}", path.display());
-                    let fd = self.document(cf).map_err(at)?;
-                    let found = self.run_file(fd.doc.clone(), path, true).map_err(at)?;
-                    let instances: Vec<(&'a Resource, regorus::Value)> = fd
-                        .instances
-                        .iter()
-                        .map(|(i, doc)| (&cf.module.resources[*i], doc.clone()))
-                        .collect();
-                    for (v, owners) in self
-                        .attribute(found, &instances, |d| self.run_file(d, path, false))
-                        .map_err(at)?
-                    {
-                        if owners.is_empty() {
-                            out.push((
-                                Subject::File {
-                                    module: cf.module,
-                                    file: cf.source.id,
-                                },
-                                self.judgement_on(None, &v, &fd.abstractions),
-                            ));
-                        }
-                        for r in owners {
-                            out.push((
-                                Subject::Resource(r),
-                                self.judgement(r, &v, &fd.abstractions),
-                            ));
-                        }
-                    }
-                }
-            }
-            Shape::Plan => {
-                let resources: Vec<&'a Resource> =
-                    analysis.modules.iter().flat_map(|m| &m.resources).collect();
-                let pd = self.plan_document(&resources);
-                let found = self.run(pd.doc)?;
-                let mut lost = Vec::new();
-                for (v, owners) in self.attribute(found, &pd.instances, |d| self.run(d))? {
-                    if owners.is_empty() {
-                        lost.push(v.msg.clone());
-                    }
-                    for r in owners {
-                        out.push((
-                            Subject::Resource(r),
-                            self.judgement(r, &v, &pd.abstractions),
-                        ));
-                    }
-                }
-                if !lost.is_empty() {
-                    return Err(format!(
-                        "no single resource reproduces these plan violations (a plan has no file to report them on): {}",
-                        lost.join("; ")
+                for r in owners {
+                    out.push((
+                        Subject::Resource(r),
+                        self.judgement(r, &v, &fd.abstractions),
                     ));
                 }
             }
+        }
+        Ok(out)
+    }
+
+    fn judge_plan<'a>(
+        &self,
+        analysis: &'a tf_semantic::Analysis,
+    ) -> Result<Vec<(Subject<'a>, Judgement)>, String> {
+        for module in &analysis.modules {
+            self.budget.charge(module.resources.len() as u64)?;
+        }
+        let mut out = Vec::new();
+        let resources: Vec<&'a Resource> =
+            analysis.modules.iter().flat_map(|m| &m.resources).collect();
+        let pd = self.plan_document(&resources)?;
+        let found = self.run(pd.doc)?;
+        let mut lost = Vec::new();
+        for (v, owners) in self.attribute(found, &pd.instances, |d| self.run(d))? {
+            if owners.is_empty() {
+                lost.push(v.msg.clone());
+            }
+            for r in owners {
+                out.push((
+                    Subject::Resource(r),
+                    self.judgement(r, &v, &pd.abstractions),
+                ));
+            }
+        }
+        if !lost.is_empty() {
+            return Err(format!(
+                "no single resource reproduces these plan violations (a plan has no file to report them on): {}",
+                lost.join("; ")
+            ));
         }
         Ok(out)
     }
@@ -2014,19 +2142,59 @@ impl DynRule for ForeignPolicy {
         analysis: &'a tf_semantic::Analysis,
         files: &[ConfigFile<'a>],
     ) -> Result<Vec<(Subject<'a>, Judgement)>, RuleFailure> {
-        self.judge_documents(analysis, files)
+        self.judge_files_with_budget(analysis, files, &tf_linter::RuleBudget::default())
     }
     fn judge_graph<'a>(
         &self,
         graph: &tf_semantic::graph::ResourceGraph<'a>,
     ) -> Result<Vec<(&'a Resource, Judgement)>, RuleFailure> {
-        self.judge_root(&graph.resources)
+        self.judge_graph_with_budget(graph, &tf_linter::RuleBudget::default())
     }
     fn judge_resource(&self, r: &Resource) -> Result<Vec<Judgement>, RuleFailure> {
+        self.judge_resource_with_budget(r, &tf_linter::RuleBudget::default())
+    }
+    fn judge_files_with_budget<'a>(
+        &self,
+        analysis: &'a tf_semantic::Analysis,
+        files: &[ConfigFile<'a>],
+        budget: &tf_linter::RuleBudget,
+    ) -> Result<Vec<(Subject<'a>, Judgement)>, RuleFailure> {
+        budget.finish(
+            PolicyRun {
+                policy: self,
+                budget,
+            }
+            .judge_documents(analysis, files),
+        )
+    }
+    fn judge_graph_with_budget<'a>(
+        &self,
+        graph: &tf_semantic::graph::ResourceGraph<'a>,
+        budget: &tf_linter::RuleBudget,
+    ) -> Result<Vec<(&'a Resource, Judgement)>, RuleFailure> {
+        budget.finish(
+            PolicyRun {
+                policy: self,
+                budget,
+            }
+            .judge_root(&graph.resources),
+        )
+    }
+    fn judge_resource_with_budget(
+        &self,
+        r: &Resource,
+        budget: &tf_linter::RuleBudget,
+    ) -> Result<Vec<Judgement>, RuleFailure> {
         if self.input != Input::Resource {
             return Ok(Vec::new());
         }
-        self.judge(r)
+        budget.finish(
+            PolicyRun {
+                policy: self,
+                budget,
+            }
+            .judge(r),
+        )
     }
     fn judge_module<'m>(
         &self,
@@ -2042,6 +2210,106 @@ mod tests {
 
     fn dir(files: &[(&str, &str)]) -> tempdir::Dir {
         tempdir::Dir::new(files)
+    }
+
+    fn test_policy(dir: &tempdir::Dir, sources: Arc<tf_semantic::FileTable>) -> ForeignPolicy {
+        let bundle = Bundle::load_with_sources(
+            &Options {
+                paths: &[dir.path().to_path_buf()],
+                data: &[],
+                namespaces: &[],
+                all_namespaces: false,
+                exclude: &[],
+                entries: &[],
+                shape: Shape::Plan,
+                rego_v0: false,
+            },
+            sources,
+        )
+        .unwrap();
+        ForeignPolicy {
+            info: tf_linter::rules::all()[0].info(),
+            types: None,
+            input: Input::Document,
+            bundle: Arc::new(bundle),
+            entry: DEFAULT_ENTRY.into(),
+            shape: Shape::Plan,
+            exception: None,
+            trace: None,
+        }
+    }
+
+    #[test]
+    fn internal_rego_work_is_interrupted_and_cannot_reset_the_root_timer() {
+        let dir = dir(&[(
+            "main.rego",
+            r#"package main
+import rego.v1
+deny contains "bad" if {
+    some x in numbers.range(1, 2000)
+    some y in numbers.range(1, 2000)
+    x + y == 999999
+}"#,
+        )]);
+        let policy = test_policy(&dir, Arc::new(tf_semantic::FileTable::new()));
+        let budget =
+            tf_linter::RuleBudget::new(tf_limits::Limits::default().with_rego_time_ms(1).unwrap());
+        let run = PolicyRun {
+            policy: &policy,
+            budget: &budget,
+        };
+        assert!(run.run(json!({})).unwrap_err().contains("rego_time_ms"));
+        assert_eq!(
+            budget.exhaustion().unwrap().resource,
+            tf_limits::Resource::RegoTimeMs
+        );
+        assert!(run.run(json!({})).is_err());
+        assert!(budget.finish(Ok(())).is_err());
+    }
+
+    #[test]
+    fn policy_cache_lives_only_as_long_as_its_root_budget() {
+        let dir = dir(&[(
+            "main.rego",
+            "package main\nimport rego.v1\ndeny contains \"bad\" if true",
+        )]);
+        let sources = Arc::new(tf_semantic::FileTable::new());
+        let weak = Arc::downgrade(&sources);
+        let policy = test_policy(&dir, sources);
+        let budget = tf_linter::RuleBudget::default();
+        let found = PolicyRun {
+            policy: &policy,
+            budget: &budget,
+        }
+        .run(json!({}))
+        .unwrap();
+        assert_eq!(found[0].msg, "bad");
+        let cost = budget.used();
+        assert!(cost > 1);
+        for allowance in [cost - 1, cost, cost + 1] {
+            let limits = tf_semantic::AnalyzeOptions::default()
+                .limits
+                .with_rule_steps(allowance)
+                .unwrap();
+            let root = tf_linter::RuleBudget::new(limits);
+            let result = PolicyRun {
+                policy: &policy,
+                budget: &root,
+            }
+            .run(json!({}));
+            assert_eq!(result.is_ok(), allowance >= cost);
+            assert_eq!(root.exhaustion().is_some(), allowance < cost);
+        }
+        drop(policy);
+        assert!(
+            weak.upgrade().is_some(),
+            "the working engine owns its input extensions"
+        );
+        drop(budget);
+        assert!(
+            weak.upgrade().is_none(),
+            "no engine survives its root on a persistent thread"
+        );
     }
 
     mod tempdir {
@@ -2157,6 +2425,7 @@ mod tests {
     }
 
     #[test]
+    #[expect(clippy::too_many_lines)]
     fn conftest_rules_namespaces_and_exceptions() {
         let d = dir(&[
             (

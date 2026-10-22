@@ -10,10 +10,31 @@ cargo build --locked -p tf_cli
 target/debug/oxtf scan ./terraform --format json
 ```
 
+CLI, Python, and Rust `ScanRequest::dirs()` / `ScanRequest::plan()` scans default
+to the bundled Checkov catalog plus native seed rules in the security profile.
+Rust callers can explicitly set `request.catalog = Catalog::seed()` for only
+the seed rules. `Catalog::default()` is an empty catalog for custom rules.
+
+Catalog work prioritizes signal quality over additional rules. Reviewed rules
+include a severity rationale, remediation steps, and provider documentation in
+the rule metadata; CLI text and SARIF also show that guidance. Public endpoints,
+missing guardrails, and customer-managed-key requirements are distinguished
+from public data access, administrative grants, and missing baseline encryption.
+The reviewed scope and remaining metadata work are in
+[the signal plan](docs/plans/SIGNAL_PLAN.md).
+
 Source analysis handles `.tf`, `.tf.json`, and HCL/JSON variable files. It loads
 `terraform.tfvars`, then `terraform.tfvars.json`, then both auto-file formats
 in lexical order, then explicit `--var-file` arguments in order.
 JSON variable strings are literal, including `${...}`.
+
+Source evaluation supports `file`, `filebase64`, `templatefile`, file hashes,
+string hashes, and `abspath`. File reads use the scan's overlays and resolve
+relative paths against each scanned root. Templates retain source provenance,
+unknown values and sensitivity; recursive template calls are rejected.
+Explicitly fetched packages cannot read outside their recorded package boundary.
+Unhandled expression errors make analysis fail; `try` and `can` can handle
+ordinary evaluation errors, while coverage limits remain visible.
 
 JSON configuration follows Terraform's context-dependent mapping: ordinary
 strings are templates, single interpolations preserve their result type, and
@@ -97,6 +118,15 @@ process group when a bound is exceeded.
 Use plan input when concrete planned values are available. Unavailable modules
 and bounded evaluation/expansion limits produce coverage diagnostics and an
 `incomplete` scan status.
+
+Runtime evaluation and cached override-default preparation each default to
+1,000,000 steps per root. Child modules share their root's allowances, with
+equivalent default-preparation charges on cache hits and misses. Scans also bound
+input payloads, discovery, and Rego execution time, and release backend caches
+when each root finishes. Configure
+them with `--limits PATH` (JSON), Python's
+`limits` argument, or Rust's `ScanRequest.limits`. See [limits](docs/LIMITS.md)
+for examples, measured defaults, and accounting scope.
 
 `complete` means the selected analysis ran without reported failures or
 coverage gaps. It does not mean the configuration is secure, every value

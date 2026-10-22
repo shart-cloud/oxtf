@@ -263,7 +263,8 @@ resource "test" "consumer" { value = module.db.value }
             .unwrap()
             .contains("json-private-secret")
     );
-    let graph = tf_semantic::graph::ResourceGraph::new(&out.analyses[0]);
+    let graph = tf_semantic::graph::ResourceGraph::new(&out.analyses[0])
+        .expect("graph within default limits");
     assert_eq!(graph.resources.len(), 2);
     assert_eq!(graph.neighbours[0].len(), 1);
 }
@@ -307,7 +308,9 @@ fn provider_metadata_keeps_its_provider_label() {
     )]);
     assert_eq!(out.result.status(), ScanStatus::Complete);
     let store = tf_semantic::ModuleStore::new();
-    let def = store.module(&out.result.files, &out.analyses[0].root_dir);
+    let def = store
+        .module(&out.result.files, &out.analyses[0].root_dir)
+        .unwrap();
     let meta = def.files[0]
         .1
         .body

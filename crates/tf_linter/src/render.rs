@@ -219,18 +219,26 @@ fn report(files: &FileTable, f: &Finding) -> Report {
             });
         }
     }
-    let help = if f.provenance.is_empty() {
-        None
-    } else {
-        Some(format!(
+    let mut help = Vec::new();
+    if !f.provenance.is_empty() {
+        help.push(format!(
             "provenance: {}",
             f.provenance
                 .iter()
                 .map(|s| format!("{} ({})", s.label, location(files, s.at)))
                 .collect::<Vec<_>>()
                 .join(" -> ")
-        ))
-    };
+        ));
+    }
+    if let Some(rationale) = &f.rationale {
+        help.push(format!("severity ({}): {rationale}", f.level.as_str()));
+    }
+    if let Some(remediation) = &f.remediation {
+        help.push(format!("remediation: {remediation}"));
+    }
+    if let Some(guideline) = &f.guideline {
+        help.push(format!("guideline: {guideline}"));
+    }
     Report {
         code: format!("{} [{}]", f.rule, f.certainty.as_str()),
         message: format!("{}: {}", f.address, f.message),
@@ -241,7 +249,7 @@ fn report(files: &FileTable, f: &Finding) -> Report {
         },
         src: source(files, f.primary),
         labels,
-        help,
+        help: (!help.is_empty()).then(|| help.join("\n")),
         related,
     }
 }

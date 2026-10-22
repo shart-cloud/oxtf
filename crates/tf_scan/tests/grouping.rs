@@ -56,6 +56,7 @@ variable "enc" { type = bool }
 fn roots_and_instances_are_occurrences_of_one_finding() {
     let (base, overlay) = repo_in_memory();
     let mut req = ScanRequest::dirs(vec![base], true);
+    req.catalog = tf_scan::Catalog::seed();
     req.overlay = overlay;
     let out = scan(req).unwrap();
     // Per-instance findings: two instances in each of three roots.
@@ -116,6 +117,7 @@ fn roots_and_instances_are_occurrences_of_one_finding() {
 fn ndjson_has_a_line_per_finding_and_a_summary() {
     let (base, overlay) = repo_in_memory();
     let mut req = ScanRequest::dirs(vec![base], true);
+    req.catalog = tf_scan::Catalog::seed();
     req.overlay = overlay;
     let rec = scan(req).unwrap().record();
     let lines: Vec<serde_json::Value> = tf_linter::formats::ndjson(&rec)
@@ -140,7 +142,7 @@ fn ndjson_has_a_line_per_finding_and_a_summary() {
     );
     let result = &run["results"][0];
     assert_eq!(result["ruleIndex"], 0);
-    assert_eq!(result["level"], "error");
+    assert_eq!(result["level"], "warning");
     assert_eq!(
         result["partialFingerprints"]["oxtf/v1"],
         rec.findings[0].fingerprint.as_str()

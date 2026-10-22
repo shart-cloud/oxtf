@@ -7,9 +7,13 @@ publish.workspace = true
 description = "Plan JSON front end: `terraform show -json` into the tf_semantic resource model, with findings mapped back to source spans"
 
 [dependencies]
+tf_limits.workspace = true
 tf_span.workspace = true
 tf_schema.workspace = true
 tf_eval.workspace = true
 tf_semantic.workspace = true
 tf_linter.workspace = true
 serde_json.workspace = true
+
+[lints]
+workspace = true

@@ -145,6 +145,13 @@ Found along the way, for later:
 
 ## D. Curate the catalog — done for every rule a default corpus scan reports; in review
 
+Current priority: improve the accuracy and usefulness of existing findings
+before expanding the catalog. New rule work should include a reviewed impact
+level with rationale, actionable remediation, authoritative documentation,
+and representative pass/fail/uncertain cases. A pinned implementation link
+alone does not satisfy remediation guidance. Existing `unreviewed` rules remain
+identified as such; this pass does not claim the entire catalog is curated.
+
 - `crates/tf_rule_ir/data/checkov/curation.toml`, hand-maintained and never
   regenerated: per Checkov ID a `level`, optional `category`, a `profile`
   (`security` / `audit` / `hygiene`) and a one-line `why`. `build.rs`
@@ -158,7 +165,8 @@ Found along the way, for later:
   `profiles=`). The default is `security`, which includes `unreviewed`. Only
   shipped rules are filtered; an explicit selection reaches every profile;
   `oxtf rules` lists every profile with a column for it.
-- Every bundled rule's guideline is its Checkov source at the pinned tag.
+- A bundled rule without reviewed remediation retains its Checkov source at
+  the pinned tag as a fallback guideline.
 - First curation: the 45 most frequent rules on the corpus plus 22
   well-known critical checks the module corpus rarely exercises (public S3
   ACLs and policies, world-open SSH/RDP/all ports, public RDS and Cloud
@@ -180,6 +188,54 @@ key where the provider already encrypts the data is `low` `hygiene`
 (CKV_AWS_158 moved there, for consistency with CKV_GCP_38). 206 rules are
 curated; a default corpus scan now reports no unreviewed rule: 289
 findings, 49 % not medium (4 critical, 76 high, 147 medium, 62 low).
+
+### Severity and remediation review (2026-10-20)
+
+Reviewed 40 existing bundled rules and all five native rules against their
+actual predicates and provider documentation. Seven previously unreviewed
+bundled rules now have curated metadata (213 total); 40 have remediation text
+and provider documentation. No rules or predicates were added. Curation `why`
+is exported as `rationale`; `remediation` and a supporting HTTPS `guideline`
+are validated together. Corrected descriptions also update finding messages.
+
+The reviewed families cover AWS security-group ingress, public database and
+storage settings, S3 public-access guardrails, broad IAM grants and account
+trust, RDS/EBS/SQS/SNS encryption, S3/CloudWatch key-control requirements, GCP
+firewall defaults and storage access, GKE endpoint/identity settings, and Azure
+Storage network and anonymous-access controls.
+
+Key decisions:
+
+- Public RDS endpoints and all-port security-group rules are `high`, with
+  reachability prerequisites documented. A public endpoint does not establish
+  data access. Azure's permission to enable public containers is a `medium`
+  guardrail gap, not a confirmed public container.
+- Account-principal IAM trust (`CKV_AWS_61`) and resource scoping
+  (`CKV_AWS_355`) are `medium`; neither check proves administrative access.
+  Explicit administrative grants remain `critical`, with effective-permission
+  limits explained.
+- RDS at-rest encryption and explicit S3 public-access guardrails are `medium`
+  in both native and corresponding bundled metadata. RDS remediation explains
+  snapshot-copy/restore and cutover rather than implying an in-place migration.
+- S3 and CloudWatch KMS requirements remain `low`/`hygiene`, since baseline
+  encryption already exists. SQS guidance distinguishes explicit disablement
+  from relying on service defaults; no blanket assertion of unencrypted data
+  is made from omitted attributes.
+- The presence-only GCP firewall check (`CKV2_GCP_18`) moves to `low`/`hygiene`.
+  GCP has implied deny-ingress rules: adding an allow rule merely to pass this
+  check could weaken the configuration.
+
+Primary references are stored per rule. Examples include
+[RDS encryption and migration](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.Encryption.html),
+[IAM principal semantics](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html),
+[S3 encryption defaults](https://docs.aws.amazon.com/AmazonS3/latest/userguide/default-encryption-faq.html),
+[Azure anonymous-access controls](https://learn.microsoft.com/en-us/azure/storage/blobs/anonymous-read-access-prevent),
+and [GCP firewall defaults](https://docs.cloud.google.com/firewall/docs/firewalls).
+
+Severity is a reviewed potential-impact classification, not a CVSS score or a
+proof of effective cloud access. Remaining curation should prioritize frequent
+rules without remediation and ambiguous default/guardrail checks. Catalog
+growth is secondary to that work.
 
 ## F. Fixes for nested attributes and variable defaults — done
 
@@ -204,10 +260,12 @@ findings, 49 % not medium (4 critical, 76 high, 147 medium, 62 low).
   keeps the module's interface, and falls back to the attribute when a
   caller passes its own value. `--at default|attribute` (Python `at=`)
   picks one.
-- **Verification is per declaration.** A fix is verified when the rule no
+- **Target resolution is per declaration.** The target is resolved when the rule no
   longer fails on the declaration (rule, module directory, local address)
   from any root, so a finding that moves to another attribute is not
-  reported as fixed.
+  reported as fixed. The current fix contract additionally requires complete
+  scans and no new findings or affected occurrences before reporting `verified`;
+  see `docs/FINDING_SCHEMA.md` for the before/after delta.
 - **Bug fixed along the way.** `apply_fix` looked up the hint's resource
   address in every root; two examples that each declare `aws_instance.this`
   got the first one's file edited. It now looks only in the finding's
@@ -226,9 +284,41 @@ findings.
 (`--profile all`, so moving a rule between profiles is not a regression)
 and reports the default profile's numbers beside it: findings, occurrences, JSON and
 NDJSON bytes per finding, % with attribute, % with fix hint, % header-only,
-level distribution. `--write` stores `bench/results/signal.json`; `--check`
-fails when a judged metric moves the wrong way. Run it beside the perf
+level distribution, coverage of severity rationale and remediation, and scan
+completion. Severity distribution is reported but never a quality gate:
+changing a correct `medium` to `high` must not count as progress. Metadata
+coverage is checked across all profiles and the default profile. `--write`
+stores `bench/results/signal.json` only for complete scans; `--check` fails for
+incomplete analysis or a judged metric moving the wrong way. Run it beside the perf
 guard on every change to the output or the catalog.
+
+The current corpus has pre-existing missing remote modules, evaluation coverage
+gaps, and 14 Checkov rule execution errors (`CKV_GCP_24` and `CKV_GCP_22`). The
+metadata review reports observed measurements without replacing the historical
+trusted baseline or claiming the signal gate passes. Fixing these gaps and
+recording a complete baseline is required before the new corpus coverage floors
+can be established. Focused metadata and output tests run independently.
+
+Observed before/after measurements on the same current checkout (partial
+scans, not a new baseline): all-profile findings and occurrences stay at
+568 / 1,576; default findings decrease from 304 to 262 because the 42
+presence-only GCP firewall findings move to hygiene. The default profile's
+high findings change from 89 to 58 and critical findings from 4 to 3;
+these are classification corrections, not resolved infrastructure issues.
+Reviewed rationale reaches 99.2% of observed default findings and actionable
+remediation reaches 37.4%. The remaining 62.6% is explicit guidance debt.
+NDJSON now carries rule metadata once in the summary; together with existing
+coverage diagnostics this exceeds the historical byte budget. The old
+fix-hint percentage floor also fails (9.9% versus 10.1%). Those gate failures
+remain visible rather than being waived or written over.
+
+The subsequent [completion follow-up](SIGNAL_COMPLETION.md) adds file/template
+evaluation and guidance for 11 more existing rules. The latest failed
+observation is `bench/results/signal-observed.json`: default remediation
+coverage is 68.3%, with unchanged finding counts. It includes a ranked guidance
+backlog and byte/cause inventories. The follow-up records the upstream Checkov
+defects, dependency preparation and evaluation work still blocking a complete
+baseline; the measurements above are the earlier checkpoint.
 
 ## Results so far
 

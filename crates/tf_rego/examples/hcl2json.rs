@@ -13,7 +13,7 @@ fn main() {
         let line = if !parsed.errors.is_empty() {
             serde_json::json!({"file": path, "error": "parse error"})
         } else {
-            let file = alloc.alloc(parsed.file);
+            let file = alloc.alloc(parsed.file).unwrap();
             match tf_rego::hcl2json::raw(file, &text) {
                 Ok(doc) => serde_json::json!({"file": path, "doc": doc}),
                 Err(e) => serde_json::json!({"file": path, "error": e}),

@@ -11,6 +11,7 @@ fn repo() -> PathBuf {
 
 fn request(input: ScanInput) -> ScanRequest {
     let mut req = ScanRequest::dirs(vec![], false);
+    req.catalog = Catalog::seed();
     req.input = input;
     req.threads = Some(4);
     req
@@ -84,6 +85,7 @@ fn gcp_defaults_uncertainty_and_provenance() {
 
 fn foreign(root: &str, policy: &Path, shape: Shape) -> ScanRequest {
     let mut req = ScanRequest::dirs(vec![repo().join(root)], false);
+    req.catalog = Catalog::seed();
     req.catalog.policies.foreign = vec![policy.to_path_buf()];
     req.catalog.policies.shape = Some(shape);
     req
@@ -255,6 +257,7 @@ fn a_later_catalog_source_shadows_by_name() {
         vec![repo().join("fixtures/rules/aws-rds-unencrypted/fail_explicit_false")],
         false,
     );
+    req.catalog = Catalog::seed();
     req.catalog.rule_json.push(shadow.into());
     let out = scan(req).unwrap();
     assert_eq!(out.result.findings.len(), 0);
@@ -291,7 +294,7 @@ fn selection_covers_the_whole_catalog() {
 
 fn ports(root: &str, shape: Shape) -> ScanRequest {
     let mut req = ScanRequest::dirs(vec![repo().join(root)], false);
-    req.catalog.builtin = false;
+    req.catalog = Catalog::default();
     req.catalog.policies.foreign = vec![repo().join("fixtures/rego/ports")];
     req.catalog.policies.entries = vec![
         "data.ports.rds.deny".into(),
@@ -365,7 +368,7 @@ fn ported_policies_use_metadata_module_input_and_paths() {
 #[test]
 fn conftest_conventions_files_ablation_and_exceptions() {
     let mut req = ScanRequest::dirs(vec![repo().join("fixtures/rego/conftest/tf")], false);
-    req.catalog.builtin = false;
+    req.catalog = Catalog::default();
     req.catalog.policies.foreign = vec![repo().join("fixtures/rego/conftest/policy")];
     let result = run(req);
     let mut rows: Vec<(String, String, Value, String)> = result["findings"]

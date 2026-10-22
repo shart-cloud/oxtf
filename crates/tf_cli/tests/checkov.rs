@@ -35,6 +35,7 @@ fn imported_check_can_be_listed_and_selected_without_checkov_installed() {
 }
 
 #[test]
+#[expect(clippy::too_many_lines)]
 fn graph_policy_runs_through_cli_for_source_and_plan() {
     let dir = std::env::temp_dir().join(format!("oxtf-graph-cli-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -135,6 +136,7 @@ resource "aws_flow_log" "log" { vpc_id = aws_vpc.good.id }
 /// Python, with values resolved by oxtf (the bucket's ACL comes from a
 /// variable default, which Checkov's own loader would compare as text).
 #[test]
+#[expect(clippy::too_many_lines)]
 fn yaml_policy_runs_without_export() {
     let dir = std::env::temp_dir().join(format!("oxtf-checkov-yaml-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);

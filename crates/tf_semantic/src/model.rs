@@ -351,6 +351,10 @@ pub struct Diagnostic {
 
 #[derive(Clone, Debug, Default)]
 pub struct AnalysisStats {
+    /// Logical cached-default preparation cost, charged once per module definition per root.
+    pub loader_steps: u64,
+    /// Runtime evaluation and input conversion, excluding parsing and cached preparation.
+    pub evaluation_steps: u64,
     pub files: usize,
     pub module_instances: usize,
     pub resources: usize,
@@ -362,6 +366,9 @@ pub struct AnalysisStats {
 pub struct Analysis {
     pub root_dir: PathBuf,
     /// Root first, then children depth-first.
+    /// Admitted module prefix. On storage refusal, completed resources remain
+    /// available; unfinished bodies are absent. Always inspect diagnostics before
+    /// treating missing model entries as evidence that configuration is absent.
     pub modules: Vec<Module>,
     pub diagnostics: Vec<Diagnostic>,
     pub stats: AnalysisStats,

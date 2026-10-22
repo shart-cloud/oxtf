@@ -17,6 +17,14 @@ impl RuleMeta for GcpStorageUniformAccess {
         "Cloud Storage bucket does not enforce uniform bucket-level access";
     const RESOURCE_TYPES: &'static [&'static str] = &["google_storage_bucket"];
     const ALIASES: &'static [&'static str] = &["CKV_GCP_29"];
+    const RATIONALE: Option<&'static str> = Some(
+        "Parallel ACL and IAM authorization makes access harder to control. Disabled uniform access does not establish a public grant, and uniform access alone does not prevent public IAM bindings.",
+    );
+    const REMEDIATION: Option<&'static str> = Some(
+        "Audit existing object ACLs, migrate required grants to bucket IAM, then set uniform_bucket_level_access = true. It becomes irreversible after 90 consecutive days. Separately remove public principals or enforce public access prevention when public content is not intended.",
+    );
+    const GUIDELINE: Option<&'static str> =
+        Some("https://docs.cloud.google.com/storage/docs/uniform-bucket-level-access");
 }
 
 impl Rule for GcpStorageUniformAccess {

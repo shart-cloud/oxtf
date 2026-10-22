@@ -28,8 +28,78 @@ def test_sensitive_exports_and_fix_preview(tmp_path):
     assert secret not in json.dumps(result.findings_arrow().to_pylist())
     fixed = tfscan.fix(result.findings[0].fingerprint, tmp_path, overlay=overlay, bundled=False)
     assert fixed["verified"]
+    assert fixed["target_resolved"] and fixed["no_new_findings"]
     assert fixed["verification_errors"] == []
     assert secret not in fixed["diff"]
+    assert secret not in json.dumps(fixed["finding_delta"])
+
+
+def test_fix_distinguishes_target_resolution_from_new_findings(tmp_path):
+    path = tmp_path / "main.tf"
+    overlay = {path: '''
+variable "encrypted" { default = false }
+resource "aws_db_instance" "target" { storage_encrypted = var.encrypted }
+resource "aws_db_instance" "other" { storage_encrypted = !var.encrypted }
+'''}
+    opts = dict(overlay=overlay, select=["aws-rds-unencrypted"])
+    [finding] = tfscan.scan(tmp_path, **opts).findings
+    fixed = tfscan.fix(finding.fingerprint, tmp_path, at="default", **opts)
+    assert fixed["target_resolved"]
+    assert not fixed["no_new_findings"] and not fixed["verified"]
+    assert fixed["verification_errors"] == []
+    delta = fixed["finding_delta"]
+    assert delta["before"] == delta["after"] == 1
+    assert delta["removed"][0]["fingerprint"] == finding.fingerprint
+    assert delta["added"][0]["occurrences"][0]["address"] == "aws_db_instance.other"
+    assert delta["changed"] == [] and delta["unchanged"] == 0
+
+    fixed = tfscan.fix(finding.fingerprint, tmp_path, **opts)
+    assert fixed["site"] == "attribute"
+    assert fixed["target_resolved"] and fixed["no_new_findings"] and fixed["verified"]
+    assert fixed["finding_delta"]["after"] == 0
+    assert not path.exists()
+
+
+def test_fix_reports_new_occurrences_of_an_existing_finding(tmp_path):
+    overlay = {tmp_path / "main.tf": '''
+variable "encrypted" { default = false }
+resource "aws_db_instance" "target" { storage_encrypted = var.encrypted }
+resource "aws_db_instance" "other" {
+  count = 2
+  storage_encrypted = count.index == 0 ? false : !var.encrypted
+}
+'''}
+    opts = dict(overlay=overlay, select=["aws-rds-unencrypted"])
+    before = json.loads(tfscan.scan(tmp_path, **opts).to_json())
+    target = next(f for f in before["findings"]
+                  if f["occurrences"][0]["address"] == "aws_db_instance.target")
+    fixed = tfscan.fix(target["fingerprint"], tmp_path, at="default", **opts)
+    assert fixed["target_resolved"] and not fixed["no_new_findings"]
+    assert not fixed["verified"]
+    delta = fixed["finding_delta"]
+    assert (delta["before"], delta["after"]) == (2, 1)
+    assert delta["added"] == []
+    [change] = delta["changed"]
+    assert change["before"]["fingerprint"] == change["after"]["fingerprint"]
+    assert len(change["before"]["occurrences"]) == 1
+    assert len(change["after"]["occurrences"]) == 2
+    assert change["added_occurrences"][0]["address"] == "aws_db_instance.other[1]"
+    assert change["removed_occurrences"] == []
+
+
+def test_fix_does_not_claim_resolution_when_analysis_is_incomplete(tmp_path):
+    overlay = {tmp_path / "main.tf": '''
+module "missing" { source = "vendor/name/aws" }
+resource "aws_db_instance" "target" { storage_encrypted = false }
+'''}
+    opts = dict(overlay=overlay, select=["aws-rds-unencrypted"])
+    [finding] = tfscan.scan(tmp_path, **opts).findings
+    fixed = tfscan.fix(finding.fingerprint, tmp_path, **opts)
+    assert not fixed["target_resolved"] and not fixed["no_new_findings"]
+    assert not fixed["verified"]
+    assert fixed["verification_errors"]
+    assert fixed["finding_delta"]["before"] == 1
+    assert fixed["finding_delta"]["after"] == 0
 
 
 def test_callback_messages_and_recorded_errors_are_redacted(tmp_path):

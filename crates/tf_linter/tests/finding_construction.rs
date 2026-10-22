@@ -19,6 +19,8 @@ fn info() -> RuleInfo {
         resource_types: vec!["aws_s3_bucket".into()],
         runs_on_module: false,
         guideline: None,
+        rationale: None,
+        remediation: None,
         source: Default::default(),
         aliases: Vec::new(),
         profile: tf_linter::Profile::Security,

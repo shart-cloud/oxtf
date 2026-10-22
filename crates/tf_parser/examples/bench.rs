@@ -36,6 +36,7 @@ fn corpus_files() -> Vec<PathBuf> {
     out
 }
 
+#[expect(clippy::too_many_lines)]
 fn main() {
     let iters: usize = std::env::args()
         .nth(1)
@@ -66,16 +67,7 @@ fn main() {
             comments += ret.comments.len();
             std::mem::forget(ret.file);
         }
-        // Bytes actually used inside the chunks (allocated_bytes() is the
-        // sum of chunk capacities, which over-counts the last chunk).
-        // SAFETY: no allocation happens while iterating; we only read lengths.
-        let used: usize = unsafe {
-            alloc
-                .bump()
-                .iter_allocated_chunks_raw()
-                .map(|(_, len)| len)
-                .sum()
-        };
+        let used = alloc.used_bytes();
         println!(
             "arena: {} bytes used ({} bytes in chunks) for {} source bytes = {:.2} used arena bytes per source byte ({} errors, {} comments)",
             used,
@@ -100,9 +92,11 @@ fn main() {
     let mut mine = Vec::new();
     let mut theirs = Vec::new();
     for _ in 0..iters {
+        let mut alloc = tf_allocator::Allocator::new();
         let t = Instant::now();
         for s in &sources {
             let ret = tf_parser::parse(&alloc, s);
+            assert!(alloc.budget().exhaustion().is_none());
             std::hint::black_box(&ret.file);
             drop(ret);
             alloc.reset();

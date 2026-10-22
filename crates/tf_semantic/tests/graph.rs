@@ -20,7 +20,7 @@ fn edges(files: &[(&str, &str)]) -> Vec<(String, String, Truth)> {
         "{:?}",
         analysis.diagnostics
     );
-    let graph = ResourceGraph::new(&analysis);
+    let graph = ResourceGraph::new(&analysis).expect("graph within default limits");
     let mut edges = Vec::new();
     for (i, neighbours) in graph.neighbours.iter().enumerate() {
         for &(j, certainty) in neighbours {
@@ -177,4 +177,61 @@ resource "test_link" "l" { target = test_node.n[0].id }
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].0, "test_node.n[0]");
     assert_eq!(result[0].2, Truth::True);
+}
+
+fn fan_in() -> tf_semantic::Analysis {
+    let files = FileTable::with_overlay([(
+        PathBuf::from("graph-budget/main.tf"),
+        Arc::from(
+            r#"
+resource "test_node" "n" { count = 8 }
+resource "test_link" "l" {
+  count = 8
+  ids   = test_node.n[*].id
+}
+"#,
+        ),
+    )]);
+    analyze_module(
+        Path::new("graph-budget"),
+        &AnalyzeOptions::default(),
+        &files,
+    )
+}
+
+#[test]
+fn graph_construction_charges_candidate_pairs_and_admits_edges() {
+    use tf_limits::{Limits, Resource, WorkBudget, input::InputBudget};
+    let analysis = fan_in();
+    let work = WorkBudget::for_resource(Limits::default(), Resource::RuleSteps);
+    let storage = InputBudget::new(Limits::default());
+    let graph = ResourceGraph::with_budget(&analysis, &work, &storage).unwrap();
+    let edges: usize = graph.neighbours.iter().map(Vec::len).sum();
+    assert_eq!(
+        edges,
+        2 * 8 * 8,
+        "every link instance reaches every node instance"
+    );
+    let steps = work.used();
+    assert!(steps >= 8 * 8, "{steps}");
+    let bytes = storage.stats().collection_bytes;
+    assert!(bytes > 0);
+
+    let limits = Limits::default().with_rule_steps(steps - 1).unwrap();
+    let work = WorkBudget::for_resource(limits, Resource::RuleSteps);
+    let refused = ResourceGraph::with_budget(&analysis, &work, &InputBudget::new(limits));
+    assert_eq!(refused.err().unwrap().resource, Resource::RuleSteps);
+
+    for (allowance, admitted) in [(bytes - 1, false), (bytes, true)] {
+        let limits = Limits::default().with_collection_bytes(allowance).unwrap();
+        let work = WorkBudget::for_resource(limits, Resource::RuleSteps);
+        let storage = InputBudget::new(limits);
+        let result = ResourceGraph::with_budget(&analysis, &work, &storage);
+        assert_eq!(result.is_ok(), admitted, "{allowance}");
+        if !admitted {
+            let exhaustion = result.err().unwrap();
+            assert_eq!(exhaustion.resource, Resource::CollectionBytes);
+            assert_eq!(storage.exhaustion(), Some(exhaustion));
+        }
+    }
 }

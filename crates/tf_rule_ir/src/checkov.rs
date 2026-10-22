@@ -370,6 +370,7 @@ impl AttributeCheck {
             .as_ref()
     }
 
+    #[expect(clippy::too_many_lines)]
     pub(crate) fn evaluate_value(&self, value: &Value) -> Verdict {
         use AttributeOp::*;
         if self.operator == Any {

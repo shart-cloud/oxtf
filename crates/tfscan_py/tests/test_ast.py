@@ -54,9 +54,3 @@ def test_parse_recovers_from_errors():
     assert doc.errors
     (b,) = doc.blocks()
     assert "y" in [a.name for a in b.attributes()]
-
-
-def test_bench_helper():
-    doc = tfscan.parse(SRC)
-    assert tfscan._tfscan._bench_node_access(doc, 1000, "cell") >= 0
-    assert tfscan._tfscan._bench_node_access(doc, 1000, "owned") >= 0

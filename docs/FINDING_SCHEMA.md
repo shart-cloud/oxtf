@@ -195,7 +195,7 @@ have no automatic fix hints and are also rejected by the edit API.
 | --- | --- |
 | `schema` | Record version (3). |
 | `status` | `complete`, `incomplete`, or `failed`; independent of findings. |
-| `rules` | Metadata of every rule a finding names, by ID: `category` (`network`, `storage`, `iam`, `encryption`, `other`), `level` (`low`, `medium`, `high`, `critical`: impact, independent of certainty), `description`, `guideline` (a URL the rule names, or `null`), `source` (`engine`: `builtin`, `ir`, `checkov`, `rego`, `conftest`, `python`; the rule's `file` and `line`, `null` for built-in rules), `aliases` (the rule's other IDs) and `profile` (`security`, `audit`, `hygiene`, or `unreviewed` for a bundled rule not curated yet; see `--profile`). Bundled rules' `guideline` is their Checkov source at the pinned tag. |
+| `rules` | Metadata of every rule a finding names, by ID: `category` (`network`, `storage`, `iam`, `encryption`, `other`), `level` (`low`, `medium`, `high`, `critical`: potential impact, independent of certainty), `description`, optional `rationale` (why that severity fits the check's evidence and limits), optional `remediation` (actionable steps and material migration constraints), `guideline` (documentation URL, or `null`), `source` (`engine`: `builtin`, `ir`, `checkov`, `rego`, `conftest`, `python`; the rule's `file` and `line`, `null` for built-in rules), `aliases` and `profile` (`security`, `audit`, `hygiene`, or `unreviewed`; see `--profile`). Reviewed guidance links to provider documentation; other bundled rules retain their pinned Checkov source URL. A source link alone is not remediation guidance. |
 | `findings` | One record per finding, below, ordered by file, position and rule. |
 | `diagnostics` | Parse errors, warnings and notes: `severity` (`error`, `warning`, `info`), `code`, `message`, `location` or `null`. A `rule-skipped` warning (listed first, `location` `null`) names a file in a `--rule-file` directory that did not load; its message gives the file and each reason with its line and column. The rules in that file did not run. |
 | `rule_errors` | Rules that failed to run or returned an unresolved foreign result: `rule`, `resource` (or `null`), `message`. An empty list means no execution errors were recorded for selected, applicable rules; it does not establish coverage of unsupported rules or prove that native Unknown outcomes passed. A reader must never take silence from a rule listed here as a pass. |
@@ -259,20 +259,44 @@ a default in JSON, only the HCL assignment is offered as an edit site.
 
 `oxtf fix FINGERPRINT` (and `tfscan.fix`) applies a hint and rescans to
 verify it. Both the original scan and the rescan must have `complete`
-status. The fix is verified when the rule no longer fails on the
-declaration from any root, whatever attribute would decide it next. With a
+status. `target_resolved` means the rule no longer fails on the
+declaration from any root, whatever attribute would decide it next.
+`no_new_findings` means the edit adds no finding or affected occurrence
+anywhere in the request's selected rules and roots. Existing unrelated
+findings may remain. `verified` requires both checks; `--write` writes only
+a verified edit, and an unverified edit returns exit code 1. With a
 `default_site` it writes the default first, which keeps a module's
-interface, and falls back to the attribute when a caller passes its own
-value. `--at default|attribute` picks the site. Edits keep the file's
+interface, and falls back to the attribute when the default edit leaves the
+target unresolved or introduces other findings. `--at default|attribute`
+picks the site. Edits keep the file's
 layout: a replaced value keeps the text up to its `=`, and an inserted
 attribute is aligned with the attributes above it as `terraform fmt`
 aligns them.
 
-The fix result includes `verification_errors` explaining analysis failures
-or coverage gaps before and after the edit. An empty list alone does not
-mean verified: the original rule may still fail. Verification checks this
-scanner's rule and coverage contract; it does not run Terraform validation
-or prove that other resources or policies are unaffected.
+The Rust outcome, CLI JSON and Python dict include `finding_delta`:
+
+- `before` and `after`: grouped finding counts, using the scan record's identity.
+- `added`: new finding records, with evidence from the rescan.
+- `removed`: disappeared finding records, with evidence from the original scan.
+- `changed`: persistent findings that gained or lost occurrences. Each entry
+  includes `before` and `after` finding records plus `added_occurrences` and
+  `removed_occurrences`. An added occurrence is a regression even if that
+  grouped finding already existed and the total finding count decreased.
+- `unchanged`: the number of persistent findings with the same occurrence
+  identities; their values, certainty, and source positions may differ.
+
+Findings match by fingerprint; occurrences match by root and address, with
+multiplicity preserved. Line and byte offsets are ignored when matching so
+an insertion does not make later findings appear new. Delta records use the
+same sensitive-value masking as scan records. Suppressed findings are excluded.
+
+`verification_errors` explains analysis failures or coverage gaps before and
+after the edit. If either scan is incomplete or failed, `target_resolved`,
+`no_new_findings`, and `verified` are all false; the delta still reports what
+was observed, without claiming the comparison is complete. An empty error
+list alone does not mean verified: the target may remain or new findings may
+appear. Verification covers only the request's selected scan; it does not run
+Terraform validation or check unselected policies.
 
 ## Sensitive evidence
 
@@ -310,18 +334,19 @@ inputs. Sensitive values must be marked: this is not a secret detector.
 - `diagnostic`: `severity`, `code`, `message`, `file`, `line`;
 - `summary`, always last: `schema`, `findings`, `occurrences`, `definite`,
   `conditional`, `indeterminate`, `rule_errors`, `diagnostics`,
-  `suppressed`, `roots`, `resources`, `elapsed_ms`.
+  `suppressed`, `roots`, `resources`, `elapsed_ms`, `status`, and `rules`
+  (the full rule metadata table, including guidance, sent once per scan).
 
-It is about a fifth of the JSON record's size (418 against 2,078 bytes per
-finding on the corpus); provenance, values and the occurrence list are only
-in the record.
+Provenance, values and the occurrence list are only in the full JSON record.
+Rule guidance is shared in the summary rather than repeated on each finding.
 
 ## SARIF
 
 `--format sarif` prints SARIF 2.1.0 with one run. `tool.driver.rules` is the
 record's `rules` table (`shortDescription`, `helpUri` from `guideline`,
-`defaultConfiguration.level`, and `category`, `level`, `engine` as
-properties). Each result has `ruleId` and `ruleIndex`, `level` (`error` for
+`help.text` from `remediation`, `defaultConfiguration.level`, and `category`,
+`level`, `engine`, and optional `rationale` as properties). Each result has
+`ruleId` and `ruleIndex`, `level` (`error` for
 high and critical rules, `warning` for medium, `note` for low rules and
 indeterminate findings), the message, the location with the subject as a
 logical location, `partialFingerprints["oxtf/v1"]` (the fingerprint), the

@@ -77,9 +77,45 @@ fn lazy_rules_match_their_compiled_rules() {
         assert_eq!(l.resource_types, c.resource_types, "{}", c.name);
         assert_eq!(l.runs_on_module, c.runs_on_module, "{}", c.name);
         assert_eq!(l.guideline, c.guideline, "{}", c.name);
+        assert_eq!(l.rationale, c.rationale, "{}", c.name);
+        assert_eq!(l.remediation, c.remediation, "{}", c.name);
         assert_eq!(l.source, c.source, "{}", c.name);
         assert_eq!(lazy.needs_graph(), compiled.needs_graph(), "{}", c.name);
         assert_eq!(lazy.needs_files(), compiled.needs_files(), "{}", c.name);
+    }
+}
+
+#[test]
+fn curation_changes_metadata_without_expanding_or_rewriting_predicates() {
+    let raw: bundled::Bundle = serde_json::from_str(bundled::CHECKOV_RULES_JSON).unwrap();
+    let curated = bundled::checkov().unwrap();
+    assert_eq!(raw.rules.len(), curated.len());
+    for (original, reviewed) in raw.rules.iter().zip(curated) {
+        assert_eq!(original.rule.name, reviewed.name);
+        assert_eq!(original.rule.clauses, reviewed.clauses, "{}", reviewed.name);
+    }
+    for rule in bundled::rules().unwrap() {
+        let info = rule.info();
+        if info.profile != tf_linter::Profile::Unreviewed {
+            assert!(
+                info.rationale
+                    .as_ref()
+                    .is_some_and(|s| !s.trim().is_empty()),
+                "{}",
+                info.name
+            );
+        }
+        if let Some(remediation) = &info.remediation {
+            assert!(!remediation.trim().is_empty(), "{}", info.name);
+            let url = info.guideline.as_deref().unwrap();
+            assert!(
+                url.starts_with("https://docs.aws.amazon.com/")
+                    || url.starts_with("https://docs.cloud.google.com/")
+                    || url.starts_with("https://learn.microsoft.com/"),
+                "{}: {url}",
+                info.name
+            );
+        }
     }
 }
 

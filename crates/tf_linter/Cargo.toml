@@ -7,6 +7,7 @@ publish.workspace = true
 description = "Rule engine, seed security rules and scan entry points for oxtf"
 
 [dependencies]
+tf_limits.workspace = true
 tf_span.workspace = true
 tf_schema.workspace = true
 tf_eval.workspace = true
@@ -18,3 +19,6 @@ serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+
+[lints]
+workspace = true

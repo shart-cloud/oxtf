@@ -22,6 +22,7 @@ resource "aws_db_instance" "consumer" { storage_encrypted = module.db.encrypted 
 fn request(main: &str, dir: &str, source: &str, version: Option<&str>) -> ScanRequest {
     let root = PathBuf::from(ROOT);
     let mut req = ScanRequest::dirs(vec![root.clone()], false);
+    req.catalog = tf_scan::Catalog::seed();
     let manifest = json!({"Modules":[
         {"Key":"","Source":"","Dir":"."},
         {"Key":"db","Source":source,"Version":version,"Dir":dir}
@@ -44,6 +45,47 @@ fn manifest(req: &mut ScanRequest, records: J) {
         .find(|(p, _)| p.ends_with("modules.json"))
         .unwrap();
     sf.1 = Arc::from(json!({"Modules":records}).to_string());
+}
+
+#[test]
+fn manifest_and_definition_refusal_report_storage_without_stale_installation_warnings() {
+    let req = request(MAIN, ".terraform/modules/db", "acme/db/aws", Some("1.2.3"));
+    let full = scan(req.try_clone().unwrap()).unwrap();
+    assert_eq!(full.result.status(), ScanStatus::Complete);
+    let cost = full.result.files.input_budget().stats().collection_bytes;
+    for keep_models in [false, true] {
+        for allowance in (1..cost).step_by(64).chain([cost - 1, cost, cost + 1]) {
+            let mut req = req.try_clone().unwrap();
+            req.keep_models = keep_models;
+            req.limits = tf_limits::Limits::default()
+                .with_collection_bytes(allowance)
+                .unwrap();
+            let out = scan(req).unwrap();
+            let limited = allowance < cost;
+            assert_eq!(
+                out.result.status(),
+                if limited {
+                    ScanStatus::Incomplete
+                } else {
+                    ScanStatus::Complete
+                }
+            );
+            let diagnostics = &out.result.diagnostics;
+            assert_eq!(
+                diagnostics
+                    .iter()
+                    .filter(|d| d.code == "coverage-storage")
+                    .count(),
+                usize::from(limited)
+            );
+            assert!(
+                !diagnostics
+                    .iter()
+                    .any(|d| matches!(d.code, "parse-error" | "coverage-remote-module"))
+            );
+            assert!(out.result.files.input_budget().stats().collection_bytes <= allowance);
+        }
+    }
 }
 
 fn finding_id(req: ScanRequest) -> String {
@@ -372,7 +414,8 @@ fn installed_outputs_preserve_resource_dependency_edges() {
     );
     let out = scan(req).unwrap();
     assert_eq!(out.result.status(), ScanStatus::Complete);
-    let graph = tf_semantic::graph::ResourceGraph::new(&out.analyses[0]);
+    let graph = tf_semantic::graph::ResourceGraph::new(&out.analyses[0])
+        .expect("graph within default limits");
     let consumer = graph
         .resources
         .iter()
@@ -399,6 +442,7 @@ fn multiple_roots_resolve_the_same_call_name_independently() {
         PathBuf::from("/nonexistent/second-root"),
     ];
     let mut req = ScanRequest::dirs(roots.to_vec(), false);
+    req.catalog = tf_scan::Catalog::seed();
     for (request, root) in [first, second].into_iter().zip(&roots) {
         req.overlay.extend(
             request

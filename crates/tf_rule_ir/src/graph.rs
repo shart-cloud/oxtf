@@ -225,6 +225,7 @@ impl GraphExpr {
         }
     }
 
+    #[expect(clippy::too_many_lines)]
     fn solve(&self, graph: &ResourceGraph<'_>, prior: &Results) -> Results {
         let empty = || vec![None; graph.resources.len()];
         match self {

@@ -60,6 +60,7 @@ fn expect_rows(case: &Path) -> BTreeSet<Row> {
 }
 
 #[test]
+#[expect(clippy::too_many_lines)]
 fn plan_fixtures_match_source() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let plans_root = repo.join("fixtures/plans");
@@ -94,7 +95,7 @@ fn plan_fixtures_match_source() {
             None => (stem.clone(), None),
         };
         let case_dir = repo.join("fixtures/rules").join(&rule).join(&case);
-        let src = scan_dir(&case_dir, &ScanOptions::default());
+        let src = scan_dir(&case_dir, &ScanOptions::default()).unwrap();
         let src_rows = rows(&src, &rule);
         assert_eq!(src_rows, expect_rows(&case_dir), "source scan of {case}");
         let expected: BTreeSet<Row> = match variant.as_deref() {
@@ -110,6 +111,7 @@ fn plan_fixtures_match_source() {
             &linter,
             plan,
             &PlanOptions {
+                limits: Default::default(),
                 data_dir: None,
                 source: Some(case_dir.clone()),
             },
@@ -235,6 +237,7 @@ fn plan_without_source_points_into_plan_json() {
 /// variable. The source directory is found next to the plan (no
 /// `PlanOptions::source`).
 #[test]
+#[expect(clippy::too_many_lines)]
 fn plan_case_module_count_sensitive() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let case = repo.join("fixtures/plan_cases/module_count_sensitive");

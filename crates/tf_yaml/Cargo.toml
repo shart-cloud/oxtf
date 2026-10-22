@@ -9,3 +9,6 @@ description = "YAML as the policy tools read it: PyYAML's safe_load (Checkov) an
 [dependencies]
 serde_json.workspace = true
 yaml-rust2 = { version = "=0.13.0", default-features = false }
+
+[lints]
+workspace = true

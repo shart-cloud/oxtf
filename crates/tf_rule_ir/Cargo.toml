@@ -7,6 +7,7 @@ publish.workspace = true
 description = "Serializable rule IR (JSON) for oxtf: rules built by the Python expression API, compiled to a tf_linter DynRule"
 
 [dependencies]
+tf_limits.workspace = true
 tf_eval.workspace = true
 tf_semantic.workspace = true
 tf_linter.workspace = true
@@ -19,3 +20,6 @@ rustc-hash = "2.1.3"
 [build-dependencies]
 serde_json.workspace = true
 toml.workspace = true
+
+[lints]
+workspace = true

@@ -177,6 +177,7 @@ fn jsonencode_for_over_variable() {
 }
 
 #[test]
+#[expect(clippy::too_many_lines)]
 fn local_modules_and_strict_bool() {
     let dir = tempdir("semantic_modules");
     std::fs::create_dir_all(dir.join("child")).unwrap();

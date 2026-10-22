@@ -378,7 +378,8 @@ fn unknown_filter_eligibility_keeps_uncertainty_and_source_evidence() {
         let files = FileTable::with_overlay([(PathBuf::from("filter/main.tf"), Arc::from(source))]);
         let analysis = analyze_module(Path::new("filter"), &AnalyzeOptions::default(), &files);
         assert!(analysis.diagnostics.is_empty());
-        let graph = tf_semantic::graph::ResourceGraph::new(&analysis);
+        let graph =
+            tf_semantic::graph::ResourceGraph::new(&analysis).expect("graph within default limits");
         let definition: tf_rule_ir::graph::GraphExpr = serde_json::from_value(
             json!({"kind":"and","args":[connection("exists"),attribute_filter("engine",json!("postgres"))]}),
         ).unwrap();

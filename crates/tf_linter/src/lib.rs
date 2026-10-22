@@ -2,7 +2,7 @@
 //!
 //! ```no_run
 //! use tf_linter::{scan_dir, ScanOptions};
-//! let r = scan_dir("fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local".as_ref(), &ScanOptions::default());
+//! let r = scan_dir("fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local".as_ref(), &ScanOptions::default()).unwrap();
 //! for f in &r.findings {
 //!     println!("{}", tf_linter::render::render_finding(&r.files, f, false));
 //! }
@@ -21,6 +21,7 @@
 //! - [`formats`]: NDJSON and SARIF projections of the record.
 //! - [`rules`]: the five seed rules.
 
+pub mod budget;
 pub mod engine;
 pub mod formats;
 pub mod record;
@@ -30,6 +31,7 @@ pub mod rules;
 pub mod scan;
 pub mod suppress;
 
+pub use budget::RuleBudget;
 pub use engine::{ANY_TYPE, Linter, RuleSelectionError, RunOutput, Sources, select_rules};
 pub use record::{FindingRecord, RuleError, ScanRecord};
 pub use rule::{
