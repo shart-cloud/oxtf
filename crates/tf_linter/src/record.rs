@@ -615,12 +615,15 @@ pub struct DiagnosticRecord {
     pub code: String,
     pub message: String,
     pub location: Option<Location>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<crate::recovery::DiagnosticAction>,
 }
 
 pub fn diagnostic_record(files: &FileTable, d: &Diagnostic) -> DiagnosticRecord {
     DiagnosticRecord {
         severity: format!("{:?}", d.severity).to_lowercase(),
         code: d.code.to_string(),
+        action: crate::recovery::action(d.code),
         message: d.message.clone(),
         location: d.at.map(|at| location(files, at)),
     }
@@ -628,12 +631,33 @@ pub fn diagnostic_record(files: &FileTable, d: &Diagnostic) -> DiagnosticRecord 
 
 /// A rule that failed to run. Never silent: a reader must not take the
 /// absence of a finding from this rule as a pass.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct RuleError {
     pub rule: String,
     /// The resource instance the rule was evaluating, when known.
     pub resource: Option<String>,
     pub message: String,
+}
+
+impl Serialize for RuleError {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        #[derive(Serialize)]
+        struct Report<'a> {
+            rule: &'a str,
+            resource: &'a Option<String>,
+            message: &'a str,
+            code: &'static str,
+            action: crate::recovery::DiagnosticAction,
+        }
+        Report {
+            rule: &self.rule,
+            resource: &self.resource,
+            message: &self.message,
+            code: "rule-execution-failed",
+            action: crate::recovery::rule_action(),
+        }
+        .serialize(serializer)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -680,10 +704,19 @@ impl StatsRecord {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InputKind {
+    Source,
+    Plan,
+}
+
 /// A whole scan, resolved.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ScanRecord {
     pub schema: u32,
+    #[serde(default)]
+    pub input_kind: Option<InputKind>,
     /// Analysis completion, independent of the finding count.
     #[serde(default)]
     pub status: crate::ScanStatus,
@@ -700,13 +733,30 @@ pub struct ScanRecord {
     /// limits, so a complete root can sit inside an incomplete scan.
     #[serde(default)]
     pub roots: Vec<RootRecord>,
+    /// None on older records; absence is unknown accounting, not zero checks.
+    #[serde(default)]
+    pub coverage: Option<crate::coverage::RuleCoverage>,
 }
 
 /// A root module directory and its own [`crate::ScanStatus`].
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RootRecord {
+    #[serde(default)]
+    pub coverage: Option<crate::coverage::RuleCoverage>,
+    #[serde(default)]
+    pub unresolved_inputs: Vec<crate::coverage::UnresolvedInput>,
     pub path: String,
     pub status: crate::ScanStatus,
+    #[serde(default)]
+    pub resources: usize,
+    #[serde(default)]
+    pub module_instances: usize,
+    #[serde(default)]
+    pub findings_by_rule: BTreeMap<String, Vec<String>>,
+    #[serde(default)]
+    pub diagnostics: Vec<DiagnosticRecord>,
+    #[serde(default)]
+    pub rule_errors: Vec<RuleError>,
 }
 
 /// A suppressed finding: `rule`, `resource` (address), the `comment`'s
@@ -734,12 +784,24 @@ impl ScanRecord {
             .iter()
             .map(|g| group_record(&r.files, &r.findings, g, &mut repos))
             .collect();
+        let mut triage = triage_by_root(&findings);
+        let mut coverage = crate::coverage::RuleCoverage {
+            selected_rules: r.selected_rules.len(),
+            ..Default::default()
+        };
+        for rule in &r.selected_rules {
+            coverage.rules.entry(rule.clone()).or_default();
+        }
+        for root in &r.roots {
+            coverage.merge(&root.coverage);
+        }
         ScanRecord {
             schema: SCHEMA,
+            input_kind: Some(r.input_kind),
+            coverage: Some(coverage),
             status: r.status(),
             rules,
             stats: StatsRecord::new(&r.stats, &findings),
-            findings,
             diagnostics: r
                 .diagnostics
                 .iter()
@@ -761,11 +823,42 @@ impl ScanRecord {
                 .iter()
                 .map(|root| RootRecord {
                     path: root.dir.display().to_string(),
+                    coverage: Some(root.coverage.clone()),
+                    unresolved_inputs: root.unresolved_inputs.clone(),
                     status: root.status,
+                    resources: root.resources,
+                    module_instances: root.module_instances,
+                    findings_by_rule: triage
+                        .remove(root.dir.display().to_string().as_str())
+                        .unwrap_or_default(),
+                    diagnostics: root
+                        .diagnostics
+                        .iter()
+                        .map(|d| diagnostic_record(&r.files, d))
+                        .collect(),
+                    rule_errors: root.rule_errors.clone(),
                 })
                 .collect(),
+            findings,
         }
     }
+}
+
+fn triage_by_root(findings: &[FindingRecord]) -> BTreeMap<&str, BTreeMap<String, Vec<String>>> {
+    let mut triage: BTreeMap<&str, BTreeMap<String, Vec<String>>> = BTreeMap::new();
+    for f in findings {
+        let roots: std::collections::BTreeSet<_> =
+            f.occurrences.iter().map(|o| o.root.as_str()).collect();
+        for root in roots {
+            triage
+                .entry(root)
+                .or_default()
+                .entry(f.rule.clone())
+                .or_default()
+                .push(f.fingerprint.clone());
+        }
+    }
+    triage
 }
 
 #[cfg(test)]

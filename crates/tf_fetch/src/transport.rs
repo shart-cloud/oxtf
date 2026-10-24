@@ -205,7 +205,7 @@ pub(crate) fn download(
                 .unwrap_or_else(|| format!("https://{host}"));
             let origin = http_url(&origin)?;
             let token_name = format!("TF_TOKEN_{}", host.replace('-', "__").replace('.', "_"));
-            let token = std::env::var(token_name).ok();
+            let token = std::env::var(&token_name).ok();
             let http = Http {
                 client: reqwest::blocking::Client::builder()
                     .redirect(reqwest::redirect::Policy::none())
@@ -213,6 +213,7 @@ pub(crate) fn download(
                     .map_err(|_| "could not initialize HTTP client")?,
                 auth_origin: origin.origin().ascii_serialization(),
                 token,
+                token_name,
                 deadline,
             };
             let discovery_url = origin
@@ -348,6 +349,8 @@ fn run_git(
     stage: &Path,
     deadline: Instant,
 ) -> Result<(), String> {
+    let stderr_path = stage.join("git-stderr");
+    let stderr = fs::File::create(&stderr_path).map_err(|_| "could not capture Git errors")?;
     let mut command = Command::new("git");
     command
         .arg("-C")
@@ -366,7 +369,7 @@ fn run_git(
         .env("GIT_TERMINAL_PROMPT", "0")
         .stdin(Stdio::null())
         .stdout(stdout)
-        .stderr(Stdio::null());
+        .stderr(Stdio::from(stderr));
     // A caller's Git worktree overrides must not redirect commands into it.
     for key in [
         "GIT_DIR",
@@ -411,7 +414,11 @@ fn run_git(
                 break if status.success() {
                     Ok(())
                 } else {
-                    Err("Git module fetch failed (check source, ref, and credentials)".into())
+                    let mut details = String::new();
+                    if let Ok(file) = fs::File::open(&stderr_path) {
+                        let _ = file.take(65536).read_to_string(&mut details);
+                    }
+                    Err(git_failure(&details).into())
                 };
             }
             Ok(None) => thread::sleep(Duration::from_millis(20)),
@@ -432,6 +439,32 @@ fn run_git(
     }
     outcome
 }
+fn git_failure(details: &str) -> &'static str {
+    let details = details.to_ascii_lowercase();
+    if [
+        "authentication failed",
+        "could not read username",
+        "terminal prompts disabled",
+        "permission denied (publickey",
+        "http basic: access denied",
+    ]
+    .iter()
+    .any(|s| details.contains(s))
+    {
+        "Git authentication required or rejected; configure a Git credential helper for HTTPS or load an SSH key into ssh-agent, then retry"
+    } else if details.contains("couldn't find remote ref") || details.contains("not our ref") {
+        "Git module ref was not found; check the source ref (branch, tag, or commit)"
+    } else if details.contains("could not resolve host")
+        || details.contains("could not resolve hostname")
+    {
+        "Git host could not be resolved; check the source hostname and network/DNS access"
+    } else if details.contains("repository not found") {
+        "Git repository not found; check the source URL; private repositories may also require a Git credential helper or SSH key"
+    } else {
+        "Git module fetch failed; check the source URL, ref, network access and repository permissions"
+    }
+}
+
 fn disk_size(path: &Path, limit: u64) -> Result<u64, ()> {
     let mut sum = 0u64;
     let mut stack = vec![path.to_path_buf()];
@@ -496,6 +529,7 @@ struct Http {
     client: reqwest::blocking::Client,
     auth_origin: String,
     token: Option<String>,
+    token_name: String,
     deadline: Instant,
 }
 impl Http {
@@ -515,7 +549,7 @@ impl Http {
             }
             let response = request
                 .send()
-                .map_err(|_| "module HTTP request failed (check source and credentials)")?;
+                .map_err(|_| "module HTTP request failed; check hostname, network access and TLS configuration")?;
             if response.status().is_redirection() {
                 let location = response
                     .headers()
@@ -524,6 +558,25 @@ impl Http {
                     .ok_or("HTTP redirect has no location")?;
                 url = url.join(location).map_err(|_| "invalid HTTP redirect")?;
                 continue;
+            }
+            if matches!(response.status().as_u16(), 401 | 403) {
+                return Err(if url.origin().ascii_serialization() == self.auth_origin {
+                    format!(
+                        "module HTTP access denied ({}); {} {} and retry",
+                        response.status().as_u16(),
+                        if self.token.is_some() {
+                            "verify the token and its module read permissions in"
+                        } else {
+                            "set a registry token in"
+                        },
+                        self.token_name
+                    )
+                } else {
+                    format!(
+                        "module HTTP access denied ({}) at a redirected host; registry credentials are only sent to the registry origin; check the download URL and its access permissions",
+                        response.status().as_u16()
+                    )
+                });
             }
             if !response.status().is_success() {
                 return Err(format!(
@@ -545,5 +598,87 @@ impl Http {
             return Err("registry metadata size limit exceeded".into());
         }
         serde_json::from_slice(&body).map_err(|_| "invalid registry metadata JSON".into())
+    }
+}
+
+#[cfg(test)]
+mod failure_tests {
+    use super::*;
+
+    #[test]
+    fn git_errors_distinguish_credentials_refs_and_network_without_echoing_input() {
+        for (details, expected) in [
+            (
+                "fatal: Authentication failed for https://secret@example/repo",
+                "authentication required",
+            ),
+            (
+                "fatal: could not read Username: terminal prompts disabled",
+                "credential helper",
+            ),
+            ("git@example: Permission denied (publickey).", "ssh-agent"),
+            (
+                "fatal: couldn't find remote ref missing",
+                "ref was not found",
+            ),
+            ("fatal: Could not resolve host: example", "network/DNS"),
+            ("fatal: repository not found", "private repositories"),
+        ] {
+            let message = git_failure(details);
+            assert!(message.contains(expected), "{message}");
+            assert!(!message.contains("secret@example"));
+        }
+    }
+
+    #[test]
+    fn http_access_errors_name_token_configuration_only_at_registry_origin() {
+        for (status, token, same_origin, expected) in [
+            (
+                401,
+                None,
+                true,
+                "set a registry token in TF_TOKEN_example_com",
+            ),
+            (
+                403,
+                Some("secret-token".to_string()),
+                true,
+                "verify the token",
+            ),
+            (401, None, false, "redirected host"),
+            (404, None, true, "returned status 404"),
+        ] {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let origin = format!("http://{}", listener.local_addr().unwrap());
+            let server = thread::spawn(move || {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .unwrap();
+                let mut request = [0; 4096];
+                let read = stream.read(&mut request).unwrap();
+                assert!(read > 0);
+                write!(
+                    stream,
+                    "HTTP/1.1 {status} Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                )
+                .unwrap();
+            });
+            let http = Http {
+                client: reqwest::blocking::Client::new(),
+                auth_origin: if same_origin {
+                    origin.clone()
+                } else {
+                    "https://registry.example".into()
+                },
+                token,
+                token_name: "TF_TOKEN_example_com".into(),
+                deadline: Instant::now() + Duration::from_secs(3),
+            };
+            let error = http.get(Url::parse(&origin).unwrap()).unwrap_err();
+            server.join().unwrap();
+            assert!(error.contains(expected), "{error}");
+            assert!(!error.contains("secret-token"));
+        }
     }
 }

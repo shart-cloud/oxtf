@@ -44,7 +44,7 @@ def test_expression_rule_equals_builtin_generated(generated):
 def test_expression_rule_equals_builtin_corpus():
     b, e, c = triple(CORPUS, recursive=True)
     assert keys(e) == keys(b) and keys(c) == keys(b)
-    assert c.callback_calls == 267  # every candidate resource (W4 audit: 111 + 70 + 86)
+    assert c.callback_calls == 195  # called local modules are no longer standalone roots
 
 
 def test_ir_round_trip():

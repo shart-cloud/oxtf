@@ -22,9 +22,11 @@
 //! - [`rules`]: the five seed rules.
 
 pub mod budget;
+pub mod coverage;
 pub mod engine;
 pub mod formats;
 pub mod record;
+pub mod recovery;
 pub mod render;
 pub mod rule;
 pub mod rules;

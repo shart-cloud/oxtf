@@ -2,6 +2,46 @@
   "backend": "native",
   "cases": {
     "plan:fixtures/baseline/sibling/plan.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -43,10 +83,33 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-s3-public-access-block": [
+              "190a60e05a5c43c6"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/baseline/sibling",
-          "status": "complete"
+          "resources": 3,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -86,6 +149,46 @@
       "suppressed": []
     },
     "plan:fixtures/baseline/transformed/plan.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -132,10 +235,33 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-s3-public-access-block": [
+              "af8d80c4e0a088e7"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/baseline/transformed",
-          "status": "complete"
+          "resources": 3,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -175,6 +301,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/fail_dynamic_statements.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -251,10 +417,40 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-iam-wildcard-policy": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-iam-wildcard-policy": [
+              "23176064990dba43"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-iam-wildcard-policy/fail_dynamic_statements",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -294,6 +490,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/fail_heredoc_json.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -357,10 +593,40 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-iam-wildcard-policy": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-iam-wildcard-policy": [
+              "c9b754bea47dd862"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-iam-wildcard-policy/fail_heredoc_json",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -400,6 +666,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/fail_jsonencode_inline.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -463,10 +769,40 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-iam-wildcard-policy": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-iam-wildcard-policy": [
+              "29ef9df8977a13d3"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_inline",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -506,6 +842,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/fail_jsonencode_via_local_and_list.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -582,10 +958,40 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-iam-wildcard-policy": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-iam-wildcard-policy": [
+              "4a8d14e3d6379b9a"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_via_local_and_list",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -625,6 +1031,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/fail_policy_document_data_source.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -701,10 +1147,40 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-iam-wildcard-policy": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-iam-wildcard-policy": [
+              "288076ef66668c4e"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_data_source",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -744,12 +1220,78 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/pass_policy_document_deny.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-iam-wildcard-policy": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/aws-iam-wildcard-policy/pass_policy_document_deny",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -771,12 +1313,78 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-iam-wildcard-policy/pass_scoped.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-iam-wildcard-policy": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/aws-iam-wildcard-policy/pass_scoped",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -798,6 +1406,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-rds-unencrypted/conditional_unconstrained_variable__fail.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -894,10 +1542,40 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-rds-unencrypted": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-rds-unencrypted": [
+              "7ade7df7fd2e18b0"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -937,12 +1615,78 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-rds-unencrypted/conditional_unconstrained_variable__pass.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-rds-unencrypted": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -964,6 +1708,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-rds-unencrypted/fail_absent_uses_default.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -1047,10 +1831,40 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-rds-unencrypted": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-rds-unencrypted": [
+              "96482caeecf7176c"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -1090,6 +1904,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-rds-unencrypted/fail_explicit_false.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -1173,10 +2027,40 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-rds-unencrypted": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-rds-unencrypted": [
+              "f61b1c39a1c6e374"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-rds-unencrypted/fail_explicit_false",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -1216,6 +2100,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-rds-unencrypted/fail_variable_default_false.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -1312,10 +2236,40 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-rds-unencrypted": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-rds-unencrypted": [
+              "c906d7693292db02"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -1355,12 +2309,78 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-rds-unencrypted/pass_encrypted.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 2,
+            "executed": 2,
+            "failed": 0,
+            "planned": 2,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-rds-unencrypted": {
+                "completed": 2,
+                "executed": 2,
+                "failed": 0,
+                "planned": 2,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/aws-rds-unencrypted/pass_encrypted",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -1382,6 +2402,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/conditional_unconstrained_variable__fail.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -1470,10 +2530,33 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-s3-public-access-block": [
+              "7e276b9c19a4de55"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-s3-public-access-block/conditional_unconstrained_variable",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -1513,12 +2596,71 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/conditional_unconstrained_variable__pass.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/aws-s3-public-access-block/conditional_unconstrained_variable",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -1540,6 +2682,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/fail_block_attrs_absent_default_false.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -1615,10 +2797,33 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-s3-public-access-block": [
+              "c0f3b73aa9b73ed5"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-s3-public-access-block/fail_block_attrs_absent_default_false",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -1658,6 +2863,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/fail_block_for_other_bucket.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -1699,10 +2944,33 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-s3-public-access-block": [
+              "e11397b543e49874"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-s3-public-access-block/fail_block_for_other_bucket",
-          "status": "complete"
+          "resources": 3,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -1742,6 +3010,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/fail_missing_block.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -1783,10 +3091,33 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-s3-public-access-block": [
+              "33b8fd5ac7c0fd62"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-s3-public-access-block/fail_missing_block",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -1826,6 +3157,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/fail_permissive_block.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -1901,10 +3272,33 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-s3-public-access-block": [
+              "42bcf4129ec00e6c"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-s3-public-access-block/fail_permissive_block",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -1944,12 +3338,71 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/pass_block_via_variable.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/aws-s3-public-access-block/pass_block_via_variable",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -1971,12 +3424,71 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-s3-public-access-block/pass_full_block.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/aws-s3-public-access-block/pass_full_block",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -1998,6 +3510,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/conditional_unconstrained_variable__fail.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -2102,10 +3654,40 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-sg-open-ssh": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-sg-open-ssh": [
+              "959e4db08d91de7b"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-sg-open-ssh/conditional_unconstrained_variable",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -2145,12 +3727,78 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/conditional_unconstrained_variable__pass.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-sg-open-ssh": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/aws-sg-open-ssh/conditional_unconstrained_variable",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -2172,6 +3820,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/fail_dynamic_block.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -2289,10 +3977,40 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-sg-open-ssh": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-sg-open-ssh": [
+              "f25785b3c7a90455"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-sg-open-ssh/fail_dynamic_block",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -2332,6 +4050,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/fail_inline_literal.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -2425,10 +4183,40 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-sg-open-ssh": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-sg-open-ssh": [
+              "7227eddfd33a379a"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-sg-open-ssh/fail_inline_literal",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -2468,6 +4256,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/fail_port_range_and_all_protocols.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 2,
+            "executed": 2,
+            "failed": 0,
+            "planned": 2,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -2647,10 +4475,41 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-sg-open-ssh": {
+                "completed": 2,
+                "executed": 2,
+                "failed": 0,
+                "planned": 2,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-sg-open-ssh": [
+              "ba627aa6a261bfc9",
+              "1858e91009ae5d1f"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-sg-open-ssh/fail_port_range_and_all_protocols",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -2690,6 +4549,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/fail_tfvars_through_local.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -2794,10 +4693,40 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-sg-open-ssh": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-sg-open-ssh": [
+              "f06fcb267d18aa02"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -2837,6 +4766,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/fail_vpc_ingress_rule.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 2,
+            "executed": 2,
+            "failed": 0,
+            "planned": 2,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -2900,10 +4869,40 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-sg-open-ssh": {
+                "completed": 2,
+                "executed": 2,
+                "failed": 0,
+                "planned": 2,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-sg-open-ssh": [
+              "ef3d3d6daa66f787"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-sg-open-ssh/fail_vpc_ingress_rule",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -2943,12 +4942,78 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/pass_dynamic_restricted.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-sg-open-ssh": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/aws-sg-open-ssh/pass_dynamic_restricted",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -2970,12 +5035,78 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/pass_restricted.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 2,
+            "executed": 2,
+            "failed": 0,
+            "planned": 2,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-sg-open-ssh": {
+                "completed": 2,
+                "executed": 2,
+                "failed": 0,
+                "planned": 2,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/aws-sg-open-ssh/pass_restricted",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -2997,12 +5128,78 @@
       "suppressed": []
     },
     "plan:fixtures/plans/aws-sg-open-ssh/pass_tfvars_overrides_open_default.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-sg-open-ssh": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/aws-sg-open-ssh/pass_tfvars_overrides_open_default",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -3024,6 +5221,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/gcp-storage-uniform-access/fail_absent.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -3097,10 +5334,40 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "gcp-storage-uniform-access": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "gcp-storage-uniform-access": [
+              "7e73a86e1984e7c8"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/gcp-storage-uniform-access/fail_absent",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -3142,6 +5409,46 @@
       "suppressed": []
     },
     "plan:fixtures/plans/gcp-storage-uniform-access/fail_false_via_local.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -3238,10 +5545,40 @@
           }
         }
       ],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "gcp-storage-uniform-access": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "gcp-storage-uniform-access": [
+              "5714a9bee48ab0f5"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/gcp-storage-uniform-access/fail_false_via_local",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -3283,12 +5620,78 @@
       "suppressed": []
     },
     "plan:fixtures/plans/gcp-storage-uniform-access/pass_enabled.json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "plan",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "gcp-storage-uniform-access": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/gcp-storage-uniform-access/pass_enabled",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -3310,6 +5713,46 @@
       "suppressed": []
     },
     "source:fixtures/baseline/computed": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -3351,10 +5794,33 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-s3-public-access-block": [
+              "2783993563c6cc47"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/baseline/computed",
-          "status": "complete"
+          "resources": 3,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -3394,6 +5860,46 @@
       "suppressed": []
     },
     "source:fixtures/baseline/local": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -3435,10 +5941,33 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-s3-public-access-block": [
+              "0ac3f7ab654749ed"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/baseline/local",
-          "status": "complete"
+          "resources": 3,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -3478,6 +6007,46 @@
       "suppressed": []
     },
     "source:fixtures/baseline/sibling": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -3519,10 +6088,33 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-s3-public-access-block": [
+              "190a60e05a5c43c6"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/baseline/sibling",
-          "status": "complete"
+          "resources": 3,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -3562,6 +6154,46 @@
       "suppressed": []
     },
     "source:fixtures/baseline/transformed": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -3608,10 +6240,33 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-s3-public-access-block": [
+              "af8d80c4e0a088e7"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/baseline/transformed",
-          "status": "complete"
+          "resources": 3,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -3651,6 +6306,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/fail_dynamic_statements": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -3771,10 +6466,40 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-iam-wildcard-policy": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-iam-wildcard-policy": [
+              "23176064990dba43"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-iam-wildcard-policy/fail_dynamic_statements",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -3814,6 +6539,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/fail_heredoc_json": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -3877,10 +6642,40 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-iam-wildcard-policy": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-iam-wildcard-policy": [
+              "c9b754bea47dd862"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-iam-wildcard-policy/fail_heredoc_json",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -3920,6 +6715,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_inline": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -4001,10 +6836,40 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-iam-wildcard-policy": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-iam-wildcard-policy": [
+              "29ef9df8977a13d3"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_inline",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -4044,6 +6909,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_via_local_and_list": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -4148,10 +7053,40 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-iam-wildcard-policy": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-iam-wildcard-policy": [
+              "4a8d14e3d6379b9a"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-iam-wildcard-policy/fail_jsonencode_via_local_and_list",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -4191,6 +7126,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_data_source": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -4326,10 +7301,40 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-iam-wildcard-policy": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-iam-wildcard-policy": [
+              "288076ef66668c4e"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_data_source",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -4369,6 +7374,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_dynamic_statement": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -4528,10 +7573,40 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-iam-wildcard-policy": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-iam-wildcard-policy": [
+              "a876560a158d37ed"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-iam-wildcard-policy/fail_policy_document_dynamic_statement",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -4571,12 +7646,78 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/pass_policy_document_deny": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-iam-wildcard-policy": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/aws-iam-wildcard-policy/pass_policy_document_deny",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -4598,12 +7739,78 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-iam-wildcard-policy/pass_scoped": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-iam-wildcard-policy": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/aws-iam-wildcard-policy/pass_scoped",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -4625,6 +7832,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-rds-unencrypted/conditional_count_tainted_alternative": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -4708,10 +7955,52 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-rds-unencrypted": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-rds-unencrypted": [
+              "b8007234adedbd59"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-rds-unencrypted/conditional_count_tainted_alternative",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": [
+            {
+              "location": {
+                "column": 1,
+                "end": 155,
+                "file": "fixtures/rules/aws-rds-unencrypted/conditional_count_tainted_alternative/main.tf",
+                "line": 3,
+                "start": 136
+              },
+              "module": "",
+              "variable": "replicas"
+            }
+          ]
         }
       ],
       "rule_errors": [],
@@ -4751,6 +8040,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -4847,10 +8176,52 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-rds-unencrypted": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-rds-unencrypted": [
+              "7ade7df7fd2e18b0"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": [
+            {
+              "location": {
+                "column": 1,
+                "end": 18,
+                "file": "fixtures/rules/aws-rds-unencrypted/conditional_unconstrained_variable/main.tf",
+                "line": 1,
+                "start": 0
+              },
+              "module": "",
+              "variable": "encrypt"
+            }
+          ]
         }
       ],
       "rule_errors": [],
@@ -4890,6 +8261,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -4963,10 +8374,40 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-rds-unencrypted": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-rds-unencrypted": [
+              "96482caeecf7176c"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-rds-unencrypted/fail_absent_uses_default",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -5006,6 +8447,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-rds-unencrypted/fail_explicit_false": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -5089,10 +8570,40 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-rds-unencrypted": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-rds-unencrypted": [
+              "f61b1c39a1c6e374"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-rds-unencrypted/fail_explicit_false",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -5132,6 +8643,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-rds-unencrypted/fail_variable_default_false": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -5235,10 +8786,40 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-rds-unencrypted": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-rds-unencrypted": [
+              "c906d7693292db02"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-rds-unencrypted/fail_variable_default_false",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -5278,12 +8859,78 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-rds-unencrypted/pass_encrypted": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 2,
+            "executed": 2,
+            "failed": 0,
+            "planned": 2,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-rds-unencrypted": {
+                "completed": 2,
+                "executed": 2,
+                "failed": 0,
+                "planned": 2,
+                "skipped": 0
+              },
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/aws-rds-unencrypted/pass_encrypted",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -5305,6 +8952,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/conditional_unconstrained_variable": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -5393,10 +9080,45 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-s3-public-access-block": [
+              "7e276b9c19a4de55"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-s3-public-access-block/conditional_unconstrained_variable",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": [
+            {
+              "location": {
+                "column": 1,
+                "end": 23,
+                "file": "fixtures/rules/aws-s3-public-access-block/conditional_unconstrained_variable/main.tf",
+                "line": 1,
+                "start": 0
+              },
+              "module": "",
+              "variable": "block_public"
+            }
+          ]
         }
       ],
       "rule_errors": [],
@@ -5436,6 +9158,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/fail_block_attrs_absent_default_false": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -5505,10 +9267,33 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-s3-public-access-block": [
+              "c0f3b73aa9b73ed5"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-s3-public-access-block/fail_block_attrs_absent_default_false",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -5548,6 +9333,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/fail_block_for_other_bucket": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -5589,10 +9414,33 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-s3-public-access-block": [
+              "e11397b543e49874"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-s3-public-access-block/fail_block_for_other_bucket",
-          "status": "complete"
+          "resources": 3,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -5632,6 +9480,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/fail_missing_block": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -5673,10 +9561,33 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-s3-public-access-block": [
+              "33b8fd5ac7c0fd62"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-s3-public-access-block/fail_missing_block",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -5716,6 +9627,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/fail_permissive_block": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -5791,10 +9742,33 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-s3-public-access-block": [
+              "42bcf4129ec00e6c"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-s3-public-access-block/fail_permissive_block",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -5834,12 +9808,71 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/pass_block_via_variable": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/aws-s3-public-access-block/pass_block_via_variable",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -5861,12 +9894,71 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/pass_escaped_instance_key": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/aws-s3-public-access-block/pass_escaped_instance_key",
-          "status": "complete"
+          "resources": 4,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -5888,12 +9980,71 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-s3-public-access-block/pass_full_block": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/aws-s3-public-access-block/pass_full_block",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -5915,6 +10066,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/conditional_unconstrained_variable": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -5991,10 +10182,52 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-sg-open-ssh": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-sg-open-ssh": [
+              "3bfc9a3d0bb06de4"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-sg-open-ssh/conditional_unconstrained_variable",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": [
+            {
+              "location": {
+                "column": 1,
+                "end": 19,
+                "file": "fixtures/rules/aws-sg-open-ssh/conditional_unconstrained_variable/main.tf",
+                "line": 1,
+                "start": 0
+              },
+              "module": "",
+              "variable": "ssh_cidr"
+            }
+          ]
         }
       ],
       "rule_errors": [],
@@ -6034,6 +10267,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/fail_dynamic_block": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -6157,10 +10430,40 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-sg-open-ssh": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-sg-open-ssh": [
+              "23f3beecf80594d2"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-sg-open-ssh/fail_dynamic_block",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -6200,6 +10503,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/fail_inline_literal": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -6283,10 +10626,40 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-sg-open-ssh": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-sg-open-ssh": [
+              "54ca1f4ff956976d"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-sg-open-ssh/fail_inline_literal",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -6326,6 +10699,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/fail_port_range_and_all_protocols": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 2,
+            "executed": 2,
+            "failed": 0,
+            "planned": 2,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -6485,10 +10898,41 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-sg-open-ssh": {
+                "completed": 2,
+                "executed": 2,
+                "failed": 0,
+                "planned": 2,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-sg-open-ssh": [
+              "b0d49c0367913a4e",
+              "b2d84db16ff2a888"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-sg-open-ssh/fail_port_range_and_all_protocols",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -6528,6 +10972,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -6648,10 +11132,40 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-sg-open-ssh": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-sg-open-ssh": [
+              "41dd3778b303ed75"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-sg-open-ssh/fail_tfvars_through_local",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -6691,6 +11205,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/fail_vpc_ingress_rule": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 2,
+            "executed": 2,
+            "failed": 0,
+            "planned": 2,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -6754,10 +11308,40 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-sg-open-ssh": {
+                "completed": 2,
+                "executed": 2,
+                "failed": 0,
+                "planned": 2,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "aws-sg-open-ssh": [
+              "ef3d3d6daa66f787"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/aws-sg-open-ssh/fail_vpc_ingress_rule",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -6797,12 +11381,78 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/pass_dynamic_restricted": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-sg-open-ssh": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/aws-sg-open-ssh/pass_dynamic_restricted",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -6824,12 +11474,78 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/pass_restricted": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 2,
+            "executed": 2,
+            "failed": 0,
+            "planned": 2,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-sg-open-ssh": {
+                "completed": 2,
+                "executed": 2,
+                "failed": 0,
+                "planned": 2,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/aws-sg-open-ssh/pass_restricted",
-          "status": "complete"
+          "resources": 2,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -6851,12 +11567,78 @@
       "suppressed": []
     },
     "source:fixtures/rules/aws-sg-open-ssh/pass_tfvars_overrides_open_default": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "aws-sg-open-ssh": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/aws-sg-open-ssh/pass_tfvars_overrides_open_default",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -6878,6 +11660,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/gcp-storage-uniform-access/conditional_unconstrained_variable": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -6974,10 +11796,52 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "gcp-storage-uniform-access": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "gcp-storage-uniform-access": [
+              "d2a2354b7a26b6b9"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/gcp-storage-uniform-access/conditional_unconstrained_variable",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": [
+            {
+              "location": {
+                "column": 1,
+                "end": 25,
+                "file": "fixtures/rules/gcp-storage-uniform-access/conditional_unconstrained_variable/main.tf",
+                "line": 1,
+                "start": 0
+              },
+              "module": "",
+              "variable": "uniform_access"
+            }
+          ]
         }
       ],
       "rule_errors": [],
@@ -7019,6 +11883,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/gcp-storage-uniform-access/fail_absent": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -7092,10 +11996,40 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "gcp-storage-uniform-access": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "gcp-storage-uniform-access": [
+              "7e73a86e1984e7c8"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/gcp-storage-uniform-access/fail_absent",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -7137,6 +12071,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/gcp-storage-uniform-access/fail_false_via_local": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -7233,10 +12207,40 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "gcp-storage-uniform-access": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "gcp-storage-uniform-access": [
+              "5714a9bee48ab0f5"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/gcp-storage-uniform-access/fail_false_via_local",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -7278,6 +12282,46 @@
       "suppressed": []
     },
     "source:fixtures/rules/gcp-storage-uniform-access/fail_tfvars_variable": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [
         {
@@ -7394,10 +12438,40 @@
           }
         }
       ],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "gcp-storage-uniform-access": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {
+            "gcp-storage-uniform-access": [
+              "e20a7b6d1ed90ee8"
+            ]
+          },
+          "module_instances": 1,
           "path": "fixtures/rules/gcp-storage-uniform-access/fail_tfvars_variable",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],
@@ -7439,12 +12513,78 @@
       "suppressed": []
     },
     "source:fixtures/rules/gcp-storage-uniform-access/pass_enabled": {
+      "coverage": {
+        "rules": {
+          "aws-iam-wildcard-policy": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-rds-unencrypted": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "aws-s3-public-access-block": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          },
+          "aws-sg-open-ssh": {
+            "completed": 0,
+            "executed": 0,
+            "failed": 0,
+            "planned": 0,
+            "skipped": 0
+          },
+          "gcp-storage-uniform-access": {
+            "completed": 1,
+            "executed": 1,
+            "failed": 0,
+            "planned": 1,
+            "skipped": 0
+          }
+        },
+        "selected_rules": 5
+      },
       "diagnostics": [],
       "findings": [],
+      "input_kind": "source",
       "roots": [
         {
+          "coverage": {
+            "rules": {
+              "aws-s3-public-access-block": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              },
+              "gcp-storage-uniform-access": {
+                "completed": 1,
+                "executed": 1,
+                "failed": 0,
+                "planned": 1,
+                "skipped": 0
+              }
+            },
+            "selected_rules": 5
+          },
+          "diagnostics": [],
+          "findings_by_rule": {},
+          "module_instances": 1,
           "path": "fixtures/rules/gcp-storage-uniform-access/pass_enabled",
-          "status": "complete"
+          "resources": 1,
+          "rule_errors": [],
+          "status": "complete",
+          "unresolved_inputs": []
         }
       ],
       "rule_errors": [],

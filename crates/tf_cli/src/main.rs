@@ -9,10 +9,11 @@
 //! ```
 //!
 //! Exit codes: 0 no finding at or above `--fail-on` (default: definite),
-//! 1 some finding is, 2 the scan could not run, 3 some rule failed on some
-//! resource, analysis failed, or coverage is incomplete (output is still
-//! printed; see `status`, `diagnostics` and `rule_errors`). 3 wins over 1:
-//! an incomplete scan is reported as such even when it found something.
+//! 1 some finding is, 2 the scan could not run, 3 analysis/rules failed,
+//! 4 coverage is incomplete. Output is still printed; see per-root summaries.
+//! Failed/incomplete status wins over finding thresholds.
+
+mod compare;
 
 use std::io::{IsTerminal, Write};
 use std::path::PathBuf;
@@ -56,6 +57,9 @@ const USAGE: &str = "usage:
                                   or tfvars) is fixed only where it is set (input).
                                   Exit 0 verified, 1 unverified,
                                   2 no such finding, no fix hint, or the scan failed
+  oxtf compare BEFORE.json AFTER.json [-f json|text]
+                                  compare saved scans; verify resolutions only when both
+                                  completed with the same roots and selected rules
   oxtf rules [--rule-file PATH]... [-f json]
                                   list built-in and loaded rules: level, category, engine,
                                   description, resource types and source file:line
@@ -67,7 +71,11 @@ Built in are the seed rules and the bundled Checkov catalog: Checkov 3.2.328's T
 value checks, graph policies and Python resource checks (1079 rules), run natively.
 
 scan options:
-  -r, --recursive         every directory under PATH containing .tf/.tf.json files is a root module
+  -r, --recursive         discover roots below PATH; skip called local modules unless they
+                          declare a provider or backend. Hidden directories are skipped.
+                          Scope with PATH: scan env/prod (one root), scan -r env/prod
+                          (subtree), scan env/dev env/prod (selected roots).
+                          Local module dependencies are still followed outside PATH.
   -f, --format FMT        text (default), json (the finding record, docs/FINDING_SCHEMA.md),
                           ndjson (one line per finding, then a summary line) or sarif
       --fail-on C         exit 1 when a finding is at least this certain: definite
@@ -114,8 +122,9 @@ A finding is one rule failing at one source location; the roots and resource
 instances it was reached from are its occurrences.
 
 exit codes: 0 no finding at or above --fail-on, 1 some finding is, 2 the scan
-could not run, 3 analysis is incomplete or failed (wins over 1, even with
---fail-on never)";
+could not run, 3 analysis or rule execution failed, 4 scan incomplete (skipped inputs or limits).
+3 and 4 win over findings, even with --fail-on never. Use -f json or -f ndjson
+for agent output: per-root status, findings grouped by rule, diagnostics and rule errors.";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Format {
@@ -168,7 +177,7 @@ impl std::fmt::Display for ArgsError {
 impl ArgsError {
     fn exit_code(&self) -> ExitCode {
         ExitCode::from(if matches!(self, Self::InputLimit(_)) {
-            3
+            4
         } else {
             2
         })
@@ -381,6 +390,7 @@ fn main() -> ExitCode {
                 e.exit_code()
             }
         },
+        Some("compare") => compare::run(args),
         Some("fix") => fix(args),
         Some("fetch") => fetch(args),
         Some("--version" | "-V" | "version") => {
@@ -771,8 +781,10 @@ fn scan(a: Args) -> ExitCode {
     let record = ScanRecord::from_result(r);
     print_result(r, &record, format, color, diagnostics, quiet);
     let failing = fail_on.is_some_and(|c| record.findings.iter().any(|f| f.certainty <= c));
-    if r.status() != tf_linter::ScanStatus::Complete {
+    if r.status() == tf_linter::ScanStatus::Failed {
         ExitCode::from(3)
+    } else if r.status() == tf_linter::ScanStatus::Incomplete {
+        ExitCode::from(4)
     } else if failing {
         ExitCode::from(1)
     } else {
@@ -851,7 +863,10 @@ fn print_result(
             let shown: Vec<_> = r
                 .diagnostics
                 .iter()
-                .filter(|d| d.code != "rule-skipped")
+                .filter(|d| {
+                    d.code != "rule-skipped"
+                        && (record.roots.is_empty() || d.code != tf_linter::scan::NOT_INSTALLED)
+                })
                 .cloned()
                 .collect();
             let _ = write!(
@@ -889,10 +904,22 @@ fn print_result(
             format!("\n  by rule: {}", by_rule.join(", "))
         }
     );
-    if record.roots.len() > 1
-        && let Some(roots) = tf_linter::render::roots_text(&record.roots)
-    {
+    if let Some(roots) = tf_linter::render::roots_text(&record.roots) {
         let _ = writeln!(out, "{roots}");
+    }
+    for d in r
+        .diagnostics
+        .iter()
+        .filter(|d| tf_linter::scan::limits_analysis(d))
+    {
+        let resolved = tf_linter::record::diagnostic_record(&r.files, d);
+        if !record
+            .roots
+            .iter()
+            .any(|root| root.diagnostics.contains(&resolved))
+        {
+            let _ = writeln!(out, "  scan issue {}: {}", d.code, d.message);
+        }
     }
     if !r.suppressed.is_empty() {
         let _ = writeln!(out, "  suppressed by checkov:skip: {}", r.suppressed.len());

@@ -211,7 +211,7 @@ resource "aws_s3_bucket" "good" { acl = "private" }
         .output()
         .unwrap();
     // A skipped policy makes analysis incomplete, even with findings.
-    assert_eq!(scan.status.code(), Some(3), "{:?}", scan);
+    assert_eq!(scan.status.code(), Some(4), "{:?}", scan);
     let stderr = String::from_utf8_lossy(&scan.stderr);
     assert!(stderr.contains("warning: skipped rule file"), "{stderr}");
     // Drawn as a snippet of the policy file at the operator.

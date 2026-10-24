@@ -200,8 +200,10 @@ have no automatic fix hints and are also rejected by the edit API.
 | `findings` | One record per finding, below, ordered by file, position and rule. |
 | `diagnostics` | Parse errors, warnings and notes: `severity` (`error`, `warning`, `info`), `code`, `message`, `location` or `null`. A `rule-skipped` warning (listed first, `location` `null`) names a file in a `--rule-file` directory that did not load; its message gives the file and each reason with its line and column. The rules in that file did not run. `coverage-module-not-installed` marks a remote module call with no installed-module manifest (install with `--fetch`, `oxtf fetch` or `terraform init`); other unresolved remote sources keep `coverage-remote-module`. `coverage-fetch` names a root whose modules `--fetch` could not install. An `evaluation-error` names the failing builtin when there is one (for example `expression evaluation failed in coalesce()`), never the values involved. |
 | `rule_errors` | Rules that failed to run or returned an unresolved foreign result: `rule`, `resource` (or `null`), `message`. An empty list means no execution errors were recorded for selected, applicable rules; it does not establish coverage of unsupported rules or prove that native Unknown outcomes passed. A reader must never take silence from a rule listed here as a pass. |
+| `input_kind` | `source` or `plan`; null on older records. |
+| `coverage` | Selected rule IDs and execution counters; see coverage accounting below. Null on older records. |
 | `stats` | `roots`, `module_instances`, `files`, `resources`; `findings` (findings) and `occurrences` (judgements); `definite`, `conditional`, `indeterminate` and `findings_by_rule`, counting findings; `elapsed_ms`. |
-| `roots` | Each scanned root module in scan order: `path` and its own `status`. A root is `failed` or `incomplete` by its own diagnostics and rule errors; scan-wide limits (`coverage-storage`, `coverage-results`) affect only the scan `status`, so a complete root can sit inside an incomplete scan. Records without this field (older readers) default to an empty list. |
+| `roots` | Each scanned root module in scan order: `path`, its own `status`, `resources`, `module_instances`, `findings_by_rule` (rule ID to stable fingerprint list), `diagnostics`, `rule_errors`, `coverage`, and `unresolved_inputs`. Added summary fields default to empty/zero when reading older records. A root is `failed` or `incomplete` by its own diagnostics and rule errors; scan-wide limits (`coverage-storage`, `coverage-results`) affect only the scan `status`, so a complete root can sit inside an incomplete scan. Records without this field (older readers) default to an empty list. |
 | `suppressed` | Judgements of Checkov-sourced rules that a `checkov:skip=ID:reason` line suppressed, as Checkov applies them (in the resource's block or an enclosing `module` block): `rule`, `resource`, `comment` (Checkov's `No comment provided` when there is none) and the `location` of that line. Not findings, but never dropped silently. |
 
 ## Finding
@@ -330,6 +332,79 @@ Python `Value.to_str()` and Rust `value::to_json()` also remain raw for rule
 authors; these are not presentation APIs. Debug policy traces contain raw
 inputs. Sensitive values must be marked: this is not a secret detector.
 
+## Coverage and recovery actions
+
+JSON `coverage` contains `selected_rules` (a count) and `rules` (rule ID to
+`{planned, executed, completed, failed, skipped}`). At scan level every selected
+rule appears, including rules with zero applicable subjects. Root `coverage`
+maps include only rules with planned hooks; `selected_rules` is still the full
+selection count. `coverage` is null/absent on older records, meaning unknown
+accounting. A selected rule is not necessarily applicable or executed.
+
+Each check is one engine resource, module, graph, or whole-file hook. `executed`
+means the hook was entered; `completed` means it returned successfully, not
+that all policy predicates passed. `failed` counts entered hooks that failed;
+`skipped` counts planned hooks never entered after an admission/allowance refusal
+or graph preparation failure. Thus `executed = completed + failed` and
+`planned = executed + skipped`. Graph hooks may check multiple resources;
+whole-file hooks run once per root. There is no universal predicate pass count.
+Planning only sees the analysed model, so analysis/coverage diagnostics remain
+necessary even when every planned check completed. Suppression does not undo
+execution accounting. Policy files skipped before rule selection are diagnosed
+separately and are not counted as selected rules.
+
+Each root's `unresolved_inputs` entries have `module`, `variable`, and a resolved
+`location`. These describe variables whose value is not fully concrete, including
+nested unknown values. They exclude values, snippets, and error details. Unknown
+provider attributes and unsupported features are not necessarily input variables;
+this list is not a count of all unknown values or a verdict on configuration.
+
+Diagnostics may include `action`: `{kind, retryable, required_input, explanation}`.
+`code` is the stable reason key; actions derive from it, without interpreting the
+rendered message. Known actions require investigation or changed inputs before
+retry (`retryable: false`). Unknown codes may have no action. `required_input`
+contains descriptions of configuration/environment inputs, not their values.
+Kinds currently include `install_modules`, `inspect_dependency_access`,
+`repair_configuration`, `repair_policy`, `review_limits`, `review_scope`, and
+`review_unsupported_feature`. `coverage-fetch` alone cannot establish whether
+credentials are needed; its action requests inspection of source/ref, network,
+and credential configuration. Rule errors add `code: rule-execution-failed` and
+an `inspect_rule_execution` action. Their original rule/resource/message fields
+are preserved. Actions appear in JSON, NDJSON, and SARIF notification properties.
+
+`input_kind` records `source` or `plan`; older records default to null.
+
+## Comparing saved scans
+
+`oxtf compare BEFORE.json AFTER.json [-f json|text]` accepts full JSON scan
+records (up to 64 MiB per file), not NDJSON or SARIF. It rejects unsupported
+schemas, duplicate root paths/fingerprints, findings referencing unrecorded
+roots, and inconsistent check counters. The comparison schema is independently
+versioned as `schema: 1`.
+
+The result has `before_status`, `after_status`, `comparable`, `issues`,
+`resolved`, `unverified_removed`, `certainty_changes`, and `delta`.
+`resolved` and `unverified_removed` are fingerprint lists partitioning
+`delta.removed`; that delta always describes observations, not verified fixes.
+Certainty changes contain grouped before/after certainty and per-occurrence
+`root`, `address`, `before`, `after` changes. `delta.changed` includes changed
+occurrences or certainty; unchanged positions/evidence alone do not count.
+
+Resolution requires both scans and their roots to be complete, with coverage
+accounting, no skipped/failed hooks, matching root path sets and selected rule
+ID sets, and matching source/plan input kind. Changed suppression sets or new
+unresolved variable identities prevent verification. Lost coverage still yields
+a useful observed delta; absence is not classified as resolution.
+
+Exit 0 means comparable with no added findings/occurrences or increased certainty;
+1 means a regression; 2 means invalid input/options; 4 means comparison cannot
+verify resolutions and takes precedence over regressions. Output is still
+printed on 4. An unchanged existing violation does not cause compare exit 1.
+A `resolved` result is absence under comparable recorded analysis conditions,
+not proof that every value is concrete or a provider accepts an edit. Callers
+must use matching scanner builds and policy implementations; rule IDs do not
+attest policy content. Paths compare as recorded, without inferred equivalence.
+
 ## NDJSON
 
 `--format ndjson` prints one JSON object per line, each with a `type`:
@@ -341,9 +416,9 @@ inputs. Sensitive values must be marked: this is not a secret detector.
   when there is one, `default_site` as `file`/`line`/`column`);
 - `rule_error`: `rule`, `resource`, `message`;
 - `diagnostic`: `severity`, `code`, `message`, `file`, `line`;
-- `summary`, always last: `schema`, `findings`, `occurrences`, `definite`,
+- `summary`, always last: `schema`, `input_kind`, `coverage`, `findings`, `occurrences`, `definite`,
   `conditional`, `indeterminate`, `rule_errors`, `diagnostics`,
-  `suppressed`, `roots`, `resources`, `elapsed_ms`, `status`, and `rules`
+  `suppressed`, `roots`, `root_summaries` (the full root records), `resources`, `elapsed_ms`, `status`, and `rules`
   (the full rule metadata table, including guidance, sent once per scan).
 
 Provenance, values and the occurrence list are only in the full JSON record.
@@ -368,8 +443,8 @@ provenance chain as `relatedLocations`, and `certainty`, `occurrences`,
 
 `oxtf scan` exits 0 when no finding is at least as certain as `--fail-on`
 (`definite` by default; `conditional`, `indeterminate`, or `never`), 1 when
-some finding is, 2 when the scan could not run, and 3 when analysis is
-incomplete or failed. 3 wins over 1 and is not disabled by `--fail-on never`
+some finding is, 2 when the scan could not run, and 3 when analysis or rule execution
+failed; **4** means incomplete coverage. Both take precedence over 1 and are not disabled by `--fail-on never`
 or `--no-diagnostics`. The output is printed in every case but 2.
 
 ## What each output keeps
@@ -381,4 +456,4 @@ or `--no-diagnostics`. The output is printed in every case but 2.
 | SARIF | Per finding: rule (with metadata), level, message, location, fingerprint, provenance locations, certainty, occurrence count, attribute, fix hint. |
 | Python `Finding` | One judgement (occurrence), not a grouped finding: flat getters for scalars (`certainty`, `fingerprint`, ...; `resource_type` is `None` for a file subject), dicts for `subject`, `configured`, `effective`, `fix_hint`, `hidden`, and `to_dict()` for its record (a finding with one occurrence). `provenance` dicts carry `kind`, `label`, `file`, `line`, `column`, `resource`, `attribute`. `ScanResult.to_json()` is the grouped record. |
 | Arrow | One row per judgement: columns `fingerprint`, `rule`, `category`, `level`, `certainty`, `address` (the file's path for a file subject), `resource_type` (null for a file subject), `module`, `message`, `root`, `attribute`, `file`, `line`, `column`, `provenance` (structs with `kind`, `label`, `file`, `line`, `column`, `resource`, `attribute`) and `record` (the judgement's record as JSON). Group by `fingerprint` for findings. |
-| Text | One report per finding (its representative: rule, certainty, address, message, location, provenance chain) and the other occurrences' addresses and roots. No fingerprint, values or fix hint. |
+| Text | One report per finding (its representative: rule, certainty, address, message, location, provenance chain) and the other occurrences' addresses and roots. Per-root rule groups include stable fingerprints, counts and completion diagnostics. |

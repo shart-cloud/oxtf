@@ -18,29 +18,38 @@ rescanning. Work from JSON output (`-f json`), never the text.
 
 ```sh
 oxtf --version                          # confirm it is installed (0.1.0 or later)
-oxtf scan -r PATH -f json > scan.json   # every directory with .tf files is a root
+oxtf scan -r PATH -f json > scan.json   # discover roots; called local modules are followed as dependencies
 ```
 
 Add `--fetch` only when the user agrees to network access and writing `.terraform/`: it
 installs remote modules for the roots that need them, as `terraform init` would.
 
 Exit codes: 0 means no finding at or above `--fail-on` (default `definite`, so conditional
-findings alone exit 0), 1 means some are, 2 means the scan could not run, and 3 means it was
-incomplete or failed (read `status` to tell which). Errors (for example from `oxtf fix`) are
+findings alone exit 0), 1 means some are, 2 means the scan could not run, 3 means analysis
+or rule execution failed, and 4 means incomplete coverage. Errors (for example from `oxtf fix`) are
 printed to stderr as text, even with `-f json`. `oxtf --help` prints every option.
 
 Before reporting anything, read:
 
-- `status`: `complete`, `incomplete` or `failed`. Only `complete` means every check ran on
-  everything. Findings from an incomplete scan are real, but a missing finding then proves
+- `status`: `complete`, `incomplete` or `failed`. Only `complete` means the selected
+  analysis completed without reported coverage gaps; it does not mean every value was
+  known or every upstream check is supported. Findings from an incomplete scan are real,
+  but a missing finding then proves
   nothing. Say so.
 - `roots`: each root module's own `path` and `status`. `incomplete` means some
   configuration was not evaluated, for example an uninstalled module, so its findings are
-  real but partial. `failed` means an expression failed to evaluate. Resources depending on
-  it were not checked, and the root may report few or no findings. Neither status is clean.
-- `diagnostics`: `code`, `message` and a `location`, but no root. A diagnostic in a shared
-  module file can repeat once per root that reaches it. To attribute one to a root, rescan
-  that root alone (`oxtf scan ROOT -f json`).
+  real but partial. `failed` means configuration analysis or rule execution failed. Inspect
+  the root's diagnostics and rule errors; other checks may still have completed. Neither
+  status is clean.
+- `coverage`: selected rule IDs and counts of planned/executed/completed/failed/skipped
+  rule hooks. Completed hooks are not policy passes; no applicable subjects means zero
+  checks. Inspect root status even when every planned check completed.
+- `roots[].coverage` and `roots[].unresolved_inputs`: applicable rule checks, and variable
+  names/declaration locations without values. Root `diagnostics` and `rule_errors` attribute
+  failures directly; shared module locations can occur in multiple roots.
+- `diagnostics`: `code`, `message`, `location`, and optional `action`. Dispatch on the code
+  and `action.kind`; read `required_input` and `explanation`. `retryable: false` means an
+  identical retry is not expected to help without changing inputs or configuration.
   - `coverage-module-not-installed`: remote modules are missing. Use `--fetch` or
     `terraform init`.
   - `evaluation-error`: an expression failed to evaluate. The message names the builtin
@@ -52,6 +61,19 @@ Before reporting anything, read:
     `{"evaluation_steps": 5000000}`.
   - Other `coverage-*` codes: something oxtf could not evaluate.
 - `rule_errors`: rules that failed to run. Never present one of these as a pass.
+
+For manual edits, save `before.json`, rescan with identical options to `after.json`,
+then run `oxtf compare before.json after.json`. It defaults to JSON. Exit 0 means a
+comparable scan without regressions; 1 means added findings/occurrences or increased
+certainty; 2 is invalid input; 4 means coverage/scope cannot verify resolution. Do not use
+`&&` after a scan if findings (exit 1) should not stop the workflow.
+
+Read `comparable`, `issues`, `resolved`, `unverified_removed`, `certainty_changes`, and
+`delta`. Never call an `unverified_removed` finding fixed. Changes in roots, selected rule
+IDs, source/plan kind, suppressions, or newly unresolved inputs prevent verification.
+Keep the scanner build and policy implementations consistent; comparison does not attest
+them. A resolution covers scanner observations, not cloud/provider correctness. Older
+records without coverage accounting remain readable but cannot verify resolution.
 
 ## 2. Choose findings
 

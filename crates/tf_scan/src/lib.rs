@@ -27,6 +27,8 @@ use tf_semantic::{Analysis, DiagSeverity, Diagnostic, FileTable};
 
 pub mod limits;
 pub use limits::Limits;
+mod comparison;
+pub use comparison::{CertaintyChange, OccurrenceCertaintyChange, ScanComparison};
 mod finding_delta;
 pub use finding_delta::{FindingChange, FindingDelta};
 
@@ -75,8 +77,8 @@ pub fn verify_policies(catalog: &Catalog) -> Result<Vec<TestOutcome>, ScanError>
 /// What to scan.
 #[derive(Clone, Debug)]
 pub enum ScanInput {
-    /// Root module directories. With `recursive`, every directory under
-    /// each path that contains `.tf` files is a root module.
+    /// Root module directories. With `recursive`, discover Terraform directories under
+    /// each path, excluding local module callees unless they declare a provider/backend.
     Dirs {
         paths: Vec<PathBuf>,
         recursive: bool,
@@ -443,12 +445,21 @@ pub fn scan_fetching(req: ScanRequest) -> Result<ScanOutput, ScanError> {
     drop(first);
     let failures = fetch_roots(&pending, data_dir.as_deref());
     let mut out = scan(retry)?;
-    out.result.diagnostics.extend(failures);
+    for (dir, diagnostic) in failures {
+        if let Some(root) = out.result.roots.iter_mut().find(|r| r.dir == dir) {
+            root.diagnostics.push(diagnostic.clone());
+            root.status = tf_linter::scan::status_of(&root.diagnostics, &root.rule_errors);
+        }
+        out.result.diagnostics.push(diagnostic);
+    }
     Ok(out)
 }
 
 /// Fetches roots concurrently, a few at a time; returns one warning per failure.
-fn fetch_roots(roots: &[PathBuf], data_dir: Option<&std::path::Path>) -> Vec<Diagnostic> {
+fn fetch_roots(
+    roots: &[PathBuf],
+    data_dir: Option<&std::path::Path>,
+) -> Vec<(PathBuf, Diagnostic)> {
     const CONCURRENT: usize = 8;
     let mut failures = Vec::new();
     for batch in roots.chunks(CONCURRENT) {
@@ -465,15 +476,18 @@ fn fetch_roots(roots: &[PathBuf], data_dir: Option<&std::path::Path>) -> Vec<Dia
                 .collect();
             for handle in handles {
                 if let Some((root, error)) = handle.join().expect("fetch worker") {
-                    failures.push(Diagnostic {
-                        severity: DiagSeverity::Warning,
-                        code: "coverage-fetch",
-                        message: format!(
-                            "{}: modules could not be fetched: {error}",
-                            root.display()
-                        ),
-                        at: None,
-                    });
+                    failures.push((
+                        root.clone(),
+                        Diagnostic {
+                            severity: DiagSeverity::Warning,
+                            code: "coverage-fetch",
+                            message: format!(
+                                "{}: modules could not be fetched: {error}",
+                                root.display()
+                            ),
+                            at: None,
+                        },
+                    ));
                 }
             }
         });
@@ -520,6 +534,7 @@ pub fn scan(mut req: ScanRequest) -> Result<ScanOutput, ScanError> {
     };
     // Skipped rule files come first: they qualify every finding below them.
     let output = |mut result: ScanResult, analyses| {
+        result.selected_rules = linter.rules().iter().map(|r| r.name.to_string()).collect();
         // Point each skipped file's warning at its first located problem.
         let located = skipped.iter().cloned().map(|mut d| {
             d.at = d.message.lines().find_map(|l| {

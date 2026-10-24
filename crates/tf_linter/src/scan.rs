@@ -64,9 +64,9 @@ pub fn validate_threads(threads: Option<usize>) -> Result<(), ScanError> {
 #[derive(Clone, Debug)]
 pub struct ScanOptions {
     pub limits: tf_limits::Limits,
-    /// Treat every directory under the path that contains `.tf` files as a
-    /// root module (hidden directories and `.terraform` are skipped).
-    /// Otherwise the path itself is the root module.
+    /// Discover Terraform directories below the path, excluding called local
+    /// modules unless they declare a provider/backend. Hidden directories and
+    /// installed caches are skipped. Otherwise the path itself is the root.
     pub recursive: bool,
     /// Extra `-var-file`s for the root module(s).
     pub var_files: Vec<PathBuf>,
@@ -151,15 +151,23 @@ pub struct ScanResult {
     /// diagnostics (storage, results) apply to every root and appear only in
     /// [`ScanResult::status`].
     pub roots: Vec<RootOutcome>,
+    pub selected_rules: Vec<String>,
+    pub input_kind: crate::record::InputKind,
 }
 
 /// One root module and whether its analysis and rules completed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct RootOutcome {
     pub dir: PathBuf,
     pub status: ScanStatus,
     /// Some remote module call had no installed package to read.
     pub needs_install: bool,
+    pub coverage: crate::coverage::RuleCoverage,
+    pub unresolved_inputs: Vec<crate::coverage::UnresolvedInput>,
+    pub diagnostics: Vec<Diagnostic>,
+    pub rule_errors: Vec<RuleError>,
+    pub resources: usize,
+    pub module_instances: usize,
 }
 
 /// Whether analysis completed, independently of whether it found violations.
@@ -279,6 +287,51 @@ pub fn discover_roots_with_budget(
     Ok(roots)
 }
 
+/// Remove local module callees from recursive candidates. Provider/backend
+/// declarations explicitly mark a directory as independently runnable.
+fn select_root_modules(
+    candidates: &[PathBuf],
+    files: &FileTable,
+    store: &ModuleStore,
+    limits: tf_limits::Limits,
+) -> Vec<PathBuf> {
+    use tf_semantic::module::ModuleSource;
+    use tf_semantic::source::normalize;
+    let mut called = std::collections::HashSet::new();
+    let mut explicit = std::collections::HashSet::new();
+    for dir in candidates {
+        let Ok(def) = store.module_with_limits(files, dir, limits) else {
+            break;
+        };
+        for call in &def.module_calls {
+            if let ModuleSource::Local(path) = &call.source {
+                called.insert(normalize(path));
+            }
+        }
+        if def.files.iter().any(|(_, file)| {
+            file.body.blocks().any(|b| {
+                b.ident.name == "provider"
+                    || (b.ident.name == "terraform"
+                        && b.body.blocks().any(|b| b.ident.name == "backend"))
+            })
+        }) {
+            explicit.insert(normalize(dir));
+        }
+        // Keep malformed candidates so their errors remain visible to the user.
+        if !def.parse_errors.is_empty() || !def.load_errors.is_empty() {
+            explicit.insert(normalize(dir));
+        }
+    }
+    candidates
+        .iter()
+        .filter(|dir| {
+            let dir = normalize(dir);
+            !called.contains(&dir) || explicit.contains(&dir)
+        })
+        .cloned()
+        .collect()
+}
+
 /// Scan `path` with the seed rules. A convenience for tests and examples;
 /// scans with a catalog, selection or plan input go through `tf_scan`.
 pub fn scan_dir(path: &Path, opts: &ScanOptions) -> Result<ScanResult, ScanError> {
@@ -351,11 +404,16 @@ pub fn scan_with_files(
         })
         .cloned()
         .collect();
-    let roots = filtered.as_slice();
     let start = Instant::now();
     // Parsed modules shared by every root: a recursive scan reaches most
     // module directories from several roots.
     let store = ModuleStore::new();
+    let filtered = if opts.recursive {
+        select_root_modules(&filtered, &files, &store, opts.limits)
+    } else {
+        filtered
+    };
+    let roots = filtered.as_slice();
     let aopts = AnalyzeOptions {
         limits: opts.limits,
         var_files: opts.var_files.clone(),
@@ -370,6 +428,7 @@ pub fn scan_with_files(
         diagnostics: Vec<Diagnostic>,
         out: crate::engine::RunOutput,
         analysis: Option<Analysis>,
+        unresolved_inputs: Vec<crate::coverage::UnresolvedInput>,
     }
     let work = || -> Vec<RootResult> {
         roots
@@ -393,6 +452,7 @@ pub fn scan_with_files(
                 out.findings = findings;
                 out.suppressed = suppressed;
                 RootResult {
+                    unresolved_inputs: crate::coverage::unresolved_inputs(&a, &files),
                     module_instances: a.modules.len(),
                     resources: a.stats.resources,
                     diagnostics: if opts.keep_models {
@@ -449,8 +509,14 @@ pub fn scan_with_files(
             .map_or(&r.diagnostics[..], |a| &a.diagnostics[..]);
         outcomes.push(RootOutcome {
             dir: dir.clone(),
+            coverage: r.out.coverage.clone(),
+            unresolved_inputs: r.unresolved_inputs,
             status: status_of(own, &r.out.rule_errors),
             needs_install: own.iter().any(|d| d.code == NOT_INSTALLED),
+            diagnostics: own.to_vec(),
+            rule_errors: r.out.rule_errors.clone(),
+            resources: r.resources,
+            module_instances: r.module_instances,
         });
         findings.extend(r.out.findings);
         rule_errors.extend(r.out.rule_errors);
@@ -482,7 +548,9 @@ pub fn scan_with_files(
             rule_errors,
             files,
             suppressed,
+            input_kind: crate::record::InputKind::Source,
             roots: outcomes,
+            selected_rules: linter.rules().iter().map(|r| r.name.to_string()).collect(),
         },
         analyses,
     ))
@@ -498,7 +566,9 @@ pub fn limited_scan(files: Arc<FileTable>) -> ScanResult {
         rule_errors: Vec::new(),
         files,
         suppressed: Vec::new(),
+        input_kind: crate::record::InputKind::Source,
         roots: Vec::new(),
+        selected_rules: Vec::new(),
     }
 }
 

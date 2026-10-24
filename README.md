@@ -30,7 +30,7 @@ To build from source instead: `cargo build --release --locked -p tf_cli`.
 ## Quick start
 
 ```sh
-oxtf scan -r .            # every directory with .tf files is a root module
+oxtf scan -r .            # discover independent roots; follow module calls
 oxtf scan -r --fetch .    # first install remote modules the roots need, then scan
 oxtf scan -r . -f json    # the finding record (docs/FINDING_SCHEMA.md)
 ```
@@ -43,6 +43,48 @@ Results compared with Checkov on public modules are in
 Coding agents (Claude Code, Codex) can drive the scan-and-fix loop with the
 [oxtf skill](skills/oxtf/SKILL.md): copy `skills/oxtf/` into the agent's skills
 directory. `scripts/demo-fix-loop.sh` runs the same loop on pinned public modules.
+
+For a before/after workflow, save full JSON records with identical scan options:
+
+```sh
+oxtf scan -r infra -f json > before.json
+# Edit configuration, then rescan with the same roots, rules, and input options.
+oxtf scan -r infra -f json > after.json
+oxtf compare before.json after.json       # JSON comparison by default
+oxtf compare before.json after.json -f text
+```
+
+Scan exit 1 still produces a usable record. Do not join these steps with `&&`
+if findings should not stop your workflow. Compare exits 0 for comparable scans
+without new findings or increased certainty, 1 for regressions, 2 for invalid
+records/options, and 4 when coverage or scope prevents verification. It still
+prints observations on exit 4; inspect `issues` and `unverified_removed`.
+
+`coverage` records selected rule IDs and per-rule hook counts: `planned`,
+`executed`, `completed`, `failed`, and `skipped`. A check is one resource, module,
+graph, or whole-file rule invocation. Completed hooks are **not pass counts**:
+unknown or inapplicable inputs can produce no finding. Planned checks cover
+only subjects in the analysed model; always inspect scan/root completion too.
+Each root lists only applicable rules in its coverage map and exposes
+`unresolved_inputs` as module/variable names and declaration locations, without
+values. Supply actual deployment inputs to reduce uncertainty.
+
+Diagnostics carry a stable `code` and an optional structured `action` with
+`kind`, `retryable`, `required_input`, and `explanation`. Dispatch on codes and
+action kinds, not message text. Actions identify the input or environment
+change needed before retrying and never include credential values. Rule errors
+use `rule-execution-failed` with `inspect_rule_execution` actions.
+
+Comparison classifies disappeared fingerprints as `resolved` only when both
+scans completed with matching recorded roots, selected rule IDs, and input kind
+(source versus plan), with no changed suppressions or newly unresolved inputs.
+Otherwise they are `unverified_removed`. Certainty changes include individual
+occurrences, even when the grouped certainty stays the same. A resolution is
+absence under these recorded analysis conditions, not proof of security or
+provider acceptance. Use the same scanner build and policy implementations:
+comparison does not attest their contents or infer equivalent path spellings.
+Older records lacking coverage remain readable but cannot verify resolutions.
+
 
 ## Rules
 
@@ -143,6 +185,12 @@ source URLs are rejected, and registry tokens are not forwarded across origins.
 For a private service origin, use `--registry HOST=URL` or Python
 `registry_origins={host: url}`. HTTPS is required except for loopback fixtures.
 
+Public modules need no credentials. On access failures, fetch distinguishes
+HTTP 401/403 and Git authentication errors from missing refs and DNS failures.
+Private registry errors name the `TF_TOKEN_<hostname>` variable to configure;
+Git HTTPS uses credential helpers and SSH uses ssh-agent. HTTP 403 can also mean
+insufficient permissions, and a repository's 404 may hide a private repository.
+
 Default fetch limits are 64 MiB downloaded/staged Git data per package,
 128 MiB extracted content, 10,000 entries per package, 256 module calls,
 10 levels of child modules, five HTTP redirects, and a 120-second network/process
@@ -170,8 +218,32 @@ is known, or every upstream Checkov check is supported. The bundled
 catalog's manifest lists translation coverage.
 
 CLI exit codes are 0 (no finding meets the threshold), 1 (findings meet the
-threshold), 2 (scan could not start), and 3 (incomplete/failed analysis).
-Exit 3 takes precedence, including with `--fail-on never`.
+threshold), 2 (scan could not start), 3 (analysis or rule execution failed),
+and 4 (incomplete coverage: skipped inputs, missing modules, or limits).
+Failed/incomplete status takes precedence, including with `--fail-on never`.
+
+Scope scans with directory arguments:
+
+```sh
+oxtf scan infra/prod                 # one root, plus its module dependencies
+oxtf scan infra/dev infra/prod       # only these roots
+oxtf scan -r infra/prod              # discover roots within this subtree
+oxtf scan -r infra/prod -f ndjson     # agent output, including root summaries
+```
+
+Recursive discovery skips hidden directories and installed module caches.
+Directories called by local modules are excluded as standalone roots unless
+those directories declare a `provider` block or `terraform { backend ... }`.
+Uncalled Terraform directories remain roots, including configurations without
+providers. Pass a module directory explicitly without `-r` to scan it alone.
+Dependencies may live outside the selected subtree and are still followed.
+
+Every root summary contains completion status, resource/module counts,
+findings grouped by rule with stable fingerprints, diagnostics and rule errors.
+JSON exposes these under `roots`; NDJSON includes `root_summaries` on its final
+summary line. Text prints the groups even with `--quiet` and explains completion
+gaps even with `--no-diagnostics`. A complete root can coexist with a scan-wide
+limit; always check the scan's top-level `status` too.
 
 See [finding and output contracts](docs/FINDING_SCHEMA.md),
 [domain concepts](CONTEXT.md), and [validation](docs/VALIDATION.md).

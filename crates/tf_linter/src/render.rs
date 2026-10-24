@@ -312,37 +312,75 @@ pub fn diagnostics_text(files: &FileTable, diagnostics: &[tf_semantic::Diagnosti
     out
 }
 
-/// Which roots did not complete, when that is narrower than the whole scan.
-/// Paths print relative to the roots' common directory. `None` when every root
-/// completed.
+/// Every root's completion and triage groups, with reasons for gaps.
+/// Paths print relative to the roots' common directory; empty input returns `None`.
 pub fn roots_text(roots: &[crate::record::RootRecord]) -> Option<String> {
     use crate::ScanStatus;
-    const SHOWN: usize = 5;
-    let count = |status| roots.iter().filter(|r| r.status == status).count();
-    let (failed, incomplete) = (count(ScanStatus::Failed), count(ScanStatus::Incomplete));
-    if failed + incomplete == 0 {
+    if roots.is_empty() {
         return None;
     }
+    let count = |status| roots.iter().filter(|r| r.status == status).count();
+    let (failed, incomplete) = (count(ScanStatus::Failed), count(ScanStatus::Incomplete));
     let base = common_dir(roots.iter().map(|r| std::path::Path::new(&r.path)));
     let mut text = format!(
         "  roots under {}: {failed} failed, {incomplete} incomplete, {} complete",
         base.display(),
         count(ScanStatus::Complete)
     );
-    for status in [ScanStatus::Failed, ScanStatus::Incomplete] {
-        let paths: Vec<String> = roots
-            .iter()
-            .filter(|r| r.status == status)
-            .map(|r| relative(std::path::Path::new(&r.path), &base))
-            .collect();
-        if paths.is_empty() {
-            continue;
+    for root in roots {
+        let findings: usize = root.findings_by_rule.values().map(Vec::len).sum();
+        text.push_str(&format!("\n  {}: {} — {findings} findings, {} resources, {} module instances; {} diagnostics, {} rule errors",
+            root.status.as_str(), relative(std::path::Path::new(&root.path), &base),
+            root.resources, root.module_instances, root.diagnostics.len(), root.rule_errors.len()));
+        if let Some(coverage) = &root.coverage {
+            let c = coverage.totals();
+            text.push_str(&format!("\n    checks: {} selected rules; {} planned, {} executed, {} completed, {} failed, {} skipped; {} unresolved inputs",
+                coverage.selected_rules, c.planned, c.executed, c.completed, c.failed, c.skipped, root.unresolved_inputs.len()));
         }
-        let more = paths.len().saturating_sub(SHOWN);
-        let shown = paths[..paths.len().min(SHOWN)].join(", ");
-        text.push_str(&format!("\n  {}: {shown}", status.as_str()));
-        if more > 0 {
-            text.push_str(&format!(" and {more} more"));
+        for (rule, ids) in &root.findings_by_rule {
+            text.push_str(&format!("\n    {rule}: {} [{}]", ids.len(), ids.join(", ")));
+        }
+        let missing = root
+            .diagnostics
+            .iter()
+            .filter(|d| d.code == crate::scan::NOT_INSTALLED)
+            .count();
+        if missing > 0 {
+            text.push_str(&format!("\n    coverage-module-not-installed: {missing} remote module calls were not evaluated; run oxtf scan --fetch or oxtf fetch for this root"));
+        }
+        for d in root
+            .diagnostics
+            .iter()
+            .filter(|d| d.code != crate::scan::NOT_INSTALLED)
+            .filter(|d| {
+                d.severity == "error"
+                    || d.code.starts_with("coverage-")
+                    || matches!(
+                        d.code.as_str(),
+                        "module-cycle"
+                            | "module-depth"
+                            | "module-missing"
+                            | "rule-skipped"
+                            | "plan-errored"
+                            | "plan-format"
+                    )
+            })
+        {
+            text.push_str(&format!("\n    {}: {}", d.code, d.message));
+            if let Some(at) = &d.location {
+                text.push_str(&format!(" ({}:{})", at.file, at.line));
+            }
+        }
+        for e in &root.rule_errors {
+            text.push_str(&format!(
+                "\n    rule error {}{}: {}",
+                e.rule,
+                e.resource
+                    .as_ref()
+                    .map(|r| format!(" on {r}"))
+                    .unwrap_or_default(),
+                e.message
+            ));
         }
     }
     Some(text)
