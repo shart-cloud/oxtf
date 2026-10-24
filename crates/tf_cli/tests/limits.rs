@@ -32,7 +32,7 @@ fn oversized_stdin_is_refused_during_bounded_overlay_read() {
         .unwrap();
     let output = child.wait_with_output().unwrap();
     std::fs::remove_file(config).unwrap();
-    assert_eq!(output.status.code(), Some(3));
+    assert_eq!(output.status.code(), Some(4));
     let message = String::from_utf8_lossy(&output.stderr);
     assert!(
         message.contains("coverage-storage: input_bytes"),
@@ -72,7 +72,7 @@ fn excessive_depth_is_incomplete_even_when_diagnostics_are_hidden() {
     let output = child.wait_with_output().unwrap();
     assert_eq!(
         output.status.code(),
-        Some(3),
+        Some(4),
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
@@ -126,7 +126,7 @@ fn configured_budget_controls_completion_and_fix_verification() {
         .arg(dir.join("limits.json"))
         .output()
         .unwrap();
-    assert_eq!(output.status.code(), Some(3));
+    assert_eq!(output.status.code(), Some(4));
     let record: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(record["status"], "incomplete");
     assert!(
@@ -200,7 +200,7 @@ fn loader_budget_is_configurable_and_never_silently_complete() {
     )
     .unwrap();
     std::fs::write(dir.join("override.tf"), "").unwrap();
-    for (allowance, expected_code, expected_status) in [(1, 3, "incomplete"), (1000, 0, "complete")]
+    for (allowance, expected_code, expected_status) in [(1, 4, "incomplete"), (1000, 0, "complete")]
     {
         std::fs::write(
             dir.join("limits.json"),
@@ -247,7 +247,7 @@ fn cached_input_conversion_uses_the_runtime_budget() {
     )
     .unwrap();
     std::fs::write(dir.join("override.tf"), "").unwrap();
-    for (allowance, code, status) in [(2, 3, "incomplete"), (1000, 0, "complete")] {
+    for (allowance, code, status) in [(2, 4, "incomplete"), (1000, 0, "complete")] {
         std::fs::write(
             dir.join("limits.json"),
             format!(r#"{{"evaluation_steps":{allowance}}}"#),
@@ -366,7 +366,7 @@ fn storage_refusal_is_incomplete_even_with_hidden_diagnostics() {
             .unwrap();
         assert_eq!(
             output.status.code(),
-            Some(3),
+            Some(4),
             "{}",
             String::from_utf8_lossy(&output.stderr)
         );

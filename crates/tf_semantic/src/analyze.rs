@@ -679,16 +679,47 @@ impl<'a, 'o> Analyzer<'a, 'o> {
 
     fn report_limits(&self, value: &Value, at: FileSpan) {
         if let Some(Origin::Error(message)) = value.origin() {
-            // Avoid echoing value-bearing error details into unredacted diagnostics:
-            // only a builtin's name, which carries no input value, is shown.
+            // Builtin names carry no input values and are safe in diagnostics.
             let function = message
                 .split_once(':')
                 .map(|(name, _)| name)
                 .filter(|name| tf_eval::functions::SUPPORTED.contains(name));
-            let text = match function {
+            let reason = message
+                .split_once(':')
+                .map_or(message.as_ref(), |(_, reason)| reason.trim());
+            // Only fixed, value-free messages may pass through: provider values
+            // and decoder/parser errors can contain sensitive input.
+            let safe_reason = [
+                "empty list",
+                "item not found",
+                "index out of range",
+                "step must not be zero",
+                "lists differ in length",
+                "more than one element",
+                "wrong number of arguments",
+                "invalid number",
+                "not a bool",
+                "invalid input",
+                "pattern did not match",
+                "no non-null, non-empty argument",
+                "all lists empty",
+                "condition is not a bool",
+                "operand of ! is not a bool",
+                "operand of - is not a number",
+                "syntax error in expression",
+                "invalid regular expression",
+            ]
+            .contains(&reason);
+            let mut text = match function {
                 Some(name) => format!("expression evaluation failed in {name}()"),
                 None => "expression evaluation failed".into(),
             };
+            if safe_reason {
+                text.push_str(": ");
+                text.push_str(reason);
+            } else {
+                text.push_str(": invalid argument type, value, or reference; check the expression at this location and its input values");
+            }
             self.diag(DiagSeverity::Error, "evaluation-error", text, Some(at));
         }
         if let Some(o @ (Origin::UnsupportedFunction(_) | Origin::Limit(_))) = value.origin() {

@@ -221,6 +221,12 @@ pub fn scan_plan_with_model(
     };
     let root = tf_linter::scan::RootOutcome {
         dir: a.root_dir.clone(),
+        coverage: out.coverage.clone(),
+        unresolved_inputs: tf_linter::coverage::unresolved_inputs(&a, &files),
+        diagnostics: a.diagnostics.clone(),
+        rule_errors: out.rule_errors.clone(),
+        resources: a.stats.resources,
+        module_instances: a.modules.len(),
         status: tf_linter::scan::status_of(&a.diagnostics, &out.rule_errors),
         needs_install: a
             .diagnostics
@@ -239,7 +245,9 @@ pub fn scan_plan_with_model(
             rule_errors: out.rule_errors,
             files,
             suppressed,
+            input_kind: tf_linter::record::InputKind::Plan,
             roots: vec![root],
+            selected_rules: linter.rules().iter().map(|r| r.name.to_string()).collect(),
         },
         a,
     ))

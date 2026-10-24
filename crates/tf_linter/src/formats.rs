@@ -24,6 +24,8 @@ pub fn ndjson(r: &ScanRecord) -> String {
     for e in &r.rule_errors {
         line(json!({
             "type": "rule_error",
+            "code": "rule-execution-failed",
+            "action": crate::recovery::rule_action(),
             "rule": e.rule,
             "resource": e.resource,
             "message": e.message,
@@ -34,6 +36,7 @@ pub fn ndjson(r: &ScanRecord) -> String {
             "type": "diagnostic",
             "severity": d.severity,
             "code": d.code,
+            "action": d.action,
             "message": d.message,
             "file": d.location.as_ref().map(|l| &l.file),
             "line": d.location.as_ref().map(|l| l.line),
@@ -43,6 +46,7 @@ pub fn ndjson(r: &ScanRecord) -> String {
     line(json!({
         "type": "summary",
         "schema": r.schema,
+        "input_kind": r.input_kind,
         "status": r.status,
         "rules": r.rules,
         "findings": s.findings,
@@ -54,6 +58,8 @@ pub fn ndjson(r: &ScanRecord) -> String {
         "diagnostics": r.diagnostics.len(),
         "suppressed": r.suppressed.len(),
         "roots": s.roots,
+        "root_summaries": r.roots,
+        "coverage": r.coverage,
         "resources": s.resources,
         "elapsed_ms": s.elapsed_ms,
     }));
@@ -213,6 +219,7 @@ pub fn sarif(r: &ScanRecord) -> J {
                     None => format!("{}: {}", e.rule, e.message),
                 }},
                 "associatedRule": {"id": e.rule},
+                "properties": {"code": "rule-execution-failed", "action": crate::recovery::rule_action()},
             })
         })
         .chain(r.diagnostics.iter().map(|d| {
@@ -223,6 +230,7 @@ pub fn sarif(r: &ScanRecord) -> J {
                     _ => "note",
                 },
                 "descriptor": {"id": d.code},
+                "properties": {"action": d.action},
                 "message": {"text": d.message},
             });
             if let Some(l) = &d.location {
@@ -240,6 +248,7 @@ pub fn sarif(r: &ScanRecord) -> J {
         "runs": [{
             "tool": {"driver": {"name": "oxtf", "rules": rules}},
             "results": results,
+            "properties": {"coverage": r.coverage, "root_summaries": r.roots, "input_kind": r.input_kind},
             "invocations": [{
                 "executionSuccessful": r.status == crate::ScanStatus::Complete,
                 "toolExecutionNotifications": notifications,

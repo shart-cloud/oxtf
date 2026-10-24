@@ -15,13 +15,13 @@ pub struct FindingDelta {
     pub added: Vec<FindingRecord>,
     /// Disappeared fingerprints, with evidence from the original scan.
     pub removed: Vec<FindingRecord>,
-    /// Existing fingerprints whose affected roots or instances changed.
+    /// Existing fingerprints whose affected roots, instances, or certainty changed.
     pub changed: Vec<FindingChange>,
-    /// Fingerprints with the same occurrences; evidence and positions may differ.
+    /// Fingerprints with the same occurrence identities and certainty; evidence and positions may differ.
     pub unchanged: usize,
 }
 
-/// A finding that persists but gains or loses occurrences. A new occurrence
+/// A finding that persists but changes occurrences or certainty. A new occurrence
 /// counts as a regression even if the grouped finding already existed.
 #[derive(Clone, Debug, Serialize)]
 pub struct FindingChange {
@@ -62,7 +62,12 @@ impl FindingDelta {
             let old = &before[i];
             let added_occurrences = occurrence_difference(&new.occurrences, &old.occurrences);
             let removed_occurrences = occurrence_difference(&old.occurrences, &new.occurrences);
-            if added_occurrences.is_empty() && removed_occurrences.is_empty() {
+            if added_occurrences.is_empty()
+                && removed_occurrences.is_empty()
+                && old.certainty == new.certainty
+                && occurrence_certainties(&old.occurrences)
+                    == occurrence_certainties(&new.occurrences)
+            {
                 delta.unchanged += 1;
             } else {
                 delta.changed.push(FindingChange {
@@ -107,4 +112,15 @@ fn occurrence_difference(a: &[OccurrenceRecord], b: &[OccurrenceRecord]) -> Vec<
         })
         .cloned()
         .collect()
+}
+
+fn occurrence_certainties(
+    occurrences: &[OccurrenceRecord],
+) -> Vec<(&str, &str, tf_linter::Certainty)> {
+    let mut values: Vec<_> = occurrences
+        .iter()
+        .map(|o| (o.root.as_str(), o.address.as_str(), o.certainty))
+        .collect();
+    values.sort_unstable();
+    values
 }

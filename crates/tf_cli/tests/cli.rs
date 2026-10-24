@@ -124,7 +124,7 @@ module "db" {
         ])
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(3));
+    assert_eq!(out.status.code(), Some(4));
     std::fs::remove_dir_all(dir).unwrap();
 }
 
@@ -928,7 +928,7 @@ fn explicit_fetch_enables_offline_counted_module_scans() {
             .output()
             .unwrap()
     };
-    assert_eq!(scan().status.code(), Some(3));
+    assert_eq!(scan().status.code(), Some(4));
     let fetched = Command::new(env!("CARGO_BIN_EXE_oxtf"))
         .arg("fetch")
         .arg(&root)
@@ -994,7 +994,7 @@ fn scan_fetch_installs_only_roots_that_need_modules() {
     std::fs::create_dir_all(&local).unwrap();
     std::fs::write(local.join("main.tf"), "locals { a = 1 }\n").unwrap();
     let (code, before) = scan_json(&["-r"], &base);
-    assert_eq!(code, Some(3));
+    assert_eq!(code, Some(4));
     assert!(codes(&before).contains(&"coverage-module-not-installed"));
     let statuses: Vec<_> = before["roots"]
         .as_array()
@@ -1029,10 +1029,17 @@ fn scan_fetch_reports_a_root_it_cannot_install() {
     );
     std::fs::write(root.join("main.tf"), module).unwrap();
     let (code, record) = scan_json(&["--fetch"], &root);
-    assert_eq!(code, Some(3));
+    assert_eq!(code, Some(4));
     assert_eq!(record["status"], "incomplete");
     let diagnostics = codes(&record);
     assert!(diagnostics.contains(&"coverage-fetch"), "{diagnostics:?}");
+    assert!(
+        record["roots"][0]["diagnostics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|d| d["code"] == "coverage-fetch")
+    );
     assert!(
         diagnostics.contains(&"coverage-module-not-installed"),
         "{diagnostics:?}"
@@ -1077,4 +1084,126 @@ fn text_output_collapses_missing_installs_and_names_incomplete_roots() {
     );
     assert!(text.contains("\n  incomplete: root"), "{text}");
     std::fs::remove_dir_all(&base).ok();
+}
+
+#[test]
+#[expect(clippy::too_many_lines)]
+fn recursive_roots_and_triage_summaries_follow_module_calls() {
+    let base = std::env::temp_dir().join(format!("oxtf-qol-roots-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    for dir in [
+        "prod",
+        "modules/db",
+        "modules/provider",
+        "modules/backend",
+        "modules/json",
+    ] {
+        std::fs::create_dir_all(base.join(dir)).unwrap();
+    }
+    std::fs::write(
+        base.join("prod/main.tf"),
+        r#"
+module "db" { source = "../modules/db" }
+module "provider" { source = "../modules/provider" }
+module "backend" { source = "../modules/backend" }
+module "json" { source = "../modules/json" }
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        base.join("modules/db/main.tf"),
+        r#"resource "aws_db_instance" "db" { storage_encrypted = false }"#,
+    )
+    .unwrap();
+    std::fs::write(
+        base.join("modules/provider/main.tf"),
+        "provider \"aws\" {}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        base.join("modules/backend/main.tf"),
+        "terraform {\nbackend \"local\" {}\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        base.join("modules/json/main.tf.json"),
+        r#"{"locals":{"a":1}}"#,
+    )
+    .unwrap();
+    let (code, record) = scan_json(&["-r"], &base);
+    assert_eq!(code, Some(1), "{record}");
+    assert_eq!(record["stats"]["roots"], 3, "{record}");
+    let roots = record["roots"].as_array().unwrap();
+    let prod = roots
+        .iter()
+        .find(|r| r["path"].as_str().unwrap().ends_with("prod"))
+        .unwrap();
+    assert_eq!(prod["resources"], 1);
+    assert_eq!(
+        prod["findings_by_rule"]["aws-rds-unencrypted"][0],
+        record["findings"][0]["fingerprint"]
+    );
+    let (_, explicit) = scan_json(&[], &base.join("modules/db"));
+    assert_eq!(explicit["stats"]["roots"], 1);
+    let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .args(["scan", "--no-bundled", "-r", "--quiet", "--no-diagnostics"])
+        .arg(&base)
+        .output()
+        .unwrap();
+    let text = String::from_utf8(out.stdout).unwrap();
+    assert!(text.contains("aws-rds-unencrypted: 1 ["), "{text}");
+    assert!(text.contains("3 complete"), "{text}");
+    let out = Command::new(env!("CARGO_BIN_EXE_oxtf"))
+        .args(["scan", "--no-bundled", "-r", "-f", "ndjson"])
+        .arg(&base)
+        .output()
+        .unwrap();
+    let text = String::from_utf8(out.stdout).unwrap();
+    let summary: serde_json::Value = serde_json::from_str(text.lines().last().unwrap()).unwrap();
+    assert_eq!(summary["root_summaries"], record["roots"]);
+    std::fs::remove_dir_all(base).unwrap();
+}
+
+#[test]
+fn evaluation_errors_explain_safe_reasons_and_keep_sensitive_values_private() {
+    let dir = std::env::temp_dir().join(format!("oxtf-qol-evaluation-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("main.tf"),
+        r#"
+resource "aws_db_instance" "empty" { storage_encrypted = element([], 0) }
+resource "aws_db_instance" "secret" { storage_encrypted = jsondecode(sensitive("PRIVATE_MARKER")) }
+"#,
+    )
+    .unwrap();
+    let (code, record) = scan_json(&[], &dir);
+    assert_eq!(code, Some(3), "{record}");
+    let messages: Vec<_> = record["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|d| d["code"] == "evaluation-error")
+        .map(|d| d["message"].as_str().unwrap())
+        .collect();
+    assert!(
+        messages
+            .iter()
+            .any(|m| m.contains("element()") && m.contains("empty list")),
+        "{messages:?}"
+    );
+    assert!(
+        messages
+            .iter()
+            .any(|m| m.contains("jsondecode()") && m.contains("check the expression")),
+        "{messages:?}"
+    );
+    assert!(messages.iter().all(|m| !m.contains("PRIVATE_MARKER")));
+    assert_eq!(record["roots"][0]["status"], "failed");
+    assert!(
+        !record["roots"][0]["diagnostics"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    std::fs::remove_dir_all(dir).unwrap();
 }

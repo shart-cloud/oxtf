@@ -28,8 +28,10 @@ fn schema_3_field_set_is_pinned() {
     assert_eq!(
         keys(&json),
         [
+            "coverage",
             "diagnostics",
             "findings",
+            "input_kind",
             "roots",
             "rule_errors",
             "rules",

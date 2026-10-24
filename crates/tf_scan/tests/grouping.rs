@@ -55,7 +55,13 @@ variable "enc" { type = bool }
 #[test]
 fn roots_and_instances_are_occurrences_of_one_finding() {
     let (base, overlay) = repo_in_memory();
-    let mut req = ScanRequest::dirs(vec![base], true);
+    let mut req = ScanRequest::dirs(
+        ["modules/db", "examples/a", "examples/b", "examples/c"]
+            .iter()
+            .map(|p| base.join(p))
+            .collect(),
+        false,
+    );
     req.catalog = tf_scan::Catalog::seed();
     req.overlay = overlay;
     let out = scan(req).unwrap();
@@ -116,7 +122,13 @@ fn roots_and_instances_are_occurrences_of_one_finding() {
 #[test]
 fn ndjson_has_a_line_per_finding_and_a_summary() {
     let (base, overlay) = repo_in_memory();
-    let mut req = ScanRequest::dirs(vec![base], true);
+    let mut req = ScanRequest::dirs(
+        ["modules/db", "examples/a", "examples/b", "examples/c"]
+            .iter()
+            .map(|p| base.join(p))
+            .collect(),
+        false,
+    );
     req.catalog = tf_scan::Catalog::seed();
     req.overlay = overlay;
     let rec = scan(req).unwrap().record();

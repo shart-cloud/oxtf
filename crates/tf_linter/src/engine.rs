@@ -50,6 +50,7 @@ pub struct Sources<'s> {
 /// What one module-instance pass produced.
 #[derive(Default)]
 pub struct RunOutput {
+    pub coverage: crate::coverage::RuleCoverage,
     /// Successful rule charges for this root; refused charges are excluded.
     pub rule_steps: u64,
     /// Admitted elapsed Rego execution, capped at its configured allowance on timeout.
@@ -180,12 +181,16 @@ impl Linter {
                 .iter()
                 .any(tf_semantic::Module::is_sensitive),
         };
+        run.plan_checks();
         run.graphs();
         run.files(sources);
         run.modules();
         attach_packages(&mut run.out.findings, analysis);
         if let Some(sources) = sources {
             protect_fix_hints(&mut run.out.findings, analysis, sources.files);
+        }
+        for counts in run.out.coverage.rules.values_mut() {
+            counts.skipped = counts.planned - counts.executed;
         }
         run.out.rule_steps = run.budget.used();
         run.out.rego_elapsed = run.budget.rego_elapsed();
@@ -232,6 +237,48 @@ struct RuleRun<'a> {
 }
 
 impl RuleRun<'_> {
+    fn plan_checks(&mut self) {
+        self.out.coverage.selected_rules = self.linter.infos.len();
+        for i in self.linter.graph_rules(self.analysis) {
+            self.plan(i);
+        }
+        for (i, rule) in self.linter.rules.iter().enumerate() {
+            if rule.needs_files() {
+                self.plan(i);
+            }
+        }
+        for module in &self.analysis.modules {
+            for &i in &self.linter.module_rules {
+                self.plan(i);
+            }
+            for resource in &module.resources {
+                if resource.existence == Truth::False || resource.mode != tf_semantic::Mode::Managed
+                {
+                    continue;
+                }
+                for &i in self
+                    .linter
+                    .by_type
+                    .get(&*resource.ty)
+                    .into_iter()
+                    .flatten()
+                    .chain(&self.linter.any_type)
+                {
+                    self.plan(i);
+                }
+            }
+        }
+    }
+
+    fn plan(&mut self, i: usize) {
+        self.out
+            .coverage
+            .rules
+            .entry(self.linter.infos[i].name.to_string())
+            .or_default()
+            .planned += 1;
+    }
+
     fn stopped(&self) -> bool {
         self.budget.exhaustion().is_some() || self.results_refused
     }
@@ -260,13 +307,36 @@ impl RuleRun<'_> {
         call: impl FnOnce(&dyn DynRule, &RuleBudget) -> Result<T, String>,
     ) -> Option<T> {
         assert!(!self.stopped());
-        let result = self
-            .budget
-            .charge(1)
-            .and_then(|()| call(&*self.linter.rules[i], &self.budget));
+        let result = self.budget.charge(1).and_then(|()| {
+            self.out
+                .coverage
+                .rules
+                .get_mut(self.linter.infos[i].name.as_ref())
+                .expect("selected rule")
+                .executed += 1;
+            call(&*self.linter.rules[i], &self.budget)
+        });
         match self.budget.finish(result) {
-            Ok(result) => Some(result),
+            Ok(result) => {
+                self.out
+                    .coverage
+                    .rules
+                    .get_mut(self.linter.infos[i].name.as_ref())
+                    .expect("selected rule")
+                    .completed += 1;
+                Some(result)
+            }
             Err(message) => {
+                let counts = self
+                    .out
+                    .coverage
+                    .rules
+                    .get_mut(self.linter.infos[i].name.as_ref())
+                    .expect("selected rule");
+                // Admission can fail before entering the rule hook.
+                if counts.executed > counts.completed + counts.failed {
+                    counts.failed += 1;
+                }
                 // Exhaustion text contains only the resource name and allowance,
                 // so sensitivity must not hide the reason a root stopped.
                 let message = match self.budget.exhaustion() {
